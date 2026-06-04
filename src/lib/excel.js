@@ -10,6 +10,8 @@
 // ExcelJS is heavy, so it is loaded on demand (first file operation) to keep the
 // initial app bundle small for the loading-dock laptop.
 
+import { normalizeGtin, normId } from './gs1.js';
+
 async function getExcelJS() {
   const mod = await import('exceljs');
   return mod.default || mod;
@@ -27,6 +29,8 @@ export const HEADER = [
   'Status',
   'Location',
   'GTIN',
+  'Reference',
+  'Serial',
 ];
 
 // ARGB fills for the Status column (col 8), matching the in-app color coding.
@@ -150,16 +154,26 @@ function ensureSheet(wb) {
     header.font = { bold: true };
     header.commit();
     // Reasonable default column widths.
-    [22, 28, 16, 16, 10, 12, 18, 16, 20, 18].forEach((w, i) => {
+    [22, 28, 16, 16, 10, 12, 18, 16, 20, 18, 16, 18].forEach((w, i) => {
       ws.getColumn(i + 1).width = w;
     });
-  } else if (coerce(ws.getRow(1).getCell(10).value) !== 'GTIN') {
-    // Migrate older files (9 columns) by adding the GTIN header column.
+  } else {
+    // Migrate older files by adding any missing identifier header columns.
     const header = ws.getRow(1);
-    header.getCell(10).value = 'GTIN';
-    header.getCell(10).font = { bold: true };
-    header.commit();
-    ws.getColumn(10).width = 18;
+    let changed = false;
+    [
+      [10, 'GTIN'],
+      [11, 'Reference'],
+      [12, 'Serial'],
+    ].forEach(([col, name]) => {
+      if (coerce(header.getCell(col).value) !== name) {
+        header.getCell(col).value = name;
+        header.getCell(col).font = { bold: true };
+        ws.getColumn(col).width = 18;
+        changed = true;
+      }
+    });
+    if (changed) header.commit();
   }
   return ws;
 }
@@ -179,13 +193,24 @@ function coerce(value) {
 const norm = (s) => String(coerce(s) ?? '').trim().toLowerCase();
 
 /**
- * Do an entry and a worksheet row refer to the same physical product+lot+exp?
- * Prefer an exact GTIN match when both have one; otherwise fall back to the
- * product+lot+expiration triple (keeps legacy rows without a GTIN working).
+ * Do an entry and a worksheet row refer to the same physical unit/lot?
+ * Serialized items are unique per serial; otherwise prefer GTIN, then fall back
+ * to the product+lot+expiration triple (keeps legacy rows working).
  */
 function rowMatchesEntry(entry, row) {
-  const rowGtin = coerce(row.getCell(10).value);
-  if (entry.gtin && rowGtin && norm(entry.gtin) === norm(rowGtin)) return true;
+  const es = normId(entry.serial);
+  const rs = normId(coerce(row.getCell(12).value));
+  if (es || rs) return Boolean(es && rs && es === rs);
+
+  const eg = normalizeGtin(entry.gtin);
+  const rg = normalizeGtin(coerce(row.getCell(10).value));
+  if (eg && rg) {
+    return (
+      eg === rg &&
+      norm(entry.lot) === norm(row.getCell(4).value) &&
+      norm(entry.expiration) === norm(row.getCell(3).value)
+    );
+  }
   return (
     norm(entry.product) === norm(row.getCell(2).value) &&
     norm(entry.lot) === norm(row.getCell(4).value) &&
@@ -215,6 +240,8 @@ function entryToValues(e) {
     e.status ?? '',
     e.location ?? '',
     e.gtin ?? '',
+    e.ref ?? '',
+    e.serial ?? '',
   ];
 }
 
@@ -267,6 +294,8 @@ export async function readAllEntries(handle) {
       unit: String(coerce(row.getCell(6).value) || 'each'),
       location: String(coerce(row.getCell(9).value) || ''),
       gtin: String(coerce(row.getCell(10).value) || ''),
+      ref: String(coerce(row.getCell(11).value) || ''),
+      serial: String(coerce(row.getCell(12).value) || ''),
     });
   });
   return out;
