@@ -13,10 +13,12 @@ const DEFAULT_MODEL = process.env.CLAUDE_VISION_MODEL || 'claude-haiku-4-5-20251
 
 const EXTRACTION_PROMPT = `You are reading a photo of medical implant or biologic packaging at a hospital loading dock. Extract these fields exactly as printed:
 
-- product: the product/device name and manufacturer (e.g. "Smith & Nephew X-500"). Combine brand + model if both are visible.
-- expiration_date: the use-by / expiration date in strict YYYY-MM-DD format. If only month and year are printed, use the LAST day of that month. Look for symbols like an hourglass, "EXP", "Use By", or "USE BY".
-- lot_number: the lot / batch number (often labeled LOT, Lot #, Batch, or with a factory symbol). Include only the value.
-- gtin: the GTIN / device identifier — the 14-digit number printed in the human-readable UDI line next to the barcode, usually shown after "(01)". Read ONLY the digits (e.g. "00844588000036"). If a UDI line is present, also use its "(17)" value for the expiration and its "(10)" value for the lot, since those are the most reliable.
+- product: the product/device name and manufacturer (e.g. "VG2 Cervical T57P, LifeNet Health VertiGRAFT"). Combine brand + model/description if visible.
+- expiration_date: the use-by / expiration date in strict YYYY-MM-DD format. If only month and year are printed, use the LAST day of that month. Look for "EXP", "Use By", an hourglass symbol, or the UDI "(17)" value (format YYMMDD → 20YY-MM-DD).
+- lot_number: the lot / batch number (labeled LOT, Lot #, Batch, or the UDI "(10)" value). Many tissue/allograft products have NO lot — return null if there isn't one.
+- serial_number: the serial / unique unit ID. Often labeled "ID", "SN", "S/N", or the UDI "(21)" value (e.g. "2110913-1072"). Allografts are usually serialized. Return null if none.
+- reference_code: the catalog / reference / product code, often labeled "Code", "REF", "Catalog", or "Ref #" (e.g. "VG2C-T57P"). Return null if none.
+- gtin: the GTIN / device identifier — the 14-digit number in the UDI line after "(01)" (e.g. "00889858589321"). Read ONLY the digits. Return null if not visible.
 
 Also assess:
 - confidence: one of "high", "medium", "low" reflecting how legible the packaging is.
@@ -24,9 +26,9 @@ Also assess:
 - notes: a short note about anything unreadable or ambiguous (empty string if none).
 
 Respond with ONLY a single JSON object and nothing else:
-{"product": string|null, "expiration_date": string|null, "lot_number": string|null, "gtin": string|null, "confidence": "high"|"medium"|"low", "blurry": boolean, "notes": string}
+{"product": string|null, "expiration_date": string|null, "lot_number": string|null, "serial_number": string|null, "reference_code": string|null, "gtin": string|null, "confidence": "high"|"medium"|"low", "blurry": boolean, "notes": string}
 
-Use null for any field you genuinely cannot read. Do not guess or fabricate values, especially the GTIN — only report digits you can actually read.`;
+Use null for any field you genuinely cannot read. Do not guess or fabricate values, especially the GTIN, serial, and reference code — only report characters you can actually read.`;
 
 /** Split a data URL (or raw base64) into { mediaType, data }. */
 function parseImage(image) {
@@ -133,6 +135,8 @@ export default async function handler(req, res) {
       product: result.product ?? null,
       expiration_date: result.expiration_date ?? null,
       lot_number: result.lot_number ?? null,
+      serial_number: result.serial_number ?? null,
+      reference_code: result.reference_code ?? null,
       gtin: result.gtin ?? null,
       confidence: result.confidence || 'low',
       blurry: Boolean(result.blurry),

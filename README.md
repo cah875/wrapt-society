@@ -54,8 +54,13 @@ barcode (GS1-128 or GS1 DataMatrix). One scan yields:
 | --- | --- |
 | `(01)` | GTIN (identifies the product) |
 | `(17)` | Expiration date (`YYMMDD`; day `00` = end of month) |
-| `(10)` | Lot / batch |
-| `(21)` | Serial (when present) |
+| `(10)` | Lot / batch (tissue/allografts often have none) |
+| `(21)` | Serial / unique unit ID (common on allografts) |
+
+The receiving photo also captures the human-readable **catalog/REF code** and
+**serial/ID**, which are stored alongside the GTIN. The Excel file gains
+**GTIN**, **Reference**, and **Serial** columns (added automatically; existing
+files are migrated on the next write).
 
 - **Receiving:** capture everything from the one receiving **photo** — Claude
   Vision reads the product name, expiration, lot, *and* the GTIN from the
@@ -63,20 +68,20 @@ barcode (GS1-128 or GS1 DataMatrix). One scan yields:
   in which case the product name is resolved from the GTIN via the FDA GUDID API
   (`/api/gudid`) and cached locally. Either way the GTIN is stored so the later
   scan can match. The GTIN is editable on the confirm screen.
-- **Using:** in *Use* mode, scanning a used implant's sticker removes one unit
-  from the matching in-stock row (matched by GTIN + lot + expiration). This is
-  designed to ride on the existing "sticker → implant log → Revenue Cycle"
-  handoff so OR staff aren't burdened, but it also works for scanning items off
-  the cart.
+- **Using:** in *Use* mode, scanning a used implant removes one unit from the
+  matching in-stock row. A label often has several barcodes (full UDI, catalog
+  /REF code, serial, expiration), so the app captures **all** identifiers at
+  receiving (GTIN, reference/catalog code, serial, lot) and a removal scan
+  matches against **any** of them — the tech can scan whichever barcode is
+  handy. Designed to ride on the existing "sticker → implant log → Revenue
+  Cycle" handoff, and also works for scanning items off the cart. (Serialized
+  allografts are tracked as unique units by serial.)
 
 **Hardware:** a **2D USB barcode scanner** (keyboard-wedge) is recommended —
 many implant UDIs are 2D DataMatrix. For the most reliable parsing of
 variable-length fields, configure the scanner to transmit the **GS1 / FNC1
 group separator**. The webcam path remains available as a fallback, and any code
 can be typed/pasted manually.
-
-The Excel file gains a **GTIN** column (added automatically; existing files are
-migrated on the next write).
 
 ## How data is stored (and why there's no cloud database)
 

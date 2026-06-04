@@ -27,6 +27,8 @@ export default function ConfirmationPanel({
   );
   const [lot, setLot] = useState(extracted.lot_number || '');
   const [gtin, setGtin] = useState(extracted.gtin || '');
+  const [ref, setRef] = useState(extracted.reference_code || '');
+  const [serial, setSerial] = useState(extracted.serial_number || '');
   const [quantity, setQuantity] = useState(1);
   const [unit, setUnit] = useState(settings.unitTypes?.[0] || 'each');
   const [location, setLocation] = useState(settings.location || '');
@@ -56,6 +58,8 @@ export default function ConfirmationPanel({
       unit,
       location: location.trim(),
       gtin: gtin.trim(),
+      ref: ref.trim(),
+      serial: serial.trim(),
     });
   };
 
@@ -147,6 +151,32 @@ export default function ConfirmationPanel({
           />
         </div>
 
+        <div>
+          <label className="field-label" htmlFor="reference">
+            Reference / Catalog Code
+          </label>
+          <input
+            id="reference"
+            value={ref}
+            onChange={(e) => setRef(e.target.value)}
+            placeholder="e.g. VG2C-T57P"
+            className="field-input font-mono"
+          />
+        </div>
+
+        <div>
+          <label className="field-label" htmlFor="serial">
+            Serial / Unit ID
+          </label>
+          <input
+            id="serial"
+            value={serial}
+            onChange={(e) => setSerial(e.target.value)}
+            placeholder="e.g. 2110913-1072"
+            className="field-input font-mono"
+          />
+        </div>
+
         <div className="sm:col-span-2">
           <label className="field-label" htmlFor="gtin">
             GTIN / Barcode ID
@@ -160,8 +190,9 @@ export default function ConfirmationPanel({
             className="field-input font-mono"
           />
           <p className="mt-1 text-xs text-clinical-400">
-            Captured from the photo. This is what the barcode scan matches when the item is used —
-            correct it if it looks wrong.
+            These identifiers are captured from the photo. When the item is later used, scanning{' '}
+            <em>any</em> of its barcodes (GTIN, catalog code, or serial) will match — correct any
+            that look wrong.
           </p>
         </div>
       </div>

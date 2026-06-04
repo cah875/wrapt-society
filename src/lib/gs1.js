@@ -136,6 +136,44 @@ export function parseScan(input) {
   return result;
 }
 
+/** Normalize an identifier for comparison: uppercase, alphanumerics only. */
+export function normId(input) {
+  return String(input || '').toUpperCase().replace(/[^A-Z0-9]/g, '');
+}
+
+/**
+ * From a single scanned barcode, produce every identifier it could plausibly
+ * represent, normalized for matching. A label has several barcodes (UDI, REF,
+ * serial, exp); the tech might scan any one. We don't know which, so we match a
+ * removal scan against ALL identifiers captured at receiving.
+ */
+export function scanCandidates(raw) {
+  const set = new Set();
+  const add = (v) => {
+    const n = normId(v);
+    if (n.length >= 4) set.add(n); // ignore trivially short tokens
+  };
+
+  const s = stripSymbology(String(raw || '').trim());
+  add(s); // the whole scanned string (e.g. "VG2C-T57P" or "2110913-1072")
+
+  // If it parses as a GS1/UDI, add each decoded field too.
+  const parsed = parseScan(raw);
+  if (parsed.gtin) add(parsed.gtin);
+  if (parsed.lot) add(parsed.lot);
+  if (parsed.serial) add(parsed.serial);
+
+  // If the whole thing is a plain number, add its GTIN-normalized form.
+  const digits = s.replace(/\D/g, '');
+  if (digits && /^\d+$/.test(s)) {
+    add(digits);
+    const g = normalizeGtin(s);
+    if (g) add(g);
+  }
+
+  return [...set];
+}
+
 /** Does a scanned string look like a barcode we can use? */
 export function looksLikeScan(input) {
   if (!input) return false;

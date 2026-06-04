@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { loadInventory, saveInventory, newId } from '../lib/storage.js';
 import { daysUntil, statusFor } from '../lib/dates.js';
-import { normalizeGtin } from '../lib/gs1.js';
+import { normalizeGtin, normId, scanCandidates } from '../lib/gs1.js';
 import * as excel from '../lib/excel.js';
 
 /** Build the Excel row payload from a local entry (status/days computed now). */
@@ -17,23 +17,48 @@ function toRow(entry, alertDays) {
     status: statusFor(entry.expiration, alertDays).label,
     location: entry.location || '',
     gtin: entry.gtin || '',
+    ref: entry.ref || '',
+    serial: entry.serial || '',
   };
 }
 
-/** Match two records as the same physical product+lot+exp (GTIN preferred). */
+/**
+ * Match two records as the same physical unit/lot for RECEIVE de-duplication.
+ * Serialized items are unique per serial; otherwise GTIN+lot+exp, then the
+ * product+lot+exp triple.
+ */
 function sameItem(a, b) {
   const n = (s) => (s || '').trim().toLowerCase();
+  const sa = normId(a.serial);
+  const sb = normId(b.serial);
+  if (sa || sb) return Boolean(sa && sb && sa === sb);
+
   const ga = normalizeGtin(a.gtin);
   const gb = normalizeGtin(b.gtin);
-  if (ga && gb && ga === gb && n(a.lot) === n(b.lot)) {
-    // Same GTIN + lot; require matching expiration too when both have one.
-    return !a.expiration || !b.expiration || a.expiration === b.expiration;
+  if (ga && gb) {
+    return ga === gb && n(a.lot) === n(b.lot) && (a.expiration || '') === (b.expiration || '');
   }
   return (
     n(a.product) === n(b.product) &&
     n(a.lot) === n(b.lot) &&
     (a.expiration || '') === (b.expiration || '')
   );
+}
+
+/** All identifiers an entry can be matched by when a barcode is scanned. */
+function entryIdentifiers(e) {
+  const ids = new Set();
+  const add = (v) => {
+    const x = normId(v);
+    if (x.length >= 4) ids.add(x);
+  };
+  add(e.gtin);
+  const g = normalizeGtin(e.gtin);
+  if (g) add(g);
+  add(e.ref);
+  add(e.serial);
+  add(e.lot);
+  return ids;
 }
 
 function formatTimestamp(iso) {
@@ -96,6 +121,8 @@ export function useInventory(settings, onSettingsChange) {
         unit: r.unit,
         location: r.location,
         gtin: r.gtin || '',
+        ref: r.ref || '',
+        serial: r.serial || '',
         synced: true,
         syncError: null,
       }))
@@ -297,6 +324,8 @@ export function useInventory(settings, onSettingsChange) {
           unit: data.unit || 'each',
           location: data.location || settingsRef.current.location || '',
           gtin: normalizeGtin(data.gtin),
+          ref: data.ref || '',
+          serial: data.serial || '',
           synced: false,
           syncError: null,
         };
@@ -328,15 +357,9 @@ export function useInventory(settings, onSettingsChange) {
     [entries, excelState, connected, writeEntry]
   );
 
-  /**
-   * Decrement on use: reduce the matching in-stock entry by `qty` (default 1)
-   * and write the new quantity through to the Excel file.
-   */
-  const useStock = useCallback(
-    async (item, qty = 1) => {
-      const target = entries.find((e) => e.quantity > 0 && sameItem(e, item));
-      if (!target) return { ok: false, reason: 'not_found' };
-
+  // Shared decrement: reduce a target entry by qty and write it through.
+  const applyDecrement = useCallback(
+    async (target, qty) => {
       const used = Math.min(qty, target.quantity);
       const remaining = target.quantity - used;
       const updated = {
@@ -363,7 +386,37 @@ export function useInventory(settings, onSettingsChange) {
       }
       return { ok: true, entry: updated, used, remaining, saved: false, connected: false };
     },
-    [entries, excelState, writeEntry]
+    [excelState, writeEntry]
+  );
+
+  /** Decrement on use, matching a known item (product/lot/exp/serial). */
+  const useStock = useCallback(
+    async (item, qty = 1) => {
+      const target = entries.find((e) => e.quantity > 0 && sameItem(e, item));
+      if (!target) return { ok: false, reason: 'not_found' };
+      return applyDecrement(target, qty);
+    },
+    [entries, applyDecrement]
+  );
+
+  /**
+   * Decrement on use from a raw barcode scan. Matches the scan against ANY
+   * identifier captured at receiving (GTIN, reference/catalog code, serial, or
+   * lot), so the tech can scan whichever barcode is on the label.
+   */
+  const useStockByScan = useCallback(
+    async (rawCode, qty = 1) => {
+      const candidates = scanCandidates(rawCode);
+      if (!candidates.length) return { ok: false, reason: 'unreadable' };
+      const target = entries.find((e) => {
+        if (e.quantity <= 0) return false;
+        const ids = entryIdentifiers(e);
+        return candidates.some((c) => ids.has(c));
+      });
+      if (!target) return { ok: false, reason: 'not_found', candidates };
+      return applyDecrement(target, qty);
+    },
+    [entries, applyDecrement]
   );
 
   const clearLocal = useCallback(() => setEntries([]), []);
@@ -377,6 +430,7 @@ export function useInventory(settings, onSettingsChange) {
     findInStock,
     addEntry,
     useStock,
+    useStockByScan,
     retryPending,
     clearLocal,
     // Excel connection

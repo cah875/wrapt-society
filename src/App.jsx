@@ -88,6 +88,7 @@ export default function App() {
       product: name || '',
       expiration_date: parsed.expiration,
       lot_number: parsed.lot,
+      serial_number: parsed.serial,
       gtin: parsed.gtin,
       fromScan: true,
       confidence: 'high',
@@ -96,22 +97,23 @@ export default function App() {
     setBusy(false);
   }, []);
 
-  // Using: a scan immediately removes 1 from the matching in-stock item.
+  // Using: any barcode on the label removes 1 from the matching in-stock item.
   const handleUseScan = useCallback(
-    async (parsed) => {
-      const item = {
-        gtin: parsed.gtin,
-        lot: parsed.lot,
-        expiration: parsed.expiration,
-        product: lookupGtinName(parsed.gtin),
-      };
-      const res = await inventory.useStock(item, 1);
+    async (rawCode) => {
+      const res = await inventory.useStockByScan(rawCode, 1);
       if (!res.ok) {
-        const who = item.product || (parsed.gtin ? `GTIN ${parsed.gtin}` : 'that item');
-        notify('error', `Not in inventory: ${who}. Receive it first.`, { duration: 5000 });
+        if (res.reason === 'unreadable') {
+          notify('error', 'Could not read that barcode. Try again or type it in.', {
+            duration: 5000,
+          });
+        } else {
+          notify('error', 'No match in inventory for that barcode — receive it first.', {
+            duration: 5000,
+          });
+        }
         return;
       }
-      const name = res.entry.product || item.product || 'item';
+      const name = res.entry.product || 'item';
       if (res.saved) {
         notify('success', `Used 1 × ${name} · ${res.remaining} left`);
       } else if (res.connected === false) {
@@ -128,13 +130,20 @@ export default function App() {
   // Route a raw scanned/typed code to the right handler for the current mode.
   const handleScan = useCallback(
     (rawCode) => {
-      const parsed = parseScan(rawCode);
-      if (!parsed.gtin && !parsed.lot && !parsed.expiration) {
-        notify('error', 'Could not read that barcode. Try again or type it in.', { duration: 5000 });
+      // Use mode: any barcode on the label can match a captured identifier.
+      if (mode === 'use') {
+        handleUseScan(rawCode);
         return;
       }
-      if (mode === 'use') handleUseScan(parsed);
-      else handleReceiveScan(parsed);
+      // Receive mode: need decodable UDI fields; otherwise prompt for the photo.
+      const parsed = parseScan(rawCode);
+      if (!parsed.gtin && !parsed.lot && !parsed.expiration && !parsed.serial) {
+        notify('error', "Couldn't read that as a UDI for receiving — use the photo instead.", {
+          duration: 5000,
+        });
+        return;
+      }
+      handleReceiveScan(parsed);
     },
     [mode, handleUseScan, handleReceiveScan, notify]
   );
