@@ -193,7 +193,8 @@ export default function App() {
       <Toast toast={toast} onDismiss={() => setToast(null)} />
 
       <footer className="mx-auto max-w-6xl px-4 pb-8 pt-2 text-center text-xs text-clinical-400">
-        Implant Expiration Tracker · Inventory is saved to your local Excel file and synced via OneDrive/SharePoint.
+        Northwest Specialty Hospital · Implant Expiration Tracker · Inventory is saved to your local
+        Excel file and synced via OneDrive/SharePoint.
       </footer>
     </div>
   );
