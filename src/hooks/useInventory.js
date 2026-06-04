@@ -91,6 +91,7 @@ export function useInventory(settings, onSettingsChange) {
   const [fileName, setFileName] = useState(settings.excelFileName || '');
   const [busy, setBusy] = useState(false);
   const [excelError, setExcelError] = useState('');
+  const [catalogItems, setCatalogItems] = useState([]);
 
   const handleRef = useRef(null);
   const settingsRef = useRef(settings);
@@ -132,7 +133,28 @@ export function useInventory(settings, onSettingsChange) {
       const pending = prev.filter((e) => !e.synced);
       return [...pending, ...mapped];
     });
+    try {
+      setCatalogItems(await excel.readAllCatalogItems(handle));
+    } catch {
+      // Older files may not have an Item Master sheet yet — that's fine.
+    }
   }, []);
+
+  /** Add or update one product in the Item Master sheet. */
+  const addCatalogItem = useCallback(async (item) => {
+    if (!handleRef.current || excelState !== EXCEL_STATE.CONNECTED) {
+      return { saved: false, connected: false };
+    }
+    try {
+      await excel.upsertCatalogItem(handleRef.current, item);
+      setCatalogItems(await excel.readAllCatalogItems(handleRef.current));
+      return { saved: true, connected: true };
+    } catch (err) {
+      return { saved: false, connected: true, error: err.message };
+    }
+    // excelState is read via ref-free closure; re-create when it changes.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [excelState]);
 
   const setConnected = useCallback(
     (handle, name) => {
@@ -433,6 +455,9 @@ export function useInventory(settings, onSettingsChange) {
     useStockByScan,
     retryPending,
     clearLocal,
+    // Item Master / catalog
+    catalogItems,
+    addCatalogItem,
     // Excel connection
     excelState,
     excelSupported: excelState !== EXCEL_STATE.UNSUPPORTED,

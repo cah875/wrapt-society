@@ -1,4 +1,4 @@
-import { useCallback, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import Header from './components/Header.jsx';
 import CameraCapture from './components/CameraCapture.jsx';
 import ConfirmationPanel from './components/ConfirmationPanel.jsx';
@@ -8,6 +8,8 @@ import Dashboard from './components/Dashboard.jsx';
 import SettingsModal from './components/SettingsModal.jsx';
 import SetupWizard from './components/SetupWizard.jsx';
 import ScanPanel from './components/ScanPanel.jsx';
+import CatalogConfirm from './components/CatalogConfirm.jsx';
+import CatalogView from './components/CatalogView.jsx';
 import Toast from './components/Toast.jsx';
 import EasterEgg from './components/EasterEgg.jsx';
 import { useSettings } from './hooks/useSettings.js';
@@ -17,6 +19,7 @@ import { useEasterEgg } from './hooks/useEasterEgg.js';
 import { EASTER_EGGS } from './lib/easterEggs.js';
 import { extractFromImage, lookupGtin } from './lib/api.js';
 import { parseScan } from './lib/gs1.js';
+import { buildCatalogItem, loadLookups } from './lib/catalog.js';
 import { lookupGtinName, rememberGtinName } from './lib/storage.js';
 
 export default function App() {
@@ -24,9 +27,11 @@ export default function App() {
   const inventory = useInventory(settings, update);
 
   // Capture/confirm flow state.
-  const [mode, setMode] = useState('receive'); // 'receive' | 'use'
+  const [mode, setMode] = useState('receive'); // 'receive' | 'use' | 'catalog'
   const [stage, setStage] = useState('capture'); // 'capture' | 'confirm'
   const [extracted, setExtracted] = useState(null);
+  const [catalogDraft, setCatalogDraft] = useState(null); // enriched item under review
+  const [lookups, setLookups] = useState(null); // Meditech reference tables (lazy)
   const [busy, setBusy] = useState(false);
 
   // Modals / overlays.
@@ -47,35 +52,73 @@ export default function App() {
     setToast({ type, message, ...opts });
   }, []);
 
+  // Lazy-load the (large) Meditech lookup tables the first time Catalog is used.
+  useEffect(() => {
+    if (mode === 'catalog' && !lookups) {
+      loadLookups()
+        .then(setLookups)
+        .catch(() => notify('warn', 'Could not load Meditech lookup tables.', { duration: 5000 }));
+    }
+  }, [mode, lookups, notify]);
+
+  // Enrich an extraction/scan via GUDID and open it for review in Catalog mode.
+  const draftCatalogItem = useCallback(async (visionLike) => {
+    const gtin = visionLike.gtin;
+    let gudid = null;
+    if (gtin) {
+      try {
+        gudid = await lookupGtin(gtin);
+      } catch {
+        // No GUDID match — the tech fills/edits the record manually.
+      }
+    }
+    setCatalogDraft(buildCatalogItem(visionLike, gudid));
+    setStage('confirm');
+  }, []);
+
   // --- Vision capture -------------------------------------------------------
   const handleCapture = useCallback(
     async (imageDataUrl) => {
       setBusy(true);
       try {
         const result = await extractFromImage(imageDataUrl, settings);
-        setExtracted({ ...result, fromVision: true });
-        setStage('confirm');
+        if (mode === 'catalog') {
+          await draftCatalogItem(result);
+        } else {
+          setExtracted({ ...result, fromVision: true });
+          setStage('confirm');
+        }
         if (result.blurry) {
           notify('warn', 'Photo looked blurry — please verify the fields or retake.', {
             duration: 5000,
           });
         }
       } catch (err) {
-        // Graceful fallback to manual entry when Vision is unavailable.
-        notify('error', `${err.message} You can enter details manually.`, { duration: 5000 });
-        setExtracted({ fromVision: false });
-        setStage('confirm');
+        if (mode === 'catalog') {
+          // Vision failed — start a blank record for manual catalog entry.
+          notify('error', `${err.message} You can enter details manually.`, { duration: 5000 });
+          await draftCatalogItem({});
+        } else {
+          // Graceful fallback to manual entry when Vision is unavailable.
+          notify('error', `${err.message} You can enter details manually.`, { duration: 5000 });
+          setExtracted({ fromVision: false });
+          setStage('confirm');
+        }
       } finally {
         setBusy(false);
       }
     },
-    [settings, notify]
+    [settings, notify, mode, draftCatalogItem]
   );
 
   const handleManualEntry = useCallback(() => {
+    if (mode === 'catalog') {
+      draftCatalogItem({});
+      return;
+    }
     setExtracted({ fromVision: false });
     setStage('confirm');
-  }, []);
+  }, [mode, draftCatalogItem]);
 
   // --- Barcode scanning (USB 2D scanner or manual code) ---------------------
   // Receiving: a scan prefills the confirmation panel (no Vision cost).
@@ -144,8 +187,21 @@ export default function App() {
         handleUseScan(rawCode);
         return;
       }
-      // Receive mode: need decodable UDI fields; otherwise prompt for the photo.
       const parsed = parseScan(rawCode);
+      // Catalog mode: enrich from GUDID off the GTIN, then review the record.
+      if (mode === 'catalog') {
+        if (!parsed.gtin) {
+          notify('error', "Couldn't read a GTIN from that barcode — try the photo instead.", {
+            duration: 5000,
+          });
+          return;
+        }
+        setBusy(true);
+        draftCatalogItem({ gtin: parsed.gtin, reference_code: parsed.ref })
+          .finally(() => setBusy(false));
+        return;
+      }
+      // Receive mode: need decodable UDI fields; otherwise prompt for the photo.
       if (!parsed.gtin && !parsed.lot && !parsed.expiration && !parsed.serial) {
         notify('error', "Couldn't read that as a UDI for receiving — use the photo instead.", {
           duration: 5000,
@@ -154,13 +210,35 @@ export default function App() {
       }
       handleReceiveScan(parsed);
     },
-    [mode, handleUseScan, handleReceiveScan, notify]
+    [mode, handleUseScan, handleReceiveScan, draftCatalogItem, notify]
   );
 
   const backToCapture = useCallback(() => {
     setExtracted(null);
+    setCatalogDraft(null);
     setStage('capture');
   }, []);
+
+  // --- Catalog (Item Master) ------------------------------------------------
+  const saveCatalog = useCallback(
+    async (item) => {
+      const res = await inventory.addCatalogItem(item);
+      if (res.saved) {
+        notify('success', `Catalogued ${item.product || 'item'} to the Item Master.`);
+        backToCapture();
+      } else if (res.connected === false) {
+        notify('warn', 'Connect an Excel file in Settings to save the Item Master.', {
+          duration: 6000,
+        });
+      } else {
+        setSaveError({
+          label: `Catalog ${item.product || 'item'}`,
+          message: res.error || 'Could not write to the Item Master sheet.',
+        });
+      }
+    },
+    [inventory, notify, backToCapture]
+  );
 
   // --- Logging --------------------------------------------------------------
   const logEntry = useCallback(
@@ -264,16 +342,7 @@ export default function App() {
             {stage === 'capture' ? (
               <>
                 <ScanPanel mode={mode} onMode={setMode} onManualCode={handleScan} busy={busy} />
-                {mode === 'receive' ? (
-                  <CameraCapture
-                    preferredDeviceId={settings.cameraDeviceId}
-                    busy={busy}
-                    onCapture={handleCapture}
-                    onManualEntry={handleManualEntry}
-                    onSelectDevice={(id) => update({ cameraDeviceId: id })}
-                    onCamerasEnumerated={setCameras}
-                  />
-                ) : (
+                {mode === 'use' ? (
                   <div className="card flex items-start gap-3">
                     <span className="text-3xl" aria-hidden>
                       ⬆
@@ -289,8 +358,25 @@ export default function App() {
                       </p>
                     </div>
                   </div>
+                ) : (
+                  <CameraCapture
+                    preferredDeviceId={settings.cameraDeviceId}
+                    busy={busy}
+                    onCapture={handleCapture}
+                    onManualEntry={handleManualEntry}
+                    onSelectDevice={(id) => update({ cameraDeviceId: id })}
+                    onCamerasEnumerated={setCameras}
+                  />
                 )}
               </>
+            ) : mode === 'catalog' ? (
+              <CatalogConfirm
+                item={catalogDraft || {}}
+                lookups={lookups}
+                busy={busy}
+                onSave={saveCatalog}
+                onCancel={backToCapture}
+              />
             ) : (
               <ConfirmationPanel
                 extracted={extracted || {}}
@@ -303,12 +389,20 @@ export default function App() {
           </div>
 
           <div>
-            <Dashboard
-              entries={inventory.entries}
-              settings={settings}
-              syncing={inventory.busy}
-              onRefresh={inventory.connected ? inventory.importFromFile : inventory.retryPending}
-            />
+            {mode === 'catalog' ? (
+              <CatalogView
+                items={inventory.catalogItems}
+                lookups={lookups}
+                onRefresh={inventory.connected ? inventory.importFromFile : null}
+              />
+            ) : (
+              <Dashboard
+                entries={inventory.entries}
+                settings={settings}
+                syncing={inventory.busy}
+                onRefresh={inventory.connected ? inventory.importFromFile : inventory.retryPending}
+              />
+            )}
           </div>
         </div>
       </main>

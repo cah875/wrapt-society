@@ -301,6 +301,196 @@ export async function readAllEntries(handle) {
   return out;
 }
 
+// ── Item Master (catalog) sheet ──────────────────────────────────────────────
+// A second worksheet in the SAME workbook holding one row per unique product,
+// enriched from GUDID + the captured image. This is the clean source for the
+// Meditech Expanse item-master export. Deduped by GTIN, then catalog/REF, then
+// product name.
+
+const ITEM_MASTER_SHEET = 'Item Master';
+export const ITEM_MASTER_HEADER = [
+  'Catalogued',
+  'Category',
+  'Implantable',
+  'Product Name',
+  'Brand Name',
+  'Manufacturer',
+  'Model / Version',
+  'Catalog / REF #',
+  'GTIN',
+  'Description',
+  'GMDN Term',
+  'GMDN Definition',
+  'FDA Product Code',
+  'Product Code Name',
+  'Sterile',
+  'Sterilization Method',
+  'Single Use',
+  'HCT/P (Tissue)',
+  'Latex',
+  'MRI Safety',
+  'Rx / OTC',
+  'Sizes',
+  'Packaging',
+  'Captures Lot',
+  'Captures Serial',
+  'Captures Expiration',
+  'Distribution Status',
+  'Source',
+  'EOC',
+  'Notes',
+];
+
+/** Render a tri-state boolean (true/false/null) as Y / N / blank. */
+function yn(v) {
+  if (v === true) return 'Y';
+  if (v === false) return 'N';
+  return '';
+}
+
+function catalogItemToValues(it) {
+  return [
+    it.catalogued ?? '',
+    it.category ?? '',
+    it.implantable ?? '',
+    it.product ?? '',
+    it.brandName ?? '',
+    it.manufacturer ?? '',
+    it.model ?? '',
+    it.catalogNumber ?? '',
+    it.gtin ?? '',
+    it.description ?? '',
+    it.gmdnTerm ?? '',
+    it.gmdnDefinition ?? '',
+    it.productCode ?? '',
+    it.productCodeName ?? '',
+    yn(it.sterile),
+    it.sterilizationMethod ?? '',
+    yn(it.singleUse),
+    yn(it.hctp),
+    yn(it.latex),
+    it.mriSafety ?? '',
+    it.rxOtc ?? '',
+    it.sizes ?? '',
+    it.packaging ?? '',
+    yn(it.capturesLot),
+    yn(it.capturesSerial),
+    yn(it.capturesExpiration),
+    it.distributionStatus ?? '',
+    it.source ?? '',
+    it.eoc ?? '',
+    it.notes ?? '',
+  ];
+}
+
+/** Get (or create) the Item Master sheet with a bold header row. */
+function ensureItemMasterSheet(wb) {
+  let ws = wb.getWorksheet(ITEM_MASTER_SHEET);
+  if (!ws) {
+    ws = wb.addWorksheet(ITEM_MASTER_SHEET);
+    const header = ws.getRow(1);
+    ITEM_MASTER_HEADER.forEach((h, i) => {
+      header.getCell(i + 1).value = h;
+    });
+    header.font = { bold: true };
+    header.commit();
+    // Sensible default widths (wider for text-heavy columns).
+    const widths = [18, 14, 11, 30, 22, 22, 18, 16, 18, 40, 28, 48, 14, 28, 9, 20, 11, 14, 8, 26, 10, 24, 30, 13, 15, 18, 22, 12, 10, 30];
+    widths.forEach((w, i) => {
+      ws.getColumn(i + 1).width = w;
+    });
+  }
+  return ws;
+}
+
+const CAT_GTIN = 9; // GTIN column index
+const CAT_REF = 8; // Catalog/REF column index
+const CAT_NAME = 4; // Product Name column index
+
+function catalogRowMatches(item, row) {
+  const ig = normalizeGtin(item.gtin);
+  const rg = normalizeGtin(coerce(row.getCell(CAT_GTIN).value));
+  if (ig && rg) return ig === rg;
+
+  const ir = normId(item.catalogNumber);
+  const rr = normId(coerce(row.getCell(CAT_REF).value));
+  if (ir && rr) return ir === rr;
+
+  return Boolean(item.product) && norm(item.product) === norm(row.getCell(CAT_NAME).value);
+}
+
+/** Insert or update one catalog item (matched by GTIN/REF/name), then persist. */
+export async function upsertCatalogItem(handle, item) {
+  const wb = await readWorkbook(handle);
+  const ws = ensureItemMasterSheet(wb);
+
+  let target = null;
+  ws.eachRow((row, rowNumber) => {
+    if (rowNumber === 1) return; // header
+    if (catalogRowMatches(item, row)) target = row;
+  });
+
+  const values = catalogItemToValues(item);
+  if (target) {
+    values.forEach((v, i) => {
+      target.getCell(i + 1).value = v;
+    });
+    target.commit();
+  } else {
+    ws.addRow(values).commit();
+  }
+
+  await writeWorkbook(handle, wb);
+}
+
+/** Read every catalog row back as plain item objects. */
+export async function readAllCatalogItems(handle) {
+  const wb = await readWorkbook(handle);
+  const ws = wb.getWorksheet(ITEM_MASTER_SHEET);
+  if (!ws) return [];
+  const cell = (row, i) => String(coerce(row.getCell(i).value) || '');
+  const out = [];
+  ws.eachRow((row, rowNumber) => {
+    if (rowNumber === 1) return;
+    const product = cell(row, CAT_NAME);
+    const gtin = cell(row, CAT_GTIN);
+    if (!product && !gtin) return; // skip blank rows
+    out.push({
+      catalogued: cell(row, 1),
+      category: cell(row, 2),
+      implantable: cell(row, 3),
+      product,
+      brandName: cell(row, 5),
+      manufacturer: cell(row, 6),
+      model: cell(row, 7),
+      catalogNumber: cell(row, 8),
+      gtin,
+      description: cell(row, 10),
+      gmdnTerm: cell(row, 11),
+      gmdnDefinition: cell(row, 12),
+      productCode: cell(row, 13),
+      productCodeName: cell(row, 14),
+      sterile: cell(row, 15),
+      sterilizationMethod: cell(row, 16),
+      singleUse: cell(row, 17),
+      hctp: cell(row, 18),
+      latex: cell(row, 19),
+      mriSafety: cell(row, 20),
+      rxOtc: cell(row, 21),
+      sizes: cell(row, 22),
+      packaging: cell(row, 23),
+      capturesLot: cell(row, 24),
+      capturesSerial: cell(row, 25),
+      capturesExpiration: cell(row, 26),
+      distributionStatus: cell(row, 27),
+      source: cell(row, 28),
+      eoc: cell(row, 29),
+      notes: cell(row, 30),
+    });
+  });
+  return out;
+}
+
 /** Prompt the tech to pick an existing .xlsx; persists the handle. */
 export async function pickExistingFile() {
   const [handle] = await window.showOpenFilePicker({
