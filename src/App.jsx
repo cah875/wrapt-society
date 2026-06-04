@@ -3,6 +3,7 @@ import Header from './components/Header.jsx';
 import CameraCapture from './components/CameraCapture.jsx';
 import ConfirmationPanel from './components/ConfirmationPanel.jsx';
 import DuplicateDialog from './components/DuplicateDialog.jsx';
+import SaveErrorDialog from './components/SaveErrorDialog.jsx';
 import Dashboard from './components/Dashboard.jsx';
 import SettingsModal from './components/SettingsModal.jsx';
 import SetupWizard from './components/SetupWizard.jsx';
@@ -23,6 +24,7 @@ export default function App() {
   // Modals / overlays.
   const [showSettings, setShowSettings] = useState(false);
   const [duplicate, setDuplicate] = useState(null); // { existing, incoming }
+  const [saveError, setSaveError] = useState(null); // { label, message }
   const [toast, setToast] = useState(null);
   const [wizardDismissed, setWizardDismissed] = useState(false);
   const [cameras, setCameras] = useState([]);
@@ -73,19 +75,43 @@ export default function App() {
       const label = `${data.quantity}× ${data.product}`;
       if (saved) {
         notify('success', `Logged ${label} to ${inventory.fileName || 'the Excel file'}.`);
+        backToCapture();
       } else if (!connected) {
         notify('warn', `Logged ${label} locally — connect an Excel file in Settings to save it.`, {
           duration: 6000,
         });
+        backToCapture();
       } else {
-        notify('error', `Logged ${label} locally, but writing to Excel failed${error ? `: ${error}` : ''}.`, {
-          duration: 7000,
-        });
+        // Write failed (e.g. file open in Excel). Keep the captured data and let
+        // the tech retry the save without taking a new photo.
+        setSaveError({ label, message: error || 'Could not write to the Excel file.' });
       }
-      backToCapture();
     },
     [inventory, notify, backToCapture]
   );
+
+  // Retry saving the queued item(s) — no recapture, no extra Vision cost.
+  const retrySave = useCallback(async () => {
+    const res = await inventory.retryPending();
+    if (res.ok) {
+      notify('success', `Saved ${saveError?.label || 'item'} to ${inventory.fileName || 'the Excel file'}.`);
+      setSaveError(null);
+      backToCapture();
+    } else {
+      setSaveError((prev) => ({
+        label: prev?.label,
+        message: res.error || 'Still could not write to the file.',
+      }));
+    }
+  }, [inventory, notify, saveError, backToCapture]);
+
+  const keepLocal = useCallback(() => {
+    notify('warn', `${saveError?.label || 'Item'} kept on this device — it will save with your next item.`, {
+      duration: 6000,
+    });
+    setSaveError(null);
+    backToCapture();
+  }, [notify, saveError, backToCapture]);
 
   const handleConfirm = useCallback(
     (data) => {
@@ -176,6 +202,16 @@ export default function App() {
           onAddToExisting={() => resolveDuplicate('merge')}
           onCreateNew={() => resolveDuplicate('new')}
           onCancel={() => setDuplicate(null)}
+        />
+      )}
+
+      {saveError && (
+        <SaveErrorDialog
+          label={saveError.label}
+          message={saveError.message}
+          busy={inventory.busy}
+          onRetry={retrySave}
+          onKeepLocal={keepLocal}
         />
       )}
 
