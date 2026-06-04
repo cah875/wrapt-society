@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { loadInventory, saveInventory, newId } from '../lib/storage.js';
 import { daysUntil, statusFor } from '../lib/dates.js';
+import { normalizeGtin } from '../lib/gs1.js';
 import * as excel from '../lib/excel.js';
 
 /** Build the Excel row payload from a local entry (status/days computed now). */
@@ -22,7 +23,9 @@ function toRow(entry, alertDays) {
 /** Match two records as the same physical product+lot+exp (GTIN preferred). */
 function sameItem(a, b) {
   const n = (s) => (s || '').trim().toLowerCase();
-  if (a.gtin && b.gtin && n(a.gtin) === n(b.gtin) && n(a.lot) === n(b.lot)) {
+  const ga = normalizeGtin(a.gtin);
+  const gb = normalizeGtin(b.gtin);
+  if (ga && gb && ga === gb && n(a.lot) === n(b.lot)) {
     // Same GTIN + lot; require matching expiration too when both have one.
     return !a.expiration || !b.expiration || a.expiration === b.expiration;
   }
@@ -293,7 +296,7 @@ export function useInventory(settings, onSettingsChange) {
           quantity: data.quantity,
           unit: data.unit || 'each',
           location: data.location || settingsRef.current.location || '',
-          gtin: data.gtin || '',
+          gtin: normalizeGtin(data.gtin),
           synced: false,
           syncError: null,
         };

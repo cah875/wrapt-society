@@ -50,6 +50,17 @@ function toGtin14(digits) {
 }
 
 /**
+ * Normalize a GTIN to a comparable form: digits only, left-padded to 14 when it
+ * is a standard length (8/12/13/14). Used so a GTIN read from a photo and one
+ * decoded from a later scan match even if zero-padding differs.
+ */
+export function normalizeGtin(input) {
+  const d = String(input || '').replace(/\D/g, '');
+  if (!d) return '';
+  return [8, 12, 13, 14].includes(d.length) ? d.padStart(14, '0') : d;
+}
+
+/**
  * Parse a scanned string into normalized device fields.
  * @returns {{gtin, expiration, lot, serial, productionDate, raw, isUdi}}
  */
@@ -100,7 +111,7 @@ export function parseScan(input) {
 
     switch (ai) {
       case '01':
-        result.gtin = value;
+        result.gtin = normalizeGtin(value);
         result.isUdi = true;
         break;
       case '17':
