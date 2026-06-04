@@ -1,0 +1,82 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root {
+  /* Default font scale — overridden at runtime by the font-scale setting. */
+  --app-font-scale: 1;
+}
+
+html {
+  font-size: calc(100% * var(--app-font-scale));
+}
+
+body {
+  @apply bg-clinical-50 text-clinical-900 antialiased;
+  margin: 0;
+  font-family: ui-sans-serif, system-ui, -apple-system, 'Segoe UI', Roboto,
+    Helvetica, Arial, sans-serif;
+  -webkit-tap-highlight-color: transparent;
+}
+
+.dark body {
+  @apply bg-clinical-950 text-clinical-100;
+}
+
+/* High-contrast mode: stronger borders + text, used for accessibility. */
+.contrast-high {
+  --tw-text-opacity: 1;
+}
+.contrast-high * {
+  border-color: currentColor !important;
+}
+.contrast-high button {
+  outline: 2px solid currentColor;
+}
+
+@layer components {
+  /* Large, gloved-hand-friendly primary action button. */
+  .btn {
+    @apply inline-flex items-center justify-center gap-2 rounded-xl px-5 py-3
+      text-base font-semibold transition-colors select-none
+      focus:outline-none focus-visible:ring-4 focus-visible:ring-clinical-300
+      disabled:cursor-not-allowed disabled:opacity-50;
+    min-height: 3rem;
+  }
+  .btn-primary {
+    @apply btn bg-clinical-600 text-white hover:bg-clinical-700 active:bg-clinical-800;
+  }
+  .btn-success {
+    @apply btn bg-status-ok text-white hover:brightness-110 active:brightness-95;
+  }
+  .btn-danger {
+    @apply btn bg-status-danger text-white hover:brightness-110 active:brightness-95;
+  }
+  .btn-ghost {
+    @apply btn bg-clinical-100 text-clinical-800 hover:bg-clinical-200
+      dark:bg-clinical-800 dark:text-clinical-100 dark:hover:bg-clinical-700;
+  }
+  .btn-xl {
+    @apply px-8 py-6 text-2xl rounded-2xl;
+    min-height: 5rem;
+  }
+
+  .card {
+    @apply rounded-2xl border border-clinical-200 bg-white p-5 shadow-sm
+      dark:border-clinical-800 dark:bg-clinical-900;
+  }
+
+  .field-label {
+    @apply mb-1 block text-sm font-semibold text-clinical-700 dark:text-clinical-200;
+  }
+  .field-input {
+    @apply w-full rounded-lg border border-clinical-300 bg-white px-4 py-3 text-base
+      text-clinical-900 placeholder-clinical-400 focus:border-clinical-500
+      focus:outline-none focus:ring-2 focus:ring-clinical-300
+      dark:border-clinical-700 dark:bg-clinical-800 dark:text-clinical-50;
+  }
+
+  .badge {
+    @apply inline-flex items-center gap-1 rounded-full px-3 py-1 text-sm font-semibold;
+  }
+}
