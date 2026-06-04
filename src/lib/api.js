@@ -37,6 +37,36 @@ export async function extractFromImage(imageBase64, settings = {}) {
   }
 }
 
+// ── Authentication ──────────────────────────────────────────────────────────
+/** Returns true if the current session is logged in. */
+export async function checkAuth() {
+  try {
+    await client.get('/me');
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+/** Log in with username/password; sets the auth cookie on success. */
+export async function login(username, password) {
+  try {
+    await client.post('/login', { username, password });
+    return true;
+  } catch (err) {
+    throw unwrapError(err, 'Login failed.');
+  }
+}
+
+/** Log out (clears the auth cookie). */
+export async function logout() {
+  try {
+    await client.post('/logout');
+  } catch {
+    // ignore
+  }
+}
+
 /**
  * Look up a product name for a GTIN via the FDA GUDID database.
  * @returns {Promise<{gtin, name, brandName, company, model}>}

@@ -8,6 +8,7 @@
 // present, otherwise from the ANTHROPIC_API_KEY environment variable.
 import Anthropic from '@anthropic-ai/sdk';
 import { readJsonBody, sendJson, requirePost } from './_lib.js';
+import { isAuthed } from './_auth.js';
 
 const DEFAULT_MODEL = process.env.CLAUDE_VISION_MODEL || 'claude-haiku-4-5-20251001';
 
@@ -56,6 +57,7 @@ function parseJsonResponse(text) {
 
 export default async function handler(req, res) {
   if (!requirePost(req, res)) return;
+  if (!isAuthed(req)) return sendJson(res, 401, { error: 'Please log in.' });
 
   let body;
   try {

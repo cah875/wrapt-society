@@ -83,6 +83,23 @@ variable-length fields, configure the scanner to transmit the **GS1 / FNC1
 group separator**. The webcam path remains available as a fallback, and any code
 can be typed/pasted manually.
 
+## Login / security
+
+The app is gated by a username + password. The login sets a signed, HttpOnly
+cookie, and the **API endpoints (`/api/vision`, `/api/gudid`) require it** — so
+nobody can use the page or burn your Claude credits without signing in.
+
+Credentials come from environment variables (with working defaults):
+
+| Variable | Default | Notes |
+| --- | --- | --- |
+| `APP_USERNAME` | `mmtracker` | |
+| `APP_PASSWORD` | `Directorlevelshiz` | **Set this in Vercel** — the default is visible in source. |
+| `AUTH_SECRET` | derived | Set to a long random string to sign cookies. |
+
+This is appropriate auth for an internal tool. For stronger protection you can
+also enable Vercel's built-in Deployment Protection (password/SSO at the edge).
+
 ## How data is stored (and why there's no cloud database)
 
 The inventory **Excel file lives on the technician's laptop**, inside a folder

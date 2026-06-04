@@ -9,9 +9,11 @@ import SettingsModal from './components/SettingsModal.jsx';
 import SetupWizard from './components/SetupWizard.jsx';
 import ScanPanel from './components/ScanPanel.jsx';
 import Toast from './components/Toast.jsx';
+import EasterEgg from './components/EasterEgg.jsx';
 import { useSettings } from './hooks/useSettings.js';
 import { useInventory } from './hooks/useInventory.js';
 import { useScanner } from './hooks/useScanner.js';
+import { useEasterEgg } from './hooks/useEasterEgg.js';
 import { extractFromImage, lookupGtin } from './lib/api.js';
 import { parseScan } from './lib/gs1.js';
 import { lookupGtinName, rememberGtinName } from './lib/storage.js';
@@ -33,6 +35,10 @@ export default function App() {
   const [toast, setToast] = useState(null);
   const [wizardDismissed, setWizardDismissed] = useState(false);
   const [cameras, setCameras] = useState([]);
+  const [easterEgg, setEasterEgg] = useState(false);
+
+  // Type "shawn" anywhere to summon Yoda.
+  useEasterEgg('shawn', () => setEasterEgg(true));
 
   const notify = useCallback((type, message, opts = {}) => {
     setToast({ type, message, ...opts });
@@ -335,6 +341,8 @@ export default function App() {
           onClose={() => setShowSettings(false)}
         />
       )}
+
+      {easterEgg && <EasterEgg onClose={() => setEasterEgg(false)} />}
 
       <Toast toast={toast} onDismiss={() => setToast(null)} />
 
