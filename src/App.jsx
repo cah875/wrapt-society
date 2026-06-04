@@ -7,16 +7,21 @@ import SaveErrorDialog from './components/SaveErrorDialog.jsx';
 import Dashboard from './components/Dashboard.jsx';
 import SettingsModal from './components/SettingsModal.jsx';
 import SetupWizard from './components/SetupWizard.jsx';
+import ScanPanel from './components/ScanPanel.jsx';
 import Toast from './components/Toast.jsx';
 import { useSettings } from './hooks/useSettings.js';
 import { useInventory } from './hooks/useInventory.js';
-import { extractFromImage } from './lib/api.js';
+import { useScanner } from './hooks/useScanner.js';
+import { extractFromImage, lookupGtin } from './lib/api.js';
+import { parseScan } from './lib/gs1.js';
+import { lookupGtinName, rememberGtinName } from './lib/storage.js';
 
 export default function App() {
   const { settings, update, reset } = useSettings();
   const inventory = useInventory(settings, update);
 
   // Capture/confirm flow state.
+  const [mode, setMode] = useState('receive'); // 'receive' | 'use'
   const [stage, setStage] = useState('capture'); // 'capture' | 'confirm'
   const [extracted, setExtracted] = useState(null);
   const [busy, setBusy] = useState(false);
@@ -62,6 +67,77 @@ export default function App() {
     setExtracted({ fromVision: false });
     setStage('confirm');
   }, []);
+
+  // --- Barcode scanning (USB 2D scanner or manual code) ---------------------
+  // Receiving: a scan prefills the confirmation panel (no Vision cost).
+  const handleReceiveScan = useCallback(async (parsed) => {
+    setBusy(true);
+    let name = lookupGtinName(parsed.gtin);
+    if (!name && parsed.gtin) {
+      try {
+        const r = await lookupGtin(parsed.gtin);
+        if (r?.name) {
+          name = r.name;
+          rememberGtinName(parsed.gtin, name);
+        }
+      } catch {
+        // No GUDID match — leave the name blank for the tech to fill in.
+      }
+    }
+    setExtracted({
+      product: name || '',
+      expiration_date: parsed.expiration,
+      lot_number: parsed.lot,
+      gtin: parsed.gtin,
+      fromScan: true,
+      confidence: 'high',
+    });
+    setStage('confirm');
+    setBusy(false);
+  }, []);
+
+  // Using: a scan immediately removes 1 from the matching in-stock item.
+  const handleUseScan = useCallback(
+    async (parsed) => {
+      const item = {
+        gtin: parsed.gtin,
+        lot: parsed.lot,
+        expiration: parsed.expiration,
+        product: lookupGtinName(parsed.gtin),
+      };
+      const res = await inventory.useStock(item, 1);
+      if (!res.ok) {
+        const who = item.product || (parsed.gtin ? `GTIN ${parsed.gtin}` : 'that item');
+        notify('error', `Not in inventory: ${who}. Receive it first.`, { duration: 5000 });
+        return;
+      }
+      const name = res.entry.product || item.product || 'item';
+      if (res.saved) {
+        notify('success', `Used 1 × ${name} · ${res.remaining} left`);
+      } else if (res.connected === false) {
+        notify('warn', `Used 1 × ${name} (saved on device) · ${res.remaining} left`, {
+          duration: 5000,
+        });
+      } else {
+        setSaveError({ label: `Use of ${name}`, message: res.error || 'Could not write to Excel.' });
+      }
+    },
+    [inventory, notify]
+  );
+
+  // Route a raw scanned/typed code to the right handler for the current mode.
+  const handleScan = useCallback(
+    (rawCode) => {
+      const parsed = parseScan(rawCode);
+      if (!parsed.gtin && !parsed.lot && !parsed.expiration) {
+        notify('error', 'Could not read that barcode. Try again or type it in.', { duration: 5000 });
+        return;
+      }
+      if (mode === 'use') handleUseScan(parsed);
+      else handleReceiveScan(parsed);
+    },
+    [mode, handleUseScan, handleReceiveScan, notify]
+  );
 
   const backToCapture = useCallback(() => {
     setExtracted(null);
@@ -138,6 +214,10 @@ export default function App() {
     [duplicate, logEntry]
   );
 
+  // Listen for the USB barcode scanner whenever the main screen is active.
+  const scannerEnabled = stage === 'capture' && !duplicate && !saveError && !showSettings;
+  useScanner(handleScan, scannerEnabled);
+
   const showWizard = !inventory.connected && !wizardDismissed;
 
   return (
@@ -162,16 +242,37 @@ export default function App() {
 
         {/* Two-column on large screens: capture/confirm + dashboard. */}
         <div className="grid gap-6 lg:grid-cols-2">
-          <div>
+          <div className="space-y-6">
             {stage === 'capture' ? (
-              <CameraCapture
-                preferredDeviceId={settings.cameraDeviceId}
-                busy={busy}
-                onCapture={handleCapture}
-                onManualEntry={handleManualEntry}
-                onSelectDevice={(id) => update({ cameraDeviceId: id })}
-                onCamerasEnumerated={setCameras}
-              />
+              <>
+                <ScanPanel mode={mode} onMode={setMode} onManualCode={handleScan} busy={busy} />
+                {mode === 'receive' ? (
+                  <CameraCapture
+                    preferredDeviceId={settings.cameraDeviceId}
+                    busy={busy}
+                    onCapture={handleCapture}
+                    onManualEntry={handleManualEntry}
+                    onSelectDevice={(id) => update({ cameraDeviceId: id })}
+                    onCamerasEnumerated={setCameras}
+                  />
+                ) : (
+                  <div className="card flex items-start gap-3">
+                    <span className="text-3xl" aria-hidden>
+                      ⬆
+                    </span>
+                    <div>
+                      <h2 className="text-xl font-bold text-clinical-800 dark:text-clinical-50">
+                        Use mode
+                      </h2>
+                      <p className="mt-1 text-sm text-clinical-500 dark:text-clinical-400">
+                        Scan each used implant&apos;s sticker (or type its code above). Each scan
+                        removes one unit from inventory — no photo needed, no cost. Great for
+                        running through a stack of stickers from the implant log.
+                      </p>
+                    </div>
+                  </div>
+                )}
+              </>
             ) : (
               <ConfirmationPanel
                 extracted={extracted || {}}

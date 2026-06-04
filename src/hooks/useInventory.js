@@ -15,7 +15,22 @@ function toRow(entry, alertDays) {
     daysUntil: daysUntil(entry.expiration) ?? '',
     status: statusFor(entry.expiration, alertDays).label,
     location: entry.location || '',
+    gtin: entry.gtin || '',
   };
+}
+
+/** Match two records as the same physical product+lot+exp (GTIN preferred). */
+function sameItem(a, b) {
+  const n = (s) => (s || '').trim().toLowerCase();
+  if (a.gtin && b.gtin && n(a.gtin) === n(b.gtin) && n(a.lot) === n(b.lot)) {
+    // Same GTIN + lot; require matching expiration too when both have one.
+    return !a.expiration || !b.expiration || a.expiration === b.expiration;
+  }
+  return (
+    n(a.product) === n(b.product) &&
+    n(a.lot) === n(b.lot) &&
+    (a.expiration || '') === (b.expiration || '')
+  );
 }
 
 function formatTimestamp(iso) {
@@ -77,6 +92,7 @@ export function useInventory(settings, onSettingsChange) {
         quantity: r.quantity,
         unit: r.unit,
         location: r.location,
+        gtin: r.gtin || '',
         synced: true,
         syncError: null,
       }))
@@ -205,15 +221,13 @@ export function useInventory(settings, onSettingsChange) {
 
   // ── Inventory operations ──────────────────────────────────────────────────
   const findDuplicate = useCallback(
-    ({ product, lot, expiration }) => {
-      const norm = (s) => (s || '').trim().toLowerCase();
-      return entries.find(
-        (e) =>
-          norm(e.product) === norm(product) &&
-          norm(e.lot) === norm(lot) &&
-          (e.expiration || '') === (expiration || '')
-      );
-    },
+    (item) => entries.find((e) => sameItem(e, item)),
+    [entries]
+  );
+
+  /** Find an in-stock entry (quantity > 0) matching a scanned/used item. */
+  const findInStock = useCallback(
+    (item) => entries.find((e) => e.quantity > 0 && sameItem(e, item)),
     [entries]
   );
 
@@ -279,6 +293,7 @@ export function useInventory(settings, onSettingsChange) {
           quantity: data.quantity,
           unit: data.unit || 'each',
           location: data.location || settingsRef.current.location || '',
+          gtin: data.gtin || '',
           synced: false,
           syncError: null,
         };
@@ -310,6 +325,44 @@ export function useInventory(settings, onSettingsChange) {
     [entries, excelState, connected, writeEntry]
   );
 
+  /**
+   * Decrement on use: reduce the matching in-stock entry by `qty` (default 1)
+   * and write the new quantity through to the Excel file.
+   */
+  const useStock = useCallback(
+    async (item, qty = 1) => {
+      const target = entries.find((e) => e.quantity > 0 && sameItem(e, item));
+      if (!target) return { ok: false, reason: 'not_found' };
+
+      const used = Math.min(qty, target.quantity);
+      const remaining = target.quantity - used;
+      const updated = {
+        ...target,
+        quantity: remaining,
+        timestamp: new Date().toISOString(),
+        synced: false,
+      };
+      setEntries((prev) => prev.map((e) => (e.id === target.id ? updated : e)));
+
+      if (handleRef.current && excelState === EXCEL_STATE.CONNECTED) {
+        try {
+          await writeEntry(updated);
+          setEntries((prev) =>
+            prev.map((e) => (e.id === updated.id ? { ...e, synced: true, syncError: null } : e))
+          );
+          return { ok: true, entry: updated, used, remaining, saved: true };
+        } catch (err) {
+          setEntries((prev) =>
+            prev.map((e) => (e.id === updated.id ? { ...e, syncError: err.message } : e))
+          );
+          return { ok: true, entry: updated, used, remaining, saved: false, error: err.message };
+        }
+      }
+      return { ok: true, entry: updated, used, remaining, saved: false, connected: false };
+    },
+    [entries, excelState, writeEntry]
+  );
+
   const clearLocal = useCallback(() => setEntries([]), []);
 
   const pendingCount = entries.filter((e) => !e.synced).length;
@@ -318,7 +371,9 @@ export function useInventory(settings, onSettingsChange) {
     entries,
     pendingCount,
     findDuplicate,
+    findInStock,
     addEntry,
+    useStock,
     retryPending,
     clearLocal,
     // Excel connection

@@ -53,3 +53,22 @@ export function saveInventory(entries) {
 export function newId() {
   return `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
 }
+
+// ── GTIN → product name cache (learn-as-you-go) ─────────────────────────────
+const GTIN_KEY = 'hiet.gtinmap.v1';
+
+export function loadGtinMap() {
+  return safeParse(localStorage.getItem(GTIN_KEY), {});
+}
+
+export function rememberGtinName(gtin, name) {
+  if (!gtin || !name) return;
+  const map = loadGtinMap();
+  map[gtin] = name;
+  localStorage.setItem(GTIN_KEY, JSON.stringify(map));
+}
+
+export function lookupGtinName(gtin) {
+  if (!gtin) return '';
+  return loadGtinMap()[gtin] || '';
+}
