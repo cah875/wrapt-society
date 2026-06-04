@@ -6,10 +6,13 @@
 //
 // Proxied server-side to avoid browser CORS issues and to normalize the result.
 import { sendJson } from './_lib.js';
+import { isAuthed } from './_auth.js';
 
 const LOOKUP_URL = 'https://accessgudid.nlm.nih.gov/api/v3/devices/lookup.json';
 
 export default async function handler(req, res) {
+  if (!isAuthed(req)) return sendJson(res, 401, { error: 'Please log in.' });
+
   const gtin = (req.query?.gtin || '').toString().replace(/\D/g, '');
   if (!gtin) return sendJson(res, 400, { error: 'Missing gtin parameter.' });
 
