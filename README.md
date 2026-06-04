@@ -3,7 +3,8 @@
 A fast, foolproof web app for materials technicians at a hospital loading dock.
 A tech photographs implant/biologic packaging, **Claude Vision** reads the
 product name, expiration date, and lot number, and the entry — with a quantity —
-is appended to a shared **Google Sheet**.
+is saved to a **local Excel file** that syncs to the rest of the organization via
+**OneDrive / SharePoint**.
 
 > Built to be operated with gloved hands on a laptop or tablet: large buttons,
 > high contrast, no fiddly inputs, and ~10–15 seconds per batch.
@@ -20,38 +21,67 @@ is appended to a shared **Google Sheet**.
   configurable unit type (each/box/case/set/vial).
 - 🔁 **Duplicate detection** — same product + lot + expiration prompts you to
   *add more units* instead of creating a duplicate row.
-- 📊 **Google Sheets logging** — auto-appends `Timestamp, Product, Expiration,
-  Lot, Quantity, Unit, Days Until Expiration, Status, Location`, with the Status
-  column color-coded (GREEN > 60d, YELLOW 30–60d, RED < 30d / expired).
+- 📊 **Excel logging** — writes directly to a `.xlsx` with columns `Timestamp,
+  Product, Expiration, Lot, Quantity, Unit, Days Until Expiration, Status,
+  Location`. The Status column is color-coded (GREEN > 60d, YELLOW 30–60d,
+  RED < 30d / expired). Duplicate items update their existing row so counts stay
+  accurate.
 - 🧭 **Dashboard** — total units, expiring-soon summary, recent items,
   search/filter, and group-by-expiration.
-- 🛟 **Never loses data** — every entry is cached in `localStorage` and synced to
-  the sheet; failed writes are queued and retried automatically when back online.
-- ⚙️ **Setup wizard + Settings** — API key + Sheet connection with **Test**
-  buttons, alert threshold, unit types, camera, dark mode, high contrast, and
-  font scaling.
+- 🛟 **Never loses data** — every entry is cached in `localStorage`; if a write
+  to the Excel file fails (file busy, permission lapsed), the entry is queued and
+  retried.
+- ⚙️ **Setup wizard + Settings** — connect/create the Excel file, Claude key with
+  a **Test** button, alert threshold, unit types, camera, dark mode, high
+  contrast, and font scaling.
+
+---
+
+## How data is stored (and why there's no cloud database)
+
+The inventory **Excel file lives on the technician's laptop**, inside a folder
+that OneDrive keeps synced with SharePoint:
+
+```
+OneDrive - YourHospital\Materials\implant-expiration-log.xlsx
+```
+
+The app writes to that file **in the browser** using the
+[File System Access API](https://developer.mozilla.org/docs/Web/API/File_System_API).
+OneDrive then syncs it up so anyone with access to the SharePoint folder can open
+and view it — no Azure app registration, no Google account, no server database.
+
+**Requirements / constraints**
+
+- **Browser:** Microsoft **Edge** or Google **Chrome** (the File System Access
+  API is not available in Firefox or Safari).
+- **One writer:** designed for a single logging laptop. Others *view* the file on
+  SharePoint. If two machines wrote to the same synced file simultaneously,
+  OneDrive would create conflict copies.
+- The app remembers the chosen file across sessions; after a full browser/OS
+  restart it may ask the tech to re-grant permission once (a single click via the
+  header's *Reconnect* badge or Settings).
 
 ---
 
 ## Architecture
 
 ```
-React (Vite) frontend  ──▶  /api/vision  ──▶  Claude Vision (Anthropic)
-                        └─▶  /api/sheets  ──▶  Google Sheets API (service account)
+React (Vite) frontend
+  ├─ Camera + UI + dashboard ............ all in the browser
+  ├─ Excel read/write (ExcelJS) ......... local .xlsx via File System Access API
+  └─ /api/vision (Vercel function) ...... Claude Vision (Anthropic)
 ```
 
 - **Frontend:** React 18 + Vite + Tailwind CSS, `axios` for HTTP.
-- **Serverless functions** (`/api`, deployed on Vercel) keep API credentials off
-  the client and avoid browser CORS limitations:
-  - `api/vision.js` — calls Claude Vision and returns structured JSON.
-  - `api/sheets.js` — authenticates a Google **service account** and
-    appends/reads rows, creating the tab, header, and color rules on first use.
-- **No database** — the user's own Google Sheet is the source of truth, with a
-  bounded `localStorage` cache (last 50 entries) as an offline fallback.
+- **One serverless function** (`api/vision.js`) keeps the Anthropic API key off
+  the client and avoids browser CORS limits. Inventory persistence is fully
+  client-side.
+- **ExcelJS** is lazy-loaded on the first file operation to keep the initial
+  bundle small.
 
-Credentials can come from **server environment variables** (recommended for a
-locked-down shared deployment) **or** from the in-app Settings page (stored only
-in the browser). Either works; env vars take precedence when set.
+The Claude key can come from a **server environment variable** (recommended) or
+from the in-app Settings page (stored only in the browser).
 
 ---
 
@@ -60,41 +90,35 @@ in the browser). Either works; env vars take precedence when set.
 ```bash
 npm install
 
-# Run the Vite dev server + serverless functions together:
+# Run the Vite dev server + the /api/vision function together:
 npx vercel dev          # serves the app and /api on one origin (recommended)
 
 # — or — frontend only (then point the Vite proxy at your API host):
 npm run dev
 ```
 
-Open http://localhost:3000 (with `vercel dev`) and complete the in-app setup
-wizard, or pre-configure via environment variables (see below).
+Open the app in **Edge or Chrome**, then complete the in-app setup wizard.
 
 ---
 
 ## Configuration
 
-Copy `.env.example` to `.env` (for `vercel dev`) or set these as **Vercel
-Environment Variables** in production:
+The only secret is the Claude Vision key. Copy `.env.example` to `.env` (for
+`vercel dev`) or set it as a **Vercel Environment Variable** in production:
 
 | Variable | Purpose |
 | --- | --- |
 | `ANTHROPIC_API_KEY` | Claude Vision API key ([console](https://console.anthropic.com/settings/keys)). |
 | `CLAUDE_VISION_MODEL` | *(optional)* override the vision model. |
-| `GOOGLE_SERVICE_ACCOUNT_JSON` | Service account key JSON (raw or base64). |
-| `GOOGLE_SHEET_ID` | Target spreadsheet ID. |
-| `GOOGLE_SHEET_TAB` | *(optional)* tab name, defaults to `Inventory`. |
 
-### Google Sheets setup (one time)
+### Connecting the Excel file (one time, on the logging laptop)
 
-1. In Google Cloud, create a project and **enable the Google Sheets API**.
-2. Create a **service account** and download its JSON key.
-3. Put the JSON in `GOOGLE_SERVICE_ACCOUNT_JSON` (or paste it in Settings).
-4. Open your Google Sheet → **Share** → add the service account's
-   `client_email` with **Editor** access.
-5. Paste the Sheet URL in Settings (the app extracts the ID automatically).
-
-The app creates the header row and color-coding the first time it writes.
+1. Open the deployed app in **Edge** (or Chrome).
+2. **Settings → Excel File → Create new file…** (or *Choose existing file…*).
+3. Save it inside your OneDrive-synced SharePoint folder, e.g.
+   `OneDrive - YourHospital\Materials\implant-expiration-log.xlsx`.
+4. Grant the permission prompt. Done — every logged item now appends to that
+   file and OneDrive shares it with your team.
 
 ---
 
@@ -102,9 +126,9 @@ The app creates the header row and color-coding the first time it writes.
 
 1. Push this repo to GitHub.
 2. In Vercel, **Import** the repo (framework auto-detected as Vite).
-3. Add the environment variables above.
-4. Deploy. The `vercel.json` already maps `/api/*` to serverless functions and
-   serves the SPA for all other routes.
+3. Add `ANTHROPIC_API_KEY` (and optionally `CLAUDE_VISION_MODEL`).
+4. Deploy. `vercel.json` maps `/api/*` to the serverless function and serves the
+   SPA for all other routes. (HTTPS — required for camera access — is automatic.)
 
 ---
 
@@ -112,12 +136,12 @@ The app creates the header row and color-coding the first time it writes.
 
 - **Vision fails / unreadable** → automatic fallback to a manual-entry form.
 - **Blurry photo** → flagged with a warning banner; verify or retake.
-- **Unparseable date** → inline error; the field stays editable and a wide range
-  of formats (MM/DD/YYYY, M/D/YY, `AUG 2026`, `08/2026`, ISO) are normalized.
+- **Unparseable date** → inline error; the field stays editable and many formats
+  (MM/DD/YYYY, M/D/YY, `AUG 2026`, `08/2026`, ISO) are normalized.
 - **Quantity > 100** → requires an explicit confirmation checkbox.
-- **Sheets write fails / offline** → entry cached locally and retried on
-  reconnect; the header shows pending/synced status.
-- **Missing keys** → setup wizard + clear, actionable test-button errors.
+- **Excel write fails / permission lapsed** → entry cached locally and retried;
+  the header shows a *not saved* / *Reconnect* badge.
+- **Unsupported browser** → clear prompt to switch to Edge/Chrome.
 
 ---
 
@@ -127,13 +151,12 @@ The app creates the header row and color-coding the first time it writes.
 api/
   _lib.js            shared request helpers
   vision.js          Claude Vision serverless endpoint
-  sheets.js          Google Sheets serverless endpoint
 src/
   components/        Header, CameraCapture, ConfirmationPanel, QuantityInput,
                      DuplicateDialog, Dashboard, SettingsModal, SetupWizard,
                      StatusBadge, Toast, Icons
   hooks/             useSettings, useCamera, useInventory
-  lib/               api (client), dates, storage
+  lib/               api (client), dates, storage, excel (File System Access)
   App.jsx, main.jsx, index.css
 ```
 

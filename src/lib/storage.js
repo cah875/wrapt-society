@@ -5,15 +5,14 @@
 
 const SETTINGS_KEY = 'hiet.settings.v1';
 const INVENTORY_KEY = 'hiet.inventory.v1';
-const MAX_CACHE = 50;
+// Cache doubles as the dashboard source and duplicate-detection index, so keep
+// it generous enough to cover an active inventory.
+const MAX_CACHE = 2000;
 
 export const DEFAULT_SETTINGS = {
   anthropicApiKey: '', // optional client-supplied key (server env var preferred)
   visionModel: '', // optional model override
-  sheetUrl: '',
-  sheetId: '',
-  sheetTab: 'Inventory',
-  googleServiceAccountJson: '', // optional client-supplied SA creds
+  excelFileName: '', // display name of the connected .xlsx (handle lives in IndexedDB)
   cameraDeviceId: '',
   alertDays: 30,
   location: '',
@@ -49,13 +48,6 @@ export function saveInventory(entries) {
   const trimmed = entries.slice(0, MAX_CACHE);
   localStorage.setItem(INVENTORY_KEY, JSON.stringify(trimmed));
   return trimmed;
-}
-
-/** Extract the spreadsheet ID from a full Google Sheets URL (or pass-through). */
-export function extractSheetId(urlOrId) {
-  if (!urlOrId) return '';
-  const m = String(urlOrId).match(/\/d\/([a-zA-Z0-9-_]+)/);
-  return m ? m[1] : String(urlOrId).trim();
 }
 
 export function newId() {

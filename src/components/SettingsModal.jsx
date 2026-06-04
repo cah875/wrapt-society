@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react';
-import { testVision, testSheets } from '../lib/api.js';
+import { testVision } from '../lib/api.js';
+import { EXCEL_STATE } from '../hooks/useInventory.js';
 import { CheckIcon, XIcon, AlertIcon, RefreshIcon } from './Icons.jsx';
 
 /** A single test-connection control with status feedback. */
@@ -50,9 +51,87 @@ function Section({ title, children, desc }) {
   );
 }
 
-/** Full settings editor: API keys, sheet, camera, thresholds, appearance. */
-export default function SettingsModal({ settings, onUpdate, onReset, onClose, cameras = [] }) {
-  // Local draft so typing doesn't thrash localStorage; commit on change/blur.
+/** Excel-file connection controls (pick / create / reconnect / disconnect). */
+function ExcelSection({ inventory }) {
+  const { excelState, fileName, busy, excelError } = inventory;
+
+  if (excelState === EXCEL_STATE.UNSUPPORTED) {
+    return (
+      <div className="flex items-start gap-2 rounded-lg bg-red-50 p-3 text-status-danger dark:bg-red-900/30 dark:text-red-200">
+        <AlertIcon width={20} height={20} className="mt-0.5 shrink-0" />
+        <p className="text-sm font-medium">
+          This browser can&apos;t write local Excel files. Please open the app in{' '}
+          <strong>Microsoft Edge</strong> or <strong>Google Chrome</strong>.
+        </p>
+      </div>
+    );
+  }
+
+  const connected = excelState === EXCEL_STATE.CONNECTED;
+  const needsPermission = excelState === EXCEL_STATE.NEEDS_PERMISSION;
+
+  return (
+    <div className="space-y-3">
+      {/* Current status line */}
+      {connected ? (
+        <div className="flex items-center gap-2 rounded-lg bg-green-50 p-3 text-status-ok dark:bg-green-900/30 dark:text-green-200">
+          <CheckIcon width={20} height={20} className="shrink-0" />
+          <p className="text-sm font-medium">
+            Connected to <strong>{fileName}</strong>. New items are saved here automatically.
+          </p>
+        </div>
+      ) : needsPermission ? (
+        <div className="flex items-center gap-2 rounded-lg bg-amber-50 p-3 text-status-warn dark:bg-amber-900/30 dark:text-amber-200">
+          <AlertIcon width={20} height={20} className="shrink-0" />
+          <p className="text-sm font-medium">
+            {fileName ? <strong>{fileName}</strong> : 'A file'} is saved but needs permission again.
+            Click <em>Reconnect</em>.
+          </p>
+        </div>
+      ) : (
+        <p className="text-sm text-clinical-500 dark:text-clinical-400">
+          No file connected yet. Choose or create an <code>.xlsx</code> inside your
+          OneDrive/SharePoint-synced folder so coworkers can view it.
+        </p>
+      )}
+
+      {excelError && (
+        <p className="rounded-lg bg-red-50 p-2 text-sm text-status-danger dark:bg-red-900/30 dark:text-red-200">
+          {excelError}
+        </p>
+      )}
+
+      <div className="flex flex-wrap gap-3">
+        {needsPermission && (
+          <button onClick={inventory.reconnect} className="btn-primary" disabled={busy}>
+            <RefreshIcon width={18} height={18} className={busy ? 'animate-spin' : ''} /> Reconnect
+          </button>
+        )}
+        <button onClick={inventory.connectExisting} className="btn-ghost" disabled={busy}>
+          Choose existing file…
+        </button>
+        <button onClick={inventory.connectNew} className="btn-ghost" disabled={busy}>
+          Create new file…
+        </button>
+        {connected && (
+          <button onClick={inventory.disconnect} className="btn-ghost" disabled={busy}>
+            Disconnect
+          </button>
+        )}
+      </div>
+
+      {connected && (
+        <p className="text-xs text-clinical-400">
+          Tip: keep the file in a folder like <code>OneDrive - YourHospital\Materials\</code> so it
+          syncs to SharePoint for everyone to view.
+        </p>
+      )}
+    </div>
+  );
+}
+
+/** Full settings editor: API key, Excel file, camera, thresholds, appearance. */
+export default function SettingsModal({ settings, onUpdate, onReset, onClose, cameras = [], inventory }) {
   const [draft, setDraft] = useState(settings);
   const [unitText, setUnitText] = useState((settings.unitTypes || []).join(', '));
 
@@ -60,7 +139,6 @@ export default function SettingsModal({ settings, onUpdate, onReset, onClose, ca
     setDraft(settings);
   }, [settings]);
 
-  // Persist a field immediately (settings are cheap and we want test buttons accurate).
   const set = (patch) => {
     setDraft((d) => ({ ...d, ...patch }));
     onUpdate(patch);
@@ -86,8 +164,15 @@ export default function SettingsModal({ settings, onUpdate, onReset, onClose, ca
 
         <div className="px-5 pb-8">
           <Section
+            title="Excel File"
+            desc="Where inventory is saved. Pick a file in your OneDrive/SharePoint-synced folder; it syncs automatically for coworkers to view."
+          >
+            <ExcelSection inventory={inventory} />
+          </Section>
+
+          <Section
             title="Claude Vision"
-            desc="Used to read product, expiration, and lot from photos. Leave blank if the key is configured on the server (recommended)."
+            desc="Reads product, expiration, and lot from photos. Leave blank if the key is configured on the server (recommended)."
           >
             <label className="field-label" htmlFor="anthropic-key">
               Claude API Key
@@ -112,47 +197,6 @@ export default function SettingsModal({ settings, onUpdate, onReset, onClose, ca
               className="field-input"
             />
             <TestButton label="Test Claude Vision" onTest={() => testVision(draft)} />
-          </Section>
-
-          <Section
-            title="Google Sheets"
-            desc="Your inventory log. Share the sheet with the service account email (Editor access)."
-          >
-            <label className="field-label" htmlFor="sheet-url">
-              Google Sheet URL
-            </label>
-            <input
-              id="sheet-url"
-              value={draft.sheetUrl}
-              onChange={(e) => set({ sheetUrl: e.target.value })}
-              placeholder="https://docs.google.com/spreadsheets/d/…"
-              className="field-input"
-            />
-            {draft.sheetId && (
-              <p className="mt-1 text-xs text-clinical-400">Sheet ID: {draft.sheetId}</p>
-            )}
-            <label className="field-label mt-3" htmlFor="sheet-tab">
-              Tab name
-            </label>
-            <input
-              id="sheet-tab"
-              value={draft.sheetTab}
-              onChange={(e) => set({ sheetTab: e.target.value })}
-              placeholder="Inventory"
-              className="field-input"
-            />
-            <label className="field-label mt-3" htmlFor="sa-json">
-              Service Account JSON (optional if set on server)
-            </label>
-            <textarea
-              id="sa-json"
-              rows={3}
-              value={draft.googleServiceAccountJson}
-              onChange={(e) => set({ googleServiceAccountJson: e.target.value })}
-              placeholder='{"type":"service_account", …}'
-              className="field-input font-mono text-xs"
-            />
-            <TestButton label="Test Google Sheets" onTest={() => testSheets(draft)} />
           </Section>
 
           <Section title="Capture & Inventory">
@@ -247,7 +291,7 @@ export default function SettingsModal({ settings, onUpdate, onReset, onClose, ca
           <Section title="Reset">
             <button
               onClick={() => {
-                if (window.confirm('Reset all settings to defaults? This does not delete logged inventory.')) {
+                if (window.confirm('Reset all settings to defaults? This does not delete your Excel file or logged inventory.')) {
                   onReset();
                 }
               }}

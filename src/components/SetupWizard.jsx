@@ -1,23 +1,27 @@
 import { CheckIcon, AlertIcon } from './Icons.jsx';
 
 /**
- * First-run guidance shown when Google Sheets is not configured. Explains the
- * three setup steps and routes the user to Settings. Non-blocking: the tech can
- * still capture/log to the local cache and sync later.
+ * First-run guidance shown until an Excel file is connected. Explains the setup
+ * steps and routes the user to Settings. Non-blocking: the tech can still
+ * capture/log to the local cache and connect a file afterward.
  */
-export default function SetupWizard({ sheetsConfigured, onOpenSettings, onDismiss }) {
+export default function SetupWizard({ excelSupported, onOpenSettings, onDismiss }) {
   const steps = [
     {
-      title: 'Add your Claude API key',
-      body: 'Either set ANTHROPIC_API_KEY on the server (recommended) or paste a key in Settings → Claude Vision. Use the Test button to confirm.',
+      title: 'Open in Microsoft Edge (or Chrome)',
+      body: 'Saving to a local Excel file requires Edge or Chrome. This won\'t work in Firefox or Safari.',
     },
     {
-      title: 'Connect your Google Sheet',
-      body: 'Create a Google service account, enable the Sheets API, and share your sheet with the service account email (Editor). Paste the Sheet URL in Settings → Google Sheets.',
+      title: 'Connect your Excel file',
+      body: 'In Settings → Excel File, choose or create an .xlsx inside your OneDrive/SharePoint-synced folder (e.g. "OneDrive - YourHospital\\Materials"). OneDrive shares it with coworkers automatically.',
+    },
+    {
+      title: 'Add your Claude API key',
+      body: 'Either set ANTHROPIC_API_KEY on the server (recommended) or paste a key in Settings → Claude Vision, then use the Test button.',
     },
     {
       title: 'Start logging',
-      body: 'Capture a photo, verify the details, set quantity, and Confirm & Log. Entries also cache locally and sync automatically.',
+      body: 'Capture a photo, verify the details, set the quantity, and Confirm & Log. Each item is appended to your Excel file and synced by OneDrive.',
     },
   ];
 
@@ -27,12 +31,12 @@ export default function SetupWizard({ sheetsConfigured, onOpenSettings, onDismis
         <AlertIcon width={26} height={26} className="mt-0.5 shrink-0 text-clinical-500" />
         <div className="flex-1">
           <h2 className="text-lg font-bold text-clinical-800 dark:text-clinical-50">
-            {sheetsConfigured ? 'Setup' : 'Finish setup to sync to Google Sheets'}
+            Finish setup to save to your Excel file
           </h2>
           <p className="text-sm text-clinical-500 dark:text-clinical-400">
-            {sheetsConfigured
-              ? 'You can re-run any of these steps from Settings.'
-              : 'Until a sheet is connected, items are saved locally and will sync once configured.'}
+            {excelSupported
+              ? 'Until a file is connected, items are saved in this browser and can be written to Excel once you connect.'
+              : 'This browser cannot save local Excel files — please reopen the app in Microsoft Edge or Google Chrome.'}
           </p>
 
           <ol className="mt-4 space-y-3">

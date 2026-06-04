@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useState } from 'react';
-import { loadSettings, saveSettings, extractSheetId, DEFAULT_SETTINGS } from '../lib/storage.js';
+import { loadSettings, saveSettings, DEFAULT_SETTINGS } from '../lib/storage.js';
 
 /**
  * Settings state synced to localStorage. Also applies theme / accessibility
@@ -19,10 +19,6 @@ export function useSettings() {
   const update = useCallback((patch) => {
     setSettings((prev) => {
       const next = { ...prev, ...patch };
-      // Keep sheetId derived from the URL automatically.
-      if (patch.sheetUrl !== undefined) {
-        next.sheetId = extractSheetId(patch.sheetUrl);
-      }
       saveSettings(next);
       return next;
     });
@@ -33,9 +29,5 @@ export function useSettings() {
     setSettings(DEFAULT_SETTINGS);
   }, []);
 
-  // Configuration completeness — drives the first-run setup wizard.
-  const visionReady = Boolean(settings.anthropicApiKey) || true; // server env var may cover it
-  const sheetsConfigured = Boolean(settings.sheetId);
-
-  return { settings, update, reset, visionReady, sheetsConfigured };
+  return { settings, update, reset };
 }

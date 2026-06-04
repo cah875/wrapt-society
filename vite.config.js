@@ -18,5 +18,7 @@ export default defineConfig({
   build: {
     outDir: 'dist',
     sourcemap: false,
+    // ExcelJS is lazy-loaded into its own chunk, so a larger limit is expected.
+    chunkSizeWarningLimit: 1000,
   },
 });

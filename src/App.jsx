@@ -12,8 +12,8 @@ import { useInventory } from './hooks/useInventory.js';
 import { extractFromImage } from './lib/api.js';
 
 export default function App() {
-  const { settings, update, reset, sheetsConfigured } = useSettings();
-  const inventory = useInventory(settings);
+  const { settings, update, reset } = useSettings();
+  const inventory = useInventory(settings, update);
 
   // Capture/confirm flow state.
   const [stage, setStage] = useState('capture'); // 'capture' | 'confirm'
@@ -69,17 +69,17 @@ export default function App() {
   // --- Logging --------------------------------------------------------------
   const logEntry = useCallback(
     async (data, mergeIntoId = null) => {
-      const { synced, error, configured } = await inventory.addEntry(data, mergeIntoId);
+      const { saved, error, connected } = await inventory.addEntry(data, mergeIntoId);
       const label = `${data.quantity}× ${data.product}`;
-      if (!configured) {
-        notify('success', `Logged ${label} locally. Connect a Google Sheet in Settings to sync.`, {
-          duration: 5000,
-        });
-      } else if (synced) {
-        notify('success', `Logged ${label} to Google Sheets.`);
-      } else {
-        notify('warn', `Logged ${label} locally — will sync when reconnected.${error ? ` (${error})` : ''}`, {
+      if (saved) {
+        notify('success', `Logged ${label} to ${inventory.fileName || 'the Excel file'}.`);
+      } else if (!connected) {
+        notify('warn', `Logged ${label} locally — connect an Excel file in Settings to save it.`, {
           duration: 6000,
+        });
+      } else {
+        notify('error', `Logged ${label} locally, but writing to Excel failed${error ? `: ${error}` : ''}.`, {
+          duration: 7000,
         });
       }
       backToCapture();
@@ -112,21 +112,23 @@ export default function App() {
     [duplicate, logEntry]
   );
 
-  const showWizard = !sheetsConfigured && !wizardDismissed;
+  const showWizard = !inventory.connected && !wizardDismissed;
 
   return (
     <div className="min-h-screen">
       <Header
-        online={inventory.online}
-        syncing={inventory.syncing}
+        excelState={inventory.excelState}
+        fileName={inventory.fileName}
+        busy={inventory.busy}
         pendingCount={inventory.pendingCount}
+        onReconnect={inventory.reconnect}
         onOpenSettings={() => setShowSettings(true)}
       />
 
       <main className="mx-auto max-w-6xl space-y-6 px-4 py-6">
         {showWizard && (
           <SetupWizard
-            sheetsConfigured={sheetsConfigured}
+            excelSupported={inventory.excelSupported}
             onOpenSettings={() => setShowSettings(true)}
             onDismiss={() => setWizardDismissed(true)}
           />
@@ -141,9 +143,7 @@ export default function App() {
                 busy={busy}
                 onCapture={handleCapture}
                 onManualEntry={handleManualEntry}
-                onSelectDevice={(id) => {
-                  update({ cameraDeviceId: id });
-                }}
+                onSelectDevice={(id) => update({ cameraDeviceId: id })}
                 onCamerasEnumerated={setCameras}
               />
             ) : (
@@ -161,8 +161,8 @@ export default function App() {
             <Dashboard
               entries={inventory.entries}
               settings={settings}
-              syncing={inventory.syncing}
-              onRefresh={inventory.syncPending}
+              syncing={inventory.busy}
+              onRefresh={inventory.connected ? inventory.importFromFile : inventory.retryPending}
             />
           </div>
         </div>
@@ -183,6 +183,7 @@ export default function App() {
         <SettingsModal
           settings={settings}
           cameras={cameras}
+          inventory={inventory}
           onUpdate={update}
           onReset={reset}
           onClose={() => setShowSettings(false)}
@@ -192,7 +193,7 @@ export default function App() {
       <Toast toast={toast} onDismiss={() => setToast(null)} />
 
       <footer className="mx-auto max-w-6xl px-4 pb-8 pt-2 text-center text-xs text-clinical-400">
-        Implant Expiration Tracker · Data is stored in your Google Sheet and cached locally.
+        Implant Expiration Tracker · Inventory is saved to your local Excel file and synced via OneDrive/SharePoint.
       </footer>
     </div>
   );

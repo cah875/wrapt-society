@@ -1,57 +1,209 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { loadInventory, saveInventory, newId } from '../lib/storage.js';
-import { appendRows } from '../lib/api.js';
 import { daysUntil, statusFor } from '../lib/dates.js';
+import * as excel from '../lib/excel.js';
 
-/** Map a status code to the human label written to the sheet. */
-function statusLabel(entry, alertDays) {
-  return statusFor(entry.expiration, alertDays).label;
-}
-
-/** Build the array row payload for the Sheets API from a local entry. */
-function toSheetRow(entry, alertDays) {
+/** Build the Excel row payload from a local entry (status/days computed now). */
+function toRow(entry, alertDays) {
   return {
-    timestamp: entry.timestamp,
+    timestamp: formatTimestamp(entry.timestamp),
     product: entry.product,
     expiration: entry.expiration || '',
     lot: entry.lot || '',
     quantity: entry.quantity,
     unit: entry.unit,
     daysUntil: daysUntil(entry.expiration) ?? '',
-    status: statusLabel(entry, alertDays),
+    status: statusFor(entry.expiration, alertDays).label,
     location: entry.location || '',
   };
 }
 
+function formatTimestamp(iso) {
+  const d = new Date(iso);
+  if (Number.isNaN(d.getTime())) return iso || '';
+  const pad = (n) => String(n).padStart(2, '0');
+  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())} ${pad(
+    d.getHours()
+  )}:${pad(d.getMinutes())}`;
+}
+
+/** Excel connection states surfaced to the UI. */
+export const EXCEL_STATE = {
+  UNSUPPORTED: 'unsupported',
+  DISCONNECTED: 'disconnected',
+  NEEDS_PERMISSION: 'needs-permission',
+  CONNECTED: 'connected',
+};
+
 /**
- * Inventory state machine: keeps a local cache (dashboard + offline queue) and
- * syncs entries to Google Sheets, retrying unsynced rows when back online.
+ * Inventory state machine. Keeps a local cache (dashboard, duplicate detection,
+ * and offline queue) and persists each entry to a local Excel file via the File
+ * System Access API. Entries that can't be written are queued and retried.
  */
-export function useInventory(settings) {
+export function useInventory(settings, onSettingsChange) {
   const [entries, setEntries] = useState(() => loadInventory());
-  const [online, setOnline] = useState(navigator.onLine);
-  const [syncing, setSyncing] = useState(false);
+  const [excelState, setExcelState] = useState(
+    excel.isSupported() ? EXCEL_STATE.DISCONNECTED : EXCEL_STATE.UNSUPPORTED
+  );
+  const [fileName, setFileName] = useState(settings.excelFileName || '');
+  const [busy, setBusy] = useState(false);
+  const [excelError, setExcelError] = useState('');
+
+  const handleRef = useRef(null);
   const settingsRef = useRef(settings);
   settingsRef.current = settings;
+  const onSettingsChangeRef = useRef(onSettingsChange);
+  onSettingsChangeRef.current = onSettingsChange;
 
-  // Persist on every change.
+  // Persist cache on every change.
   useEffect(() => {
     saveInventory(entries);
   }, [entries]);
 
-  // Track connectivity.
-  useEffect(() => {
-    const goOnline = () => setOnline(true);
-    const goOffline = () => setOnline(false);
-    window.addEventListener('online', goOnline);
-    window.addEventListener('offline', goOffline);
-    return () => {
-      window.removeEventListener('online', goOnline);
-      window.removeEventListener('offline', goOffline);
-    };
+  const connected = excelState === EXCEL_STATE.CONNECTED;
+
+  /** Replace the cache with the file's contents (most-recent first). */
+  const importFromFile = useCallback(async () => {
+    const handle = handleRef.current;
+    if (!handle) return;
+    const rows = await excel.readAllEntries(handle);
+    const mapped = rows
+      .map((r) => ({
+        id: newId(),
+        timestamp: r.timestamp,
+        product: r.product,
+        expiration: r.expiration,
+        lot: r.lot,
+        quantity: r.quantity,
+        unit: r.unit,
+        location: r.location,
+        synced: true,
+        syncError: null,
+      }))
+      .reverse(); // file is append-order; newest last → show newest first
+    setEntries((prev) => {
+      // Preserve any not-yet-saved local entries on top.
+      const pending = prev.filter((e) => !e.synced);
+      return [...pending, ...mapped];
+    });
   }, []);
 
-  /** Find an existing entry matching product + lot + expiration. */
+  const setConnected = useCallback(
+    (handle, name) => {
+      handleRef.current = handle;
+      setFileName(name);
+      setExcelState(EXCEL_STATE.CONNECTED);
+      setExcelError('');
+      onSettingsChangeRef.current?.({ excelFileName: name });
+    },
+    []
+  );
+
+  // On mount, try to restore a previously chosen file.
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      if (!excel.isSupported()) return;
+      try {
+        const handle = await excel.loadHandle();
+        if (!handle || cancelled) return;
+        handleRef.current = handle;
+        const perm = await excel.queryPermission(handle, true);
+        if (cancelled) return;
+        if (perm === 'granted') {
+          setConnected(handle, handle.name);
+          await importFromFile();
+        } else {
+          setFileName(handle.name);
+          setExcelState(EXCEL_STATE.NEEDS_PERMISSION);
+        }
+      } catch {
+        // Ignore restore failures; user can reconnect from Settings.
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  /** Persist a single entry to the connected Excel file. */
+  const writeEntry = useCallback(
+    async (entry) => {
+      if (!handleRef.current) throw new Error('No Excel file connected.');
+      await excel.upsertEntry(handleRef.current, toRow(entry, settingsRef.current.alertDays));
+    },
+    []
+  );
+
+  // ── Connection actions (must run from a user gesture) ─────────────────────
+  const connectExisting = useCallback(async () => {
+    setBusy(true);
+    setExcelError('');
+    try {
+      const handle = await excel.pickExistingFile();
+      handleRef.current = handle;
+      const ok = await excel.requestPermission(handle, true);
+      if (!ok) throw new Error('Permission to edit the file was not granted.');
+      setConnected(handle, handle.name);
+      await importFromFile();
+      return true;
+    } catch (err) {
+      if (err?.name === 'AbortError') return false; // user cancelled picker
+      setExcelError(err.message || 'Could not open the Excel file.');
+      return false;
+    } finally {
+      setBusy(false);
+    }
+  }, [importFromFile, setConnected]);
+
+  const connectNew = useCallback(async () => {
+    setBusy(true);
+    setExcelError('');
+    try {
+      const handle = await excel.createNewFile();
+      setConnected(handle, handle.name);
+      await importFromFile();
+      return true;
+    } catch (err) {
+      if (err?.name === 'AbortError') return false;
+      setExcelError(err.message || 'Could not create the Excel file.');
+      return false;
+    } finally {
+      setBusy(false);
+    }
+  }, [importFromFile, setConnected]);
+
+  const reconnect = useCallback(async () => {
+    setBusy(true);
+    setExcelError('');
+    try {
+      const handle = handleRef.current || (await excel.loadHandle());
+      if (!handle) throw new Error('No saved file to reconnect.');
+      handleRef.current = handle;
+      const ok = await excel.requestPermission(handle, true);
+      if (!ok) throw new Error('Permission was not granted.');
+      setConnected(handle, handle.name);
+      await importFromFile();
+      return true;
+    } catch (err) {
+      if (err?.name === 'AbortError') return false;
+      setExcelError(err.message || 'Could not reconnect.');
+      return false;
+    } finally {
+      setBusy(false);
+    }
+  }, [importFromFile, setConnected]);
+
+  const disconnect = useCallback(async () => {
+    await excel.clearHandle();
+    handleRef.current = null;
+    setFileName('');
+    setExcelState(EXCEL_STATE.DISCONNECTED);
+    onSettingsChangeRef.current?.({ excelFileName: '' });
+  }, []);
+
+  // ── Inventory operations ──────────────────────────────────────────────────
   const findDuplicate = useCallback(
     ({ product, lot, expiration }) => {
       const norm = (s) => (s || '').trim().toLowerCase();
@@ -65,66 +217,51 @@ export function useInventory(settings) {
     [entries]
   );
 
-  /** Push any unsynced entries to the sheet. Best-effort, safe to call often. */
-  const syncPending = useCallback(async () => {
-    const cfg = settingsRef.current;
-    if (!cfg?.sheetId && !cfg?.googleServiceAccountJson) return; // not configured
-    if (!navigator.onLine) return;
-
+  /** Retry writing any entries that failed to save earlier. */
+  const retryPending = useCallback(async () => {
+    if (!handleRef.current) return;
     const pending = entries.filter((e) => !e.synced);
     if (!pending.length) return;
-
-    setSyncing(true);
+    setBusy(true);
     try {
-      const rows = pending.map((e) => toSheetRow(e, cfg.alertDays));
-      await appendRows(rows, cfg);
-      const ids = new Set(pending.map((e) => e.id));
-      setEntries((prev) =>
-        prev.map((e) => (ids.has(e.id) ? { ...e, synced: true, syncError: null } : e))
-      );
-    } catch (err) {
-      setEntries((prev) =>
-        prev.map((e) => (!e.synced ? { ...e, syncError: err.message } : e))
-      );
+      for (const e of pending) {
+        try {
+          await writeEntry(e);
+          setEntries((prev) =>
+            prev.map((x) => (x.id === e.id ? { ...x, synced: true, syncError: null } : x))
+          );
+        } catch (err) {
+          setEntries((prev) =>
+            prev.map((x) => (x.id === e.id ? { ...x, syncError: err.message } : x))
+          );
+        }
+      }
     } finally {
-      setSyncing(false);
+      setBusy(false);
     }
-  }, [entries]);
-
-  // Retry pending whenever we (re)gain connectivity.
-  useEffect(() => {
-    if (online) syncPending();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [online]);
+  }, [entries, writeEntry]);
 
   /**
-   * Add a brand-new entry (or, when `mergeIntoId` is given, add quantity to an
-   * existing one). Attempts an immediate sync; falls back to the offline queue.
-   * Returns the resulting entry and whether the sheet write succeeded.
+   * Add a new entry, or merge quantity into an existing one. Writes through to
+   * the Excel file when connected; otherwise queues the entry as pending.
    */
   const addEntry = useCallback(
     async (data, mergeIntoId = null) => {
-      const cfg = settingsRef.current;
       let resultEntry;
 
       if (mergeIntoId) {
-        // Increment an existing entry's quantity and re-log the delta.
-        setEntries((prev) =>
-          prev.map((e) =>
-            e.id === mergeIntoId
-              ? {
-                  ...e,
-                  quantity: e.quantity + data.quantity,
-                  timestamp: new Date().toISOString(),
-                  synced: false,
-                }
-              : e
-          )
-        );
         const base = entries.find((e) => e.id === mergeIntoId);
         resultEntry = base
-          ? { ...base, quantity: base.quantity + data.quantity }
+          ? {
+              ...base,
+              quantity: base.quantity + data.quantity,
+              timestamp: new Date().toISOString(),
+              synced: false,
+            }
           : null;
+        setEntries((prev) =>
+          prev.map((e) => (e.id === mergeIntoId ? resultEntry : e))
+        );
       } else {
         resultEntry = {
           id: newId(),
@@ -134,39 +271,36 @@ export function useInventory(settings) {
           lot: data.lot || '',
           quantity: data.quantity,
           unit: data.unit || 'each',
-          location: data.location || cfg.location || '',
+          location: data.location || settingsRef.current.location || '',
           synced: false,
           syncError: null,
         };
         setEntries((prev) => [resultEntry, ...prev]);
       }
 
-      // Attempt immediate sync of just this change.
-      let synced = false;
-      let error = null;
-      const configured = cfg?.sheetId || cfg?.googleServiceAccountJson;
-      if (configured && navigator.onLine && resultEntry) {
+      if (!resultEntry) {
+        return { entry: null, saved: false, error: 'Entry not found.', connected };
+      }
+
+      // Write through to the file when connected.
+      if (handleRef.current && excelState === EXCEL_STATE.CONNECTED) {
         try {
-          await appendRows([toSheetRow(resultEntry, cfg.alertDays)], cfg);
-          synced = true;
+          await writeEntry(resultEntry);
           setEntries((prev) =>
-            prev.map((e) =>
-              e.id === resultEntry.id ? { ...e, synced: true, syncError: null } : e
-            )
+            prev.map((e) => (e.id === resultEntry.id ? { ...e, synced: true, syncError: null } : e))
           );
+          return { entry: resultEntry, saved: true, error: null, connected: true };
         } catch (err) {
-          error = err.message;
           setEntries((prev) =>
-            prev.map((e) =>
-              e.id === resultEntry.id ? { ...e, syncError: err.message } : e
-            )
+            prev.map((e) => (e.id === resultEntry.id ? { ...e, syncError: err.message } : e))
           );
+          return { entry: resultEntry, saved: false, error: err.message, connected: true };
         }
       }
 
-      return { entry: resultEntry, synced, error, configured: Boolean(configured) };
+      return { entry: resultEntry, saved: false, error: null, connected: false };
     },
-    [entries]
+    [entries, excelState, connected, writeEntry]
   );
 
   const clearLocal = useCallback(() => setEntries([]), []);
@@ -175,12 +309,22 @@ export function useInventory(settings) {
 
   return {
     entries,
-    online,
-    syncing,
     pendingCount,
     findDuplicate,
     addEntry,
-    syncPending,
+    retryPending,
     clearLocal,
+    // Excel connection
+    excelState,
+    excelSupported: excelState !== EXCEL_STATE.UNSUPPORTED,
+    connected,
+    fileName,
+    busy,
+    excelError,
+    connectExisting,
+    connectNew,
+    reconnect,
+    disconnect,
+    importFromFile,
   };
 }

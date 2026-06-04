@@ -188,9 +188,9 @@ function ItemTable({ items, alertDays }) {
                     {!e.synced && (
                       <span
                         className="ml-2 align-middle text-xs font-normal text-status-warn"
-                        title={e.syncError || 'Pending sync to Google Sheets'}
+                        title={e.syncError || 'Not yet saved to the Excel file'}
                       >
-                        ● pending
+                        ● not saved
                       </span>
                     )}
                   </div>

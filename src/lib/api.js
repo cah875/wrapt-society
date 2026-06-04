@@ -1,7 +1,7 @@
-// Thin client for the Vercel serverless endpoints (/api/*).
-// Every call optionally forwards the user's in-app credentials so the app
-// works both with server-side env vars (preferred) and with keys pasted into
-// the Settings page.
+// Thin client for the Vercel serverless Vision endpoint (/api/vision).
+// Inventory persistence happens entirely client-side (local Excel file); the
+// only server call is Claude Vision, which keeps the Anthropic key off the
+// client when configured via environment variables.
 import axios from 'axios';
 
 const client = axios.create({
@@ -48,53 +48,5 @@ export async function testVision(settings = {}) {
     return data;
   } catch (err) {
     throw unwrapError(err, 'Vision test failed.');
-  }
-}
-
-function sheetAuth(settings) {
-  return {
-    sheetId: settings.sheetId || undefined,
-    sheetTab: settings.sheetTab || undefined,
-    serviceAccountJson: settings.googleServiceAccountJson || undefined,
-  };
-}
-
-/** Append one or more inventory rows to the configured Google Sheet. */
-export async function appendRows(rows, settings = {}) {
-  try {
-    const { data } = await client.post('/sheets', {
-      action: 'append',
-      rows,
-      ...sheetAuth(settings),
-    });
-    return data;
-  } catch (err) {
-    throw unwrapError(err, 'Could not write to Google Sheet.');
-  }
-}
-
-/** Read recent rows back from the sheet (used to refresh the dashboard). */
-export async function readRows(settings = {}) {
-  try {
-    const { data } = await client.post('/sheets', {
-      action: 'read',
-      ...sheetAuth(settings),
-    });
-    return data;
-  } catch (err) {
-    throw unwrapError(err, 'Could not read Google Sheet.');
-  }
-}
-
-/** Verify the Google Sheets credentials/connectivity. */
-export async function testSheets(settings = {}) {
-  try {
-    const { data } = await client.post('/sheets', {
-      action: 'test',
-      ...sheetAuth(settings),
-    });
-    return data;
-  } catch (err) {
-    throw unwrapError(err, 'Sheets test failed.');
   }
 }
