@@ -337,6 +337,7 @@ export const ITEM_MASTER_HEADER = [
   'Captures Expiration',
   'Distribution Status',
   'Source',
+  'EOC',
   'Notes',
 ];
 
@@ -377,6 +378,7 @@ function catalogItemToValues(it) {
     yn(it.capturesExpiration),
     it.distributionStatus ?? '',
     it.source ?? '',
+    it.eoc ?? '',
     it.notes ?? '',
   ];
 }
@@ -393,7 +395,7 @@ function ensureItemMasterSheet(wb) {
     header.font = { bold: true };
     header.commit();
     // Sensible default widths (wider for text-heavy columns).
-    const widths = [18, 14, 11, 30, 22, 22, 18, 16, 18, 40, 28, 48, 14, 28, 9, 20, 11, 14, 8, 26, 10, 24, 30, 13, 15, 18, 22, 12, 30];
+    const widths = [18, 14, 11, 30, 22, 22, 18, 16, 18, 40, 28, 48, 14, 28, 9, 20, 11, 14, 8, 26, 10, 24, 30, 13, 15, 18, 22, 12, 10, 30];
     widths.forEach((w, i) => {
       ws.getColumn(i + 1).width = w;
     });
@@ -482,7 +484,8 @@ export async function readAllCatalogItems(handle) {
       capturesExpiration: cell(row, 26),
       distributionStatus: cell(row, 27),
       source: cell(row, 28),
-      notes: cell(row, 29),
+      eoc: cell(row, 29),
+      notes: cell(row, 30),
     });
   });
   return out;

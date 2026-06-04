@@ -1,6 +1,7 @@
 import { useMemo, useState } from 'react';
 import { CheckIcon, XIcon, AlertIcon } from './Icons.jsx';
-import { matchManufacturer, suggestCategory, missingRequired } from '../lib/catalog.js';
+import LookupCombo from './LookupCombo.jsx';
+import { matchManufacturer, suggestCategory, suggestEOC, missingRequired } from '../lib/catalog.js';
 
 /** Small read-only enrichment chip. */
 function Fact({ label, value }) {
@@ -23,6 +24,7 @@ const ynText = (v) => (v === true ? 'Yes' : v === false ? 'No' : v || '');
 export default function CatalogConfirm({ item, lookups, busy, onSave, onCancel }) {
   const categories = lookups?.categories || [];
   const manufacturers = lookups?.manufacturers || [];
+  const eocList = lookups?.eoc || [];
 
   // Auto-suggestions computed once from the enrichment.
   const suggestedCat = useMemo(() => suggestCategory(item, categories), [item, categories]);
@@ -30,10 +32,11 @@ export default function CatalogConfirm({ item, lookups, busy, onSave, onCancel }
     () => matchManufacturer(item.manufacturer, manufacturers),
     [item, manufacturers]
   );
+  const suggestedEoc = useMemo(() => suggestEOC(item, eocList), [item, eocList]);
 
   const [product, setProduct] = useState(item.product || '');
-  const [brandName, setBrandName] = useState(item.brandName || '');
   const [categoryCode, setCategoryCode] = useState(item.category || suggestedCat?.code || '');
+  const [eocCode, setEocCode] = useState(item.eoc || suggestedEoc?.code || '');
   const [implantable, setImplantable] = useState(item.implantable || '');
   const [mfrName, setMfrName] = useState(matchedMfr?.name || item.manufacturer || '');
   const [catalogNumber, setCatalogNumber] = useState(item.catalogNumber || '');
@@ -44,8 +47,8 @@ export default function CatalogConfirm({ item, lookups, busy, onSave, onCancel }
   const built = {
     ...item,
     product: product.trim(),
-    brandName: brandName.trim(),
     category: categoryCode,
+    eoc: eocCode,
     implantable,
     manufacturer: mfrName.trim(),
     catalogNumber: catalogNumber.trim(),
@@ -78,8 +81,8 @@ export default function CatalogConfirm({ item, lookups, busy, onSave, onCancel }
         <div className="flex items-start gap-2 rounded-lg bg-amber-50 p-3 text-status-warn dark:bg-amber-900/30 dark:text-amber-200">
           <AlertIcon width={20} height={20} className="mt-0.5 shrink-0" />
           <p className="text-sm font-medium">
-            Still needed for Meditech: {missing.join(', ')}. (Vendor cost, vendor #, EOC &amp; charge
-            code are filled later by MM/finance.)
+            Still needed for Meditech: {missing.join(', ')}. (Vendor cost &amp; charge code are
+            completed later by MM/finance.)
           </p>
         </div>
       )}
@@ -90,31 +93,29 @@ export default function CatalogConfirm({ item, lookups, busy, onSave, onCancel }
           <input id="cat-product" value={product} onChange={(e) => setProduct(e.target.value)}
             className="field-input" placeholder="e.g. VertiGRAFT Allograft Spacer" />
           <p className="mt-1 text-xs text-clinical-400">
-            Description1 / 2 are auto-trimmed to 30 chars each for Meditech; full text goes to Ext Description.
+            Description1 / 2 are auto-trimmed to 30 chars (whole words); the full name goes to Ext Description.
           </p>
         </div>
 
-        <div>
-          <label className="field-label" htmlFor="cat-brand">Common Name (brand)</label>
-          <input id="cat-brand" value={brandName} onChange={(e) => setBrandName(e.target.value)}
-            className="field-input" placeholder="brand name" />
-        </div>
+        <LookupCombo
+          id="cat-category"
+          label="Category (Meditech) *"
+          options={categories}
+          value={categoryCode}
+          onChange={setCategoryCode}
+          suggestion={suggestedCat}
+          placeholder="type to search 69 categories"
+        />
 
-        <div>
-          <label className="field-label" htmlFor="cat-category">
-            Category (Meditech) *
-            {suggestedCat && (
-              <span className="ml-2 font-normal text-clinical-400">suggested: {suggestedCat.name}</span>
-            )}
-          </label>
-          <select id="cat-category" value={categoryCode} onChange={(e) => setCategoryCode(e.target.value)}
-            className="field-input">
-            <option value="">— select category —</option>
-            {categories.map((c) => (
-              <option key={c.code} value={c.code}>{c.name} ({c.code})</option>
-            ))}
-          </select>
-        </div>
+        <LookupCombo
+          id="cat-eoc"
+          label="EOC / Expense *"
+          options={eocList}
+          value={eocCode}
+          onChange={setEocCode}
+          suggestion={suggestedEoc}
+          placeholder="type to search expense codes"
+        />
 
         <div>
           <label className="field-label" htmlFor="cat-mfr">Manufacturer *</label>

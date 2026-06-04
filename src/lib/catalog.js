@@ -50,8 +50,25 @@ function guessImplantable(g) {
   return '';
 }
 
-/** Truncate to n chars (Meditech Description fields cap at 30). */
-const cut = (s, n) => String(s || '').slice(0, n);
+/**
+ * Word-aware truncate: pack whole words up to n chars (so a 30-char Meditech
+ * Description reads sensibly instead of cutting mid-word). Returns
+ * { head, rest } so the caller can flow the remainder into Description2.
+ */
+function wordCut(s, n) {
+  const text = String(s || '').trim().replace(/\s+/g, ' ');
+  if (text.length <= n) return { head: text, rest: '' };
+  let cutAt = text.lastIndexOf(' ', n);
+  if (cutAt <= 0) cutAt = n; // single very long word — hard cut
+  return { head: text.slice(0, cutAt).trim(), rest: text.slice(cutAt).trim() };
+}
+
+/** Largest unit of measure in a Meditech packaging string ("CA/30 BX/12 EA" → "CA"). */
+function largestUnit(packaging) {
+  const first = String(packaging || '').trim().split(/\s+/)[0] || '';
+  const uom = first.split('/')[0];
+  return uom || 'EA';
+}
 
 /**
  * Merge a Vision result and a GUDID lookup into the catalog item shape that
@@ -65,6 +82,7 @@ export function buildCatalogItem(vision = {}, gudid = null, extras = {}) {
   return {
     catalogued: new Date().toISOString().slice(0, 16).replace('T', ' '),
     category: extras.category ?? '',
+    eoc: extras.eoc ?? '',
     implantable: extras.implantable ?? guessImplantable(g),
     product: g.name || vision.product || '',
     brandName: g.brandName || '',
@@ -136,10 +154,74 @@ export const MEDITECH_COLUMNS = [
 
 export const MEDITECH_HEADERS = MEDITECH_COLUMNS.map((c) => c.header);
 
-// Fields we can't derive from GUDID/photo — left blank for the MM/finance team.
-const FINANCE_BLANK = new Set([
-  'Charge Code', 'EOC', 'Vendor Num', 'Vendor UP', 'Vendor Cost/UP', 'Vendor Cat Num',
-]);
+// Fields genuinely unknowable from GUDID/photo — left for the MM/finance team.
+// (Vendor Num/UP/Cat Num and EOC are now auto-derived, so they're validated.)
+const FINANCE_BLANK = new Set(['Charge Code', 'Vendor Cost/UP']);
+
+// ── EOC (expense/general-ledger) reconciliation ──────────────────────────────
+// Clinical specialty keywords → the token used in the EOC expense names.
+const SPECIALTY = [
+  ['SPINE', /spin|vertebr|interbody|pedicle|lumbar|cervical|thoracic|disc/],
+  ['CARDI', /cardi|heart|coronary|aortic|valve|pacemaker|stent|vascular graft/],
+  ['NEURO', /neuro|brain|cranial|dura|shunt|cerebr/],
+  ['ORTHO', /orth|bone|fracture|femur|tibia|humerus|knee|hip|joint|screw|plate|nail|anchor|fusion/],
+  ['ENT', /\bent\b|ear|nose|throat|sinus|cochlea|tympan|otolog/],
+  ['EYES', /eye|ocular|lens|retina|intraocular|corneal|glaucoma/],
+  ['GYN', /gyn|uter|pelvic|vaginal|cervix/],
+  ['UROLO', /uro|bladder|ureter|prostat|urethra|urinary/],
+  ['PLAST', /plast|breast|dermal|skin graft|aesthetic|cosmetic|reconstruct/],
+  ['PAIN', /pain|neurostim|spinal cord stim|intrathecal/],
+  ['ORAL', /oral|dental|maxillo|mandib|tooth/],
+  ['POD', /pod|foot|ankle|toe|hallux|calcaneal/],
+  ['GI', /gastro|\bgi\b|esophag|colon|biliary|hernia|mesh/],
+  ['VASCU', /vascular|vein|venous|arter|endovascular/],
+  ['GENER', /general|soft tissue|wound|suture/],
+];
+
+/** Detect the clinical specialty token from GUDID enrichment, or ''. */
+function detectSpecialty(item) {
+  const hay = `${item.gmdnTerm} ${item.productCodeName} ${item.product} ${item.description}`.toLowerCase();
+  for (const [token, re] of SPECIALTY) if (re.test(hay)) return token;
+  return '';
+}
+
+// Non-implant supply types → token in "MED SUPPLIES <type>" expense names.
+const SUPPLY = [
+  ['SUTURE', /sutur/], ['GLOVE', /glove/], ['CATHETE', /cathet/], ['CANNULA', /cannula/],
+  ['NEEDLE', /needle/], ['WOUND', /wound|dressing|bandage/], ['IMAGING', /imaging|contrast/],
+  ['INSTRUM', /instrument/], ['CHEMOTH', /chemo/], ['PLASTIC', /plastic/], ['PAPER', /paper/],
+];
+
+/**
+ * Suggest a Meditech EOC by reconciling GUDID signals with the Expense/EOC
+ * Lookups. Implants default to the OP (outpatient) family at the detected
+ * specialty; supplies map to "MED SUPPLIES <type>"; falls back to the family's
+ * OTHER bucket. The tech confirms/overrides in a dropdown.
+ * @param {string} [family] - 'OP' | 'IP' | 'OVERNIGHT' (implants only).
+ */
+export function suggestEOC(item, eocList = [], family = 'OP') {
+  const find = (pred) => eocList.find((e) => pred(e.name.toUpperCase()));
+  const isImplant = item.implantable === 'Y' || item.implantable === true || item.hctp === 'Y';
+
+  if (isImplant) {
+    const prefix = family === 'IP' ? 'IP IMPLANTS' : family === 'OVERNIGHT' ? 'OP OVERNIGHT IMP' : 'OP IMPLANTS';
+    const spec = detectSpecialty(item);
+    if (spec) {
+      const hit = find((n) => n.startsWith(prefix) && n.includes(spec));
+      if (hit) return hit;
+    }
+    return find((n) => n.startsWith(prefix) && n.includes('OTHER')) || find((n) => n.startsWith(prefix)) || null;
+  }
+
+  const hay = `${item.gmdnTerm} ${item.productCodeName} ${item.product} ${item.description}`.toLowerCase();
+  for (const [token, re] of SUPPLY) {
+    if (re.test(hay)) {
+      const hit = find((n) => n.startsWith('MED SUPPLIES') && n.includes(token));
+      if (hit) return hit;
+    }
+  }
+  return find((n) => n.startsWith('MED SUPPLIES') && n.includes('OTHER')) || null;
+}
 
 // Mandatory columns that are intentionally blank (assigned later by Meditech),
 // so they shouldn't be flagged as "missing" to the tech.
@@ -207,15 +289,23 @@ export function suggestCategory(item, categories = []) {
  */
 export function buildMeditechRow(item, lookups = {}) {
   const mfr = matchManufacturer(item.manufacturer, lookups.manufacturers);
-  const fullDesc = item.product || item.description || '';
-  const row = {
+  const name = item.product || item.description || '';
+  const { head: desc1, rest } = wordCut(name, 30);
+  const desc2 = wordCut(rest, 30).head;
+  // Full, untruncated text for Ext Description (name + GUDID description if extra).
+  const ext = [item.product, item.description]
+    .filter(Boolean)
+    .filter((v, i, a) => a.indexOf(v) === i)
+    .join(' — ');
+  const ref = item.catalogNumber || '';
+  return {
     Number: '',
     'Allergen Haz': item.latex === 'Y' ? 'LATEX' : '',
-    'Common Name': item.brandName || '',
-    Description1: cut(fullDesc, 30),
-    Description2: cut(fullDesc.slice(30), 30),
+    'Common Name': '',
+    Description1: desc1,
+    Description2: desc2,
     Category: item.category || '',
-    'Ext Description': item.description || item.product || '',
+    'Ext Description': ext,
     Form: '',
     Implantable: item.implantable || '',
     'PO Type': '',
@@ -225,24 +315,25 @@ export function buildMeditechRow(item, lookups = {}) {
     'Charge Code': '',
     'Excl CDM Updates': '',
     HCPCS: '',
-    EOC: '',
+    EOC: item.eoc || '',
     'Mark Up %': '',
     'Patient EOC': '',
     'Patient UI': 'EA',
     'Tax Code': '',
     Taxable: '',
-    'Vendor Num': '',
+    // No distinct vendor data yet: use the manufacturer catalog/REF as the
+    // vendor number & catalog number; vendor unit of purchase = largest pack.
+    'Vendor Num': ref,
     'Vendor Order': '1',
-    'Vendor UP': '',
+    'Vendor UP': largestUnit(item.packaging),
     'Vendor Cost/UP': '',
-    'Vendor Cat Num': '',
+    'Vendor Cat Num': ref,
     Manufacturer: mfr?.code || '',
-    'Manufacturer Cat Num': item.catalogNumber || '',
+    'Manufacturer Cat Num': ref,
     GTIN: item.gtin || '',
     'GTIN Unit': '',
     'GTIN Manufacturer': '',
   };
-  return row;
 }
 
 /** Which mandatory/facility columns are still empty for an item (for UI flags). */
