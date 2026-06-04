@@ -5,23 +5,31 @@ export default {
   theme: {
     extend: {
       colors: {
-        // Calm, clinical palette — blues, grays, whites. No neon.
+        // Palette derived from the Northwest Specialty Hospital brand.
+        // 600 = the brand blue (#197B97); lighter/darker steps for tints + states.
         clinical: {
-          50: '#f1f6fb',
-          100: '#dce9f5',
-          200: '#bcd4ec',
-          300: '#8fb6dd',
-          400: '#5b91c9',
-          500: '#3a72b3',
-          600: '#2b5a96',
-          700: '#254a7a',
-          800: '#223f66',
-          900: '#1f3656',
-          950: '#152338',
+          50: '#eef7fa',
+          100: '#d5ebf1',
+          200: '#aed7e3',
+          300: '#7bbccd',
+          400: '#479cb3',
+          500: '#2483a0',
+          600: '#197b97', // brand blue
+          700: '#15637a',
+          800: '#154f61',
+          900: '#143f4d',
+          950: '#0c2832',
+        },
+        // Exact brand colors (logo marks) for accents.
+        brand: {
+          green: '#3E9D45',
+          brown: '#714F39',
+          blue: '#197B97',
+          gray: '#4C4D4F',
         },
         // Status colors tuned for high contrast / accessibility.
         status: {
-          ok: '#15803d', // green-700
+          ok: '#2f8a3a', // brand-derived green, legible on light tints
           warn: '#b45309', // amber-700
           danger: '#b91c1c', // red-700
         },

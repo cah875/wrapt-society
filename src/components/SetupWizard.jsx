@@ -13,7 +13,7 @@ export default function SetupWizard({ excelSupported, onOpenSettings, onDismiss 
     },
     {
       title: 'Connect your Excel file',
-      body: 'In Settings → Excel File, choose or create an .xlsx inside your OneDrive/SharePoint-synced folder (e.g. "OneDrive - YourHospital\\Materials"). OneDrive shares it with coworkers automatically.',
+      body: 'In Settings → Excel File, choose or create an .xlsx inside your OneDrive/SharePoint-synced folder (e.g. "OneDrive - Northwest Specialty Hospital\\Materials"). OneDrive shares it with coworkers automatically.',
     },
     {
       title: 'Add your Claude API key',

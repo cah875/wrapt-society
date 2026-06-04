@@ -57,12 +57,15 @@ export default function Header({
     <header className="sticky top-0 z-30 border-b border-clinical-200 bg-white/90 backdrop-blur dark:border-clinical-800 dark:bg-clinical-950/90">
       <div className="mx-auto flex max-w-6xl items-center justify-between gap-3 px-4 py-3">
         <div className="flex items-center gap-3">
-          <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-clinical-600 text-white">
-            <svg width="22" height="22" viewBox="0 0 24 24" fill="currentColor" aria-hidden>
-              <path d="M10 3h4v7h7v4h-7v7h-4v-7H3v-4h7z" />
-            </svg>
+          {/* Logo on a white chip so it stays legible in both light and dark mode. */}
+          <div className="rounded-lg bg-white p-1.5 shadow-sm ring-1 ring-clinical-200 dark:ring-clinical-700">
+            <img
+              src="/logo.png"
+              alt="Northwest Specialty Hospital"
+              className="h-7 w-auto sm:h-9"
+            />
           </div>
-          <div className="leading-tight">
+          <div className="hidden leading-tight sm:block">
             <h1 className="text-lg font-bold text-clinical-800 dark:text-clinical-50">
               Implant Expiration Tracker
             </h1>

@@ -17,7 +17,7 @@ export default function StatusBadge({ expiration, alertDays = 30, showDays = tru
         style={{
           backgroundColor:
             s.color === 'ok'
-              ? '#15803d'
+              ? '#3E9D45'
               : s.color === 'warn'
               ? '#b45309'
               : s.color === 'danger'

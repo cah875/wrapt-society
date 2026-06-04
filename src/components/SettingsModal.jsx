@@ -122,8 +122,9 @@ function ExcelSection({ inventory }) {
 
       {connected && (
         <p className="text-xs text-clinical-400">
-          Tip: keep the file in a folder like <code>OneDrive - YourHospital\Materials\</code> so it
-          syncs to SharePoint for everyone to view.
+          Tip: keep the file in a folder like{' '}
+          <code>OneDrive - Northwest Specialty Hospital\Materials\</code> so it syncs to SharePoint
+          for everyone to view.
         </p>
       )}
     </div>
