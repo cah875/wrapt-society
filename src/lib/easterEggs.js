@@ -18,17 +18,19 @@ function imageCandidates(name) {
 export const EASTER_EGGS = {
   shawn: {
     name: 'shawn',
+    type: 'image',
     message: 'Made Yoda Happy You Have',
     candidates: ['/yoda.gif'],
   },
   ruger: {
     name: 'ruger',
-    message: 'The Force Is Strong With Ruger',
-    candidates: imageCandidates('ruger'),
+    type: 'plane',
+    message: 'Spreading Chemtrails, Ruger Is',
   },
   elizabeth: {
     name: 'elizabeth',
-    message: 'The Force Is Strong With Elizabeth',
+    type: 'hat',
+    message: 'Trust No One, Elizabeth Does',
     candidates: imageCandidates('elizabeth'),
   },
 };
