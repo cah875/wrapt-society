@@ -188,15 +188,22 @@ export default function SettingsModal({ settings, onUpdate, onReset, onClose, ca
               className="field-input"
             />
             <label className="field-label mt-3" htmlFor="vision-model">
-              Model override (optional)
+              Model
             </label>
-            <input
+            <select
               id="vision-model"
               value={draft.visionModel}
               onChange={(e) => set({ visionModel: e.target.value })}
-              placeholder="claude-opus-4-8"
               className="field-input"
-            />
+            >
+              <option value="">Default — Haiku 4.5 (fastest, cheapest)</option>
+              <option value="claude-haiku-4-5-20251001">Haiku 4.5 — lowest cost</option>
+              <option value="claude-sonnet-4-6">Sonnet 4.6 — balanced</option>
+              <option value="claude-opus-4-8">Opus 4.8 — most capable, highest cost</option>
+            </select>
+            <p className="mt-1 text-xs text-clinical-400">
+              Reading clear labels rarely needs more than Haiku. Tap Test after changing.
+            </p>
             <TestButton label="Test Claude Vision" onTest={() => testVision(draft)} />
           </Section>
 

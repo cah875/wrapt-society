@@ -9,7 +9,7 @@
 import Anthropic from '@anthropic-ai/sdk';
 import { readJsonBody, sendJson, requirePost } from './_lib.js';
 
-const DEFAULT_MODEL = process.env.CLAUDE_VISION_MODEL || 'claude-opus-4-8';
+const DEFAULT_MODEL = process.env.CLAUDE_VISION_MODEL || 'claude-haiku-4-5-20251001';
 
 const EXTRACTION_PROMPT = `You are reading a photo of medical implant or biologic packaging at a hospital loading dock. Extract these fields exactly as printed:
 
