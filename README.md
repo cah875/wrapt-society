@@ -13,8 +13,16 @@ is saved to a **local Excel file** that syncs to the rest of the organization vi
 
 ## Features
 
-- 📷 **Webcam capture** — large green *CAPTURE PHOTO* button, live preview,
-  retake/confirm, and multi-camera selection.
+- 🏷️ **Barcode / UDI scanning** — a USB 2D scanner (or manual entry) reads the
+  GS1 UDI barcode and decodes **GTIN, expiration, and lot** in one scan. No API
+  cost. Product names come from the **FDA GUDID** database plus a
+  learn-as-you-go cache, so Vision is rarely needed.
+- ↕️ **Receive & Use modes** — *Receive* adds stock; *Use* removes one unit per
+  scan (scan the implant log stickers at the Revenue Cycle handoff, or scan items
+  off the cart). Decrement is free and needs no photo.
+- 📷 **Webcam capture (fallback)** — large green *CAPTURE PHOTO* button, live
+  preview, retake/confirm, and multi-camera selection — for items whose barcode
+  is damaged or missing.
 - 🤖 **Claude Vision extraction** — returns `{ product, expiration_date, lot_number }`
   plus a confidence level and a blurry-photo flag. All fields are editable.
 - 🔢 **Gloved-hand quantity input** — big +/- steppers, batch presets, and a
@@ -36,6 +44,37 @@ is saved to a **local Excel file** that syncs to the rest of the organization vi
   contrast, and font scaling.
 
 ---
+
+## Barcode / UDI workflow
+
+Medical implant packages carry a **UDI** (Unique Device Identifier) in a GS1
+barcode (GS1-128 or GS1 DataMatrix). One scan yields:
+
+| GS1 AI | Field |
+| --- | --- |
+| `(01)` | GTIN (identifies the product) |
+| `(17)` | Expiration date (`YYMMDD`; day `00` = end of month) |
+| `(10)` | Lot / batch |
+| `(21)` | Serial (when present) |
+
+- **Receiving:** in *Receive* mode, scanning a package pre-fills the confirm
+  screen with GTIN/expiration/lot; the tech sets the quantity and logs it. The
+  product **name** is resolved from the GTIN via the FDA GUDID API
+  (`/api/gudid`) and cached locally, so repeat items are instant and free.
+- **Using:** in *Use* mode, scanning a used implant's sticker removes one unit
+  from the matching in-stock row (matched by GTIN + lot + expiration). This is
+  designed to ride on the existing "sticker → implant log → Revenue Cycle"
+  handoff so OR staff aren't burdened, but it also works for scanning items off
+  the cart.
+
+**Hardware:** a **2D USB barcode scanner** (keyboard-wedge) is recommended —
+many implant UDIs are 2D DataMatrix. For the most reliable parsing of
+variable-length fields, configure the scanner to transmit the **GS1 / FNC1
+group separator**. The webcam path remains available as a fallback, and any code
+can be typed/pasted manually.
+
+The Excel file gains a **GTIN** column (added automatically; existing files are
+migrated on the next write).
 
 ## How data is stored (and why there's no cloud database)
 
@@ -68,9 +107,10 @@ and view it — no Azure app registration, no Google account, no server database
 
 ```
 React (Vite) frontend
-  ├─ Camera + UI + dashboard ............ all in the browser
+  ├─ Camera + barcode + UI + dashboard .. all in the browser
   ├─ Excel read/write (ExcelJS) ......... local .xlsx via File System Access API
-  └─ /api/vision (Vercel function) ...... Claude Vision (Anthropic)
+  ├─ /api/vision (Vercel function) ...... Claude Vision (Anthropic)
+  └─ /api/gudid  (Vercel function) ...... GTIN → name via FDA GUDID (free)
 ```
 
 - **Frontend:** React 18 + Vite + Tailwind CSS, `axios` for HTTP.
@@ -151,12 +191,13 @@ The only secret is the Claude Vision key. Copy `.env.example` to `.env` (for
 api/
   _lib.js            shared request helpers
   vision.js          Claude Vision serverless endpoint
+  gudid.js           FDA GUDID GTIN → name lookup
 src/
   components/        Header, CameraCapture, ConfirmationPanel, QuantityInput,
-                     DuplicateDialog, Dashboard, SettingsModal, SetupWizard,
-                     StatusBadge, Toast, Icons
-  hooks/             useSettings, useCamera, useInventory
-  lib/               api (client), dates, storage, excel (File System Access)
+                     DuplicateDialog, SaveErrorDialog, ScanPanel, Dashboard,
+                     SettingsModal, SetupWizard, StatusBadge, Toast, Icons
+  hooks/             useSettings, useCamera, useInventory, useScanner
+  lib/               api (client), dates, storage, excel, gs1 (UDI parser)
   App.jsx, main.jsx, index.css
 ```
 

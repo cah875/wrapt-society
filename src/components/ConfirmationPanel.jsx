@@ -54,6 +54,7 @@ export default function ConfirmationPanel({
       quantity,
       unit,
       location: location.trim(),
+      gtin: extracted.gtin || '',
     });
   };
 
@@ -63,12 +64,22 @@ export default function ConfirmationPanel({
         <h2 className="text-xl font-bold text-clinical-800 dark:text-clinical-50">
           Verify Item Details
         </h2>
-        {extracted.fromVision && (
+        {extracted.fromScan ? (
+          <span className="badge bg-green-100 text-status-ok dark:bg-green-900/40 dark:text-green-300">
+            ✓ Scanned barcode
+          </span>
+        ) : extracted.fromVision ? (
           <span className={`badge ${CONFIDENCE_STYLE[confidence] || CONFIDENCE_STYLE.low}`}>
             Confidence: {confidence}
           </span>
-        )}
+        ) : null}
       </div>
+
+      {extracted.gtin && (
+        <p className="text-sm text-clinical-500 dark:text-clinical-400">
+          GTIN: <span className="font-mono">{extracted.gtin}</span>
+        </p>
+      )}
 
       {blurry && (
         <div className="flex items-start gap-2 rounded-lg bg-amber-50 p-3 text-status-warn dark:bg-amber-900/30 dark:text-amber-200">

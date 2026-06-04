@@ -26,6 +26,7 @@ export const HEADER = [
   'Days Until Expiration',
   'Status',
   'Location',
+  'GTIN',
 ];
 
 // ARGB fills for the Status column (col 8), matching the in-app color coding.
@@ -149,9 +150,16 @@ function ensureSheet(wb) {
     header.font = { bold: true };
     header.commit();
     // Reasonable default column widths.
-    [22, 28, 16, 16, 10, 12, 18, 16, 20].forEach((w, i) => {
+    [22, 28, 16, 16, 10, 12, 18, 16, 20, 18].forEach((w, i) => {
       ws.getColumn(i + 1).width = w;
     });
+  } else if (coerce(ws.getRow(1).getCell(10).value) !== 'GTIN') {
+    // Migrate older files (9 columns) by adding the GTIN header column.
+    const header = ws.getRow(1);
+    header.getCell(10).value = 'GTIN';
+    header.getCell(10).font = { bold: true };
+    header.commit();
+    ws.getColumn(10).width = 18;
   }
   return ws;
 }
@@ -168,10 +176,21 @@ function coerce(value) {
   return value;
 }
 
-/** Stable key for matching rows: product | lot | expiration (case-insensitive). */
-function rowKey(product, lot, expiration) {
-  const n = (s) => String(coerce(s) ?? '').trim().toLowerCase();
-  return `${n(product)}||${n(lot)}||${n(expiration)}`;
+const norm = (s) => String(coerce(s) ?? '').trim().toLowerCase();
+
+/**
+ * Do an entry and a worksheet row refer to the same physical product+lot+exp?
+ * Prefer an exact GTIN match when both have one; otherwise fall back to the
+ * product+lot+expiration triple (keeps legacy rows without a GTIN working).
+ */
+function rowMatchesEntry(entry, row) {
+  const rowGtin = coerce(row.getCell(10).value);
+  if (entry.gtin && rowGtin && norm(entry.gtin) === norm(rowGtin)) return true;
+  return (
+    norm(entry.product) === norm(row.getCell(2).value) &&
+    norm(entry.lot) === norm(row.getCell(4).value) &&
+    norm(entry.expiration) === norm(row.getCell(3).value)
+  );
 }
 
 function applyStatusFill(row, status) {
@@ -195,6 +214,7 @@ function entryToValues(e) {
     e.daysUntil ?? '',
     e.status ?? '',
     e.location ?? '',
+    e.gtin ?? '',
   ];
 }
 
@@ -205,13 +225,11 @@ function entryToValues(e) {
 export async function upsertEntry(handle, entry) {
   const wb = await readWorkbook(handle);
   const ws = ensureSheet(wb);
-  const key = rowKey(entry.product, entry.lot, entry.expiration);
 
   let target = null;
   ws.eachRow((row, rowNumber) => {
     if (rowNumber === 1) return; // header
-    const k = rowKey(row.getCell(2).value, row.getCell(4).value, row.getCell(3).value);
-    if (k === key) target = row;
+    if (rowMatchesEntry(entry, row)) target = row;
   });
 
   const values = entryToValues(entry);
@@ -248,6 +266,7 @@ export async function readAllEntries(handle) {
       quantity: Number(coerce(row.getCell(5).value)) || 0,
       unit: String(coerce(row.getCell(6).value) || 'each'),
       location: String(coerce(row.getCell(9).value) || ''),
+      gtin: String(coerce(row.getCell(10).value) || ''),
     });
   });
   return out;

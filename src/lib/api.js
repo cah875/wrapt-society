@@ -37,6 +37,20 @@ export async function extractFromImage(imageBase64, settings = {}) {
   }
 }
 
+/**
+ * Look up a product name for a GTIN via the FDA GUDID database.
+ * @returns {Promise<{gtin, name, brandName, company, model}>}
+ * @throws if not found / lookup failed.
+ */
+export async function lookupGtin(gtin) {
+  try {
+    const { data } = await client.get('/gudid', { params: { gtin } });
+    return data;
+  } catch (err) {
+    throw unwrapError(err, 'GTIN lookup failed.');
+  }
+}
+
 /** Verify the Claude Vision credentials/connectivity. */
 export async function testVision(settings = {}) {
   try {
