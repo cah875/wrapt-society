@@ -26,6 +26,7 @@ export const EASTER_EGGS = {
     name: 'ruger',
     type: 'plane',
     message: 'Spreading Chemtrails, Ruger Is',
+    candidates: imageCandidates('ruger'),
   },
   elizabeth: {
     name: 'elizabeth',

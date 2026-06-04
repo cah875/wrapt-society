@@ -1,11 +1,20 @@
 import { useEffect, useState } from 'react';
 
-/** Simple airplane silhouette pointing right. */
+/** Airplane silhouette, rotated 90° right so the nose points along its path. */
 function Plane() {
   return (
-    <svg className="egg-plane" width="92" height="92" viewBox="0 0 24 24" fill="currentColor" aria-hidden>
-      <path d="M21 16v-2l-8-5V3.5A1.5 1.5 0 0 0 11.5 2 1.5 1.5 0 0 0 10 3.5V9l-8 5v2l8-2.5V19l-2 1.5V22l3.5-1 3.5 1v-1.5L13 19v-5.5z" />
-    </svg>
+    <div className="egg-plane">
+      <svg
+        width="92"
+        height="92"
+        viewBox="0 0 24 24"
+        fill="currentColor"
+        style={{ transform: 'rotate(90deg)' }}
+        aria-hidden
+      >
+        <path d="M21 16v-2l-8-5V3.5A1.5 1.5 0 0 0 11.5 2 1.5 1.5 0 0 0 10 3.5V9l-8 5v2l8-2.5V19l-2 1.5V22l3.5-1 3.5 1v-1.5L13 19v-5.5z" />
+      </svg>
+    </div>
   );
 }
 
@@ -67,6 +76,14 @@ export default function EasterEgg({ egg, onClose }) {
         <>
           <div className="egg-trail" />
           <Plane />
+          {src && (
+            <img
+              src={src}
+              alt={egg.name}
+              onError={() => setIdx((i) => i + 1)}
+              className="max-h-[45vh] w-auto rounded-lg"
+            />
+          )}
         </>
       )}
 
