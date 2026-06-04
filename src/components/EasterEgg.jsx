@@ -1,11 +1,17 @@
 import { useEffect, useState } from 'react';
 
 /**
- * Full-screen Star Wars–styled overlay. Dismiss with click or Escape.
- * Shows /yoda.gif when present; the message displays regardless.
+ * Full-screen Star Wars–styled overlay for an easter egg. Dismiss with click or
+ * Escape. Tries each candidate image src in turn (so different file extensions
+ * just work); the message shows regardless of whether an image loads.
  */
-export default function EasterEgg({ onClose }) {
-  const [imgOk, setImgOk] = useState(true);
+export default function EasterEgg({ egg, onClose }) {
+  const [idx, setIdx] = useState(0);
+
+  // Reset to the first candidate whenever a different egg is shown.
+  useEffect(() => {
+    setIdx(0);
+  }, [egg]);
 
   useEffect(() => {
     const onKey = (e) => {
@@ -15,6 +21,8 @@ export default function EasterEgg({ onClose }) {
     return () => window.removeEventListener('keydown', onKey);
   }, [onClose]);
 
+  const src = egg.candidates[idx];
+
   return (
     <div
       onClick={onClose}
@@ -22,11 +30,11 @@ export default function EasterEgg({ onClose }) {
       role="dialog"
       aria-label="Easter egg"
     >
-      {imgOk && (
+      {src && (
         <img
-          src="/yoda.gif"
-          alt="Yoda"
-          onError={() => setImgOk(false)}
+          src={src}
+          alt={egg.name || 'surprise'}
+          onError={() => setIdx((i) => i + 1)}
           className="max-h-[55vh] w-auto rounded-lg"
         />
       )}
@@ -34,7 +42,7 @@ export default function EasterEgg({ onClose }) {
         className="px-4 font-serif text-4xl font-extrabold tracking-wide sm:text-6xl"
         style={{ color: '#FFE81F', textShadow: '0 0 18px rgba(255,232,31,0.55)' }}
       >
-        Made Yoda Happy You Have
+        {egg.message}
       </h1>
       <p className="text-sm uppercase tracking-[0.3em] text-yellow-200/70">
         click anywhere to continue
