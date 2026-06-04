@@ -57,10 +57,12 @@ barcode (GS1-128 or GS1 DataMatrix). One scan yields:
 | `(10)` | Lot / batch |
 | `(21)` | Serial (when present) |
 
-- **Receiving:** in *Receive* mode, scanning a package pre-fills the confirm
-  screen with GTIN/expiration/lot; the tech sets the quantity and logs it. The
-  product **name** is resolved from the GTIN via the FDA GUDID API
-  (`/api/gudid`) and cached locally, so repeat items are instant and free.
+- **Receiving:** capture everything from the one receiving **photo** — Claude
+  Vision reads the product name, expiration, lot, *and* the GTIN from the
+  human-readable UDI line — or **scan** the package barcode (no Vision cost),
+  in which case the product name is resolved from the GTIN via the FDA GUDID API
+  (`/api/gudid`) and cached locally. Either way the GTIN is stored so the later
+  scan can match. The GTIN is editable on the confirm screen.
 - **Using:** in *Use* mode, scanning a used implant's sticker removes one unit
   from the matching in-stock row (matched by GTIN + lot + expiration). This is
   designed to ride on the existing "sticker → implant log → Revenue Cycle"

@@ -26,6 +26,7 @@ export default function ConfirmationPanel({
     extracted.expiration_date || ''
   );
   const [lot, setLot] = useState(extracted.lot_number || '');
+  const [gtin, setGtin] = useState(extracted.gtin || '');
   const [quantity, setQuantity] = useState(1);
   const [unit, setUnit] = useState(settings.unitTypes?.[0] || 'each');
   const [location, setLocation] = useState(settings.location || '');
@@ -54,7 +55,7 @@ export default function ConfirmationPanel({
       quantity,
       unit,
       location: location.trim(),
-      gtin: extracted.gtin || '',
+      gtin: gtin.trim(),
     });
   };
 
@@ -75,11 +76,6 @@ export default function ConfirmationPanel({
         ) : null}
       </div>
 
-      {extracted.gtin && (
-        <p className="text-sm text-clinical-500 dark:text-clinical-400">
-          GTIN: <span className="font-mono">{extracted.gtin}</span>
-        </p>
-      )}
 
       {blurry && (
         <div className="flex items-start gap-2 rounded-lg bg-amber-50 p-3 text-status-warn dark:bg-amber-900/30 dark:text-amber-200">
@@ -149,6 +145,24 @@ export default function ConfirmationPanel({
             placeholder="e.g. 12345"
             className="field-input"
           />
+        </div>
+
+        <div className="sm:col-span-2">
+          <label className="field-label" htmlFor="gtin">
+            GTIN / Barcode ID
+          </label>
+          <input
+            id="gtin"
+            value={gtin}
+            onChange={(e) => setGtin(e.target.value)}
+            inputMode="numeric"
+            placeholder="14-digit number from the barcode/UDI"
+            className="field-input font-mono"
+          />
+          <p className="mt-1 text-xs text-clinical-400">
+            Captured from the photo. This is what the barcode scan matches when the item is used —
+            correct it if it looks wrong.
+          </p>
         </div>
       </div>
 
