@@ -14,6 +14,7 @@ import { useSettings } from './hooks/useSettings.js';
 import { useInventory } from './hooks/useInventory.js';
 import { useScanner } from './hooks/useScanner.js';
 import { useEasterEgg } from './hooks/useEasterEgg.js';
+import { EASTER_EGGS } from './lib/easterEggs.js';
 import { extractFromImage, lookupGtin } from './lib/api.js';
 import { parseScan } from './lib/gs1.js';
 import { lookupGtinName, rememberGtinName } from './lib/storage.js';
@@ -35,10 +36,12 @@ export default function App() {
   const [toast, setToast] = useState(null);
   const [wizardDismissed, setWizardDismissed] = useState(false);
   const [cameras, setCameras] = useState([]);
-  const [easterEgg, setEasterEgg] = useState(false);
+  const [easterEgg, setEasterEgg] = useState(null);
 
-  // Type "shawn" anywhere to summon Yoda.
-  useEasterEgg('shawn', () => setEasterEgg(true));
+  // Type a name anywhere to summon that person's popup.
+  useEasterEgg('shawn', () => setEasterEgg(EASTER_EGGS.shawn));
+  useEasterEgg('ruger', () => setEasterEgg(EASTER_EGGS.ruger));
+  useEasterEgg('elizabeth', () => setEasterEgg(EASTER_EGGS.elizabeth));
 
   const notify = useCallback((type, message, opts = {}) => {
     setToast({ type, message, ...opts });
@@ -342,7 +345,7 @@ export default function App() {
         />
       )}
 
-      {easterEgg && <EasterEgg onClose={() => setEasterEgg(false)} />}
+      {easterEgg && <EasterEgg egg={easterEgg} onClose={() => setEasterEgg(null)} />}
 
       <Toast toast={toast} onDismiss={() => setToast(null)} />
 
