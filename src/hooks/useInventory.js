@@ -217,12 +217,16 @@ export function useInventory(settings, onSettingsChange) {
     [entries]
   );
 
-  /** Retry writing any entries that failed to save earlier. */
+  /** Retry writing any entries that failed to save earlier. Returns a result. */
   const retryPending = useCallback(async () => {
-    if (!handleRef.current) return;
+    if (!handleRef.current) {
+      return { ok: false, error: 'No Excel file connected.' };
+    }
     const pending = entries.filter((e) => !e.synced);
-    if (!pending.length) return;
+    if (!pending.length) return { ok: true, failed: 0, error: null };
     setBusy(true);
+    let failed = 0;
+    let lastError = null;
     try {
       for (const e of pending) {
         try {
@@ -231,6 +235,8 @@ export function useInventory(settings, onSettingsChange) {
             prev.map((x) => (x.id === e.id ? { ...x, synced: true, syncError: null } : x))
           );
         } catch (err) {
+          failed += 1;
+          lastError = err.message;
           setEntries((prev) =>
             prev.map((x) => (x.id === e.id ? { ...x, syncError: err.message } : x))
           );
@@ -239,6 +245,7 @@ export function useInventory(settings, onSettingsChange) {
     } finally {
       setBusy(false);
     }
+    return { ok: failed === 0, failed, error: lastError };
   }, [entries, writeEntry]);
 
   /**
