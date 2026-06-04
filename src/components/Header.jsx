@@ -70,7 +70,7 @@ export default function Header({
               Implant Expiration Tracker
             </h1>
             <p className="text-xs text-clinical-500 dark:text-clinical-400">
-              Loading dock inventory logging
+              Chris&apos;s Director Level Stuff
             </p>
           </div>
         </div>
