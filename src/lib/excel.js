@@ -311,6 +311,7 @@ const ITEM_MASTER_SHEET = 'Item Master';
 export const ITEM_MASTER_HEADER = [
   'Catalogued',
   'Category',
+  'Implantable',
   'Product Name',
   'Brand Name',
   'Manufacturer',
@@ -350,6 +351,7 @@ function catalogItemToValues(it) {
   return [
     it.catalogued ?? '',
     it.category ?? '',
+    it.implantable ?? '',
     it.product ?? '',
     it.brandName ?? '',
     it.manufacturer ?? '',
@@ -391,7 +393,7 @@ function ensureItemMasterSheet(wb) {
     header.font = { bold: true };
     header.commit();
     // Sensible default widths (wider for text-heavy columns).
-    const widths = [18, 12, 30, 22, 22, 18, 16, 18, 40, 28, 48, 14, 28, 9, 20, 11, 14, 8, 26, 10, 24, 30, 13, 15, 18, 22, 12, 30];
+    const widths = [18, 14, 11, 30, 22, 22, 18, 16, 18, 40, 28, 48, 14, 28, 9, 20, 11, 14, 8, 26, 10, 24, 30, 13, 15, 18, 22, 12, 30];
     widths.forEach((w, i) => {
       ws.getColumn(i + 1).width = w;
     });
@@ -399,9 +401,9 @@ function ensureItemMasterSheet(wb) {
   return ws;
 }
 
-const CAT_GTIN = 8; // GTIN column index
-const CAT_REF = 7; // Catalog/REF column index
-const CAT_NAME = 3; // Product Name column index
+const CAT_GTIN = 9; // GTIN column index
+const CAT_REF = 8; // Catalog/REF column index
+const CAT_NAME = 4; // Product Name column index
 
 function catalogRowMatches(item, row) {
   const ig = normalizeGtin(item.gtin);
@@ -454,32 +456,33 @@ export async function readAllCatalogItems(handle) {
     out.push({
       catalogued: cell(row, 1),
       category: cell(row, 2),
+      implantable: cell(row, 3),
       product,
-      brandName: cell(row, 4),
-      manufacturer: cell(row, 5),
-      model: cell(row, 6),
-      catalogNumber: cell(row, 7),
+      brandName: cell(row, 5),
+      manufacturer: cell(row, 6),
+      model: cell(row, 7),
+      catalogNumber: cell(row, 8),
       gtin,
-      description: cell(row, 9),
-      gmdnTerm: cell(row, 10),
-      gmdnDefinition: cell(row, 11),
-      productCode: cell(row, 12),
-      productCodeName: cell(row, 13),
-      sterile: cell(row, 14),
-      sterilizationMethod: cell(row, 15),
-      singleUse: cell(row, 16),
-      hctp: cell(row, 17),
-      latex: cell(row, 18),
-      mriSafety: cell(row, 19),
-      rxOtc: cell(row, 20),
-      sizes: cell(row, 21),
-      packaging: cell(row, 22),
-      capturesLot: cell(row, 23),
-      capturesSerial: cell(row, 24),
-      capturesExpiration: cell(row, 25),
-      distributionStatus: cell(row, 26),
-      source: cell(row, 27),
-      notes: cell(row, 28),
+      description: cell(row, 10),
+      gmdnTerm: cell(row, 11),
+      gmdnDefinition: cell(row, 12),
+      productCode: cell(row, 13),
+      productCodeName: cell(row, 14),
+      sterile: cell(row, 15),
+      sterilizationMethod: cell(row, 16),
+      singleUse: cell(row, 17),
+      hctp: cell(row, 18),
+      latex: cell(row, 19),
+      mriSafety: cell(row, 20),
+      rxOtc: cell(row, 21),
+      sizes: cell(row, 22),
+      packaging: cell(row, 23),
+      capturesLot: cell(row, 24),
+      capturesSerial: cell(row, 25),
+      capturesExpiration: cell(row, 26),
+      distributionStatus: cell(row, 27),
+      source: cell(row, 28),
+      notes: cell(row, 29),
     });
   });
   return out;

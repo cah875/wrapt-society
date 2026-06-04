@@ -16,37 +16,56 @@ function formatSizes(sizes = []) {
     .join('; ');
 }
 
-/** Format the GUDID packaging hierarchy, e.g. "Box of 5; Case of 20". */
-function formatPackaging(packaging = []) {
-  return packaging
-    .map((p) => {
-      const type = p.type || 'Package';
-      return p.quantity ? `${type} of ${p.quantity}` : type;
-    })
-    .filter(Boolean)
-    .join('; ');
+// Common package-type → Meditech unit-of-measure mnemonic.
+const UOM = {
+  each: 'EA', unit: 'EA', box: 'BX', case: 'CA', carton: 'CT', tray: 'TR',
+  pack: 'PK', package: 'PK', packet: 'PK', bag: 'BG', kit: 'KT', pair: 'PR',
+  bottle: 'BT', vial: 'VL', set: 'ST', dozen: 'DZ', roll: 'RL', can: 'CN',
+};
+
+/**
+ * Build a Meditech packaging string from the GUDID packaging hierarchy, e.g.
+ * "CA/20 BX/5 EA" (largest pack first, ending in the base unit). Best-effort —
+ * the tech can edit it in the catalog form. Returns '' when GUDID has none.
+ */
+function toMeditechPackaging(packaging = []) {
+  const levels = packaging
+    .map((p) => ({
+      uom: UOM[(p.type || '').toLowerCase()] || (p.type || '').slice(0, 2).toUpperCase(),
+      qty: parseInt(p.quantity, 10),
+    }))
+    .filter((l) => l.uom && l.qty)
+    .sort((a, b) => b.qty - a.qty);
+  if (!levels.length) return '';
+  return [...levels.map((l) => `${l.uom}/${l.qty}`), 'EA'].join(' ');
 }
 
-/** Best-effort category guess from GUDID signals; the tech can override. */
-function guessCategory(g) {
-  if (g?.hctp) return 'Biologic';
+/** Is this product implantable, per GUDID signals? Returns 'Y' / 'N' / ''. */
+function guessImplantable(g) {
   const term = (g?.gmdn?.term || '').toLowerCase();
-  if (/(allograft|tissue|graft|demineralized|bone matrix|dermis)/.test(term)) return 'Biologic';
-  if (/(implant|screw|plate|prosth|anchor|cage|stent)/.test(term)) return 'Implant';
+  const desc = (g?.description || '').toLowerCase();
+  if (/(implant|screw|plate|prosth|anchor|cage|stent|graft|allograft)/.test(term + ' ' + desc)) {
+    return 'Y';
+  }
   return '';
 }
+
+/** Truncate to n chars (Meditech Description fields cap at 30). */
+const cut = (s, n) => String(s || '').slice(0, n);
 
 /**
  * Merge a Vision result and a GUDID lookup into the catalog item shape that
  * src/lib/excel.js (upsertCatalogItem) expects. Either source may be missing;
- * Vision-read fields fill gaps GUDID doesn't cover.
+ * Vision-read fields fill gaps GUDID doesn't cover. The Meditech `category`
+ * mnemonic is chosen by the tech in the UI, so it defaults blank here.
  */
 export function buildCatalogItem(vision = {}, gudid = null, extras = {}) {
   const g = gudid || {};
   const rxOtc = g.rx === true ? 'Rx' : g.otc === true ? 'OTC' : '';
   return {
     catalogued: new Date().toISOString().slice(0, 16).replace('T', ' '),
-    category: extras.category ?? guessCategory(g),
+    category: extras.category ?? '',
+    implantable: extras.implantable ?? guessImplantable(g),
     product: g.name || vision.product || '',
     brandName: g.brandName || '',
     manufacturer: g.company || '',
@@ -66,7 +85,7 @@ export function buildCatalogItem(vision = {}, gudid = null, extras = {}) {
     mriSafety: g.mriSafety || '',
     rxOtc,
     sizes: formatSizes(g.sizes),
-    packaging: formatPackaging(g.packaging),
+    packaging: toMeditechPackaging(g.packaging),
     capturesLot: g.hasLot ?? null,
     capturesSerial: g.hasSerial ?? null,
     capturesExpiration: g.hasExpiration ?? null,
@@ -75,6 +94,183 @@ export function buildCatalogItem(vision = {}, gudid = null, extras = {}) {
     notes: extras.notes || '',
     ...extras.overrides,
   };
+}
+
+// ── Meditech Expanse item-master mapping ─────────────────────────────────────
+// 32 columns (A–AF) matching the NWSH ItemTemplate. `req` flags drive the UI:
+// 'mandatory' (red, errors out without it), 'facility' (amber), '' (optional).
+export const MEDITECH_COLUMNS = [
+  { header: 'Number', req: 'mandatory' },
+  { header: 'Allergen Haz', req: '' },
+  { header: 'Common Name', req: '' },
+  { header: 'Description1', req: 'mandatory' },
+  { header: 'Description2', req: '' },
+  { header: 'Category', req: 'mandatory' },
+  { header: 'Ext Description', req: '' },
+  { header: 'Form', req: '' },
+  { header: 'Implantable', req: 'facility' },
+  { header: 'PO Type', req: '' },
+  { header: 'UNSPSC', req: '' },
+  { header: 'Packaging', req: 'mandatory' },
+  { header: 'Pur Facility', req: 'mandatory' },
+  { header: 'Charge Code', req: 'facility' },
+  { header: 'Excl CDM Updates', req: '' },
+  { header: 'HCPCS', req: '' },
+  { header: 'EOC', req: 'mandatory' },
+  { header: 'Mark Up %', req: '' },
+  { header: 'Patient EOC', req: '' },
+  { header: 'Patient UI', req: '' },
+  { header: 'Tax Code', req: '' },
+  { header: 'Taxable', req: '' },
+  { header: 'Vendor Num', req: 'mandatory' },
+  { header: 'Vendor Order', req: 'mandatory' },
+  { header: 'Vendor UP', req: 'mandatory' },
+  { header: 'Vendor Cost/UP', req: 'mandatory' },
+  { header: 'Vendor Cat Num', req: 'mandatory' },
+  { header: 'Manufacturer', req: 'mandatory' },
+  { header: 'Manufacturer Cat Num', req: 'mandatory' },
+  { header: 'GTIN', req: '' },
+  { header: 'GTIN Unit', req: '' },
+  { header: 'GTIN Manufacturer', req: '' },
+];
+
+export const MEDITECH_HEADERS = MEDITECH_COLUMNS.map((c) => c.header);
+
+// Fields we can't derive from GUDID/photo — left blank for the MM/finance team.
+const FINANCE_BLANK = new Set([
+  'Charge Code', 'EOC', 'Vendor Num', 'Vendor UP', 'Vendor Cost/UP', 'Vendor Cat Num',
+]);
+
+// Mandatory columns that are intentionally blank (assigned later by Meditech),
+// so they shouldn't be flagged as "missing" to the tech.
+const AUTO_BLANK = new Set(['Number']);
+
+/** Normalize a company name for matching (drop punctuation + legal suffixes). */
+function normCompany(name) {
+  return String(name || '')
+    .toUpperCase()
+    .replace(/[.,/&]/g, ' ')
+    .replace(/\b(INC|LLC|LLP|LTD|CORP|CORPORATION|CO|COMPANY|GMBH|SA|AG|PLC|THE)\b/g, ' ')
+    .replace(/\s+/g, ' ')
+    .trim();
+}
+
+/**
+ * Match a GUDID company name to a Meditech manufacturer mnemonic from the
+ * Lookups table. Tries exact-normalized, then prefix, then token overlap.
+ * @returns {{name, code}|null}
+ */
+export function matchManufacturer(company, manufacturers = []) {
+  const target = normCompany(company);
+  if (!target) return null;
+  let best = null;
+  let bestScore = 0;
+  for (const m of manufacturers) {
+    const n = normCompany(m.name);
+    if (!n) continue;
+    let score = 0;
+    if (n === target) score = 100;
+    else if (n.startsWith(target) || target.startsWith(n)) score = 70;
+    else {
+      const t = new Set(target.split(' '));
+      const overlap = n.split(' ').filter((w) => t.has(w)).length;
+      if (overlap) score = 40 + overlap * 5;
+    }
+    if (score > bestScore) {
+      bestScore = score;
+      best = m;
+    }
+  }
+  return bestScore >= 40 ? best : null;
+}
+
+/** Suggest a Meditech category by matching GMDN/keywords to the 69 categories. */
+export function suggestCategory(item, categories = []) {
+  const hay = `${item.gmdnTerm} ${item.productCodeName} ${item.product} ${item.description}`.toLowerCase();
+  if (!hay.trim()) return null;
+  let best = null;
+  let bestScore = 0;
+  for (const c of categories) {
+    const words = c.name.toLowerCase().split(/[\s,/]+/).filter((w) => w.length > 3);
+    const score = words.filter((w) => hay.includes(w)).length;
+    if (score > bestScore) {
+      bestScore = score;
+      best = c;
+    }
+  }
+  return bestScore > 0 ? best : null;
+}
+
+/**
+ * Map one stored catalog item to a Meditech row keyed by header. Auto-fills the
+ * product-identity columns; mandatory finance fields are left blank for MM.
+ */
+export function buildMeditechRow(item, lookups = {}) {
+  const mfr = matchManufacturer(item.manufacturer, lookups.manufacturers);
+  const fullDesc = item.product || item.description || '';
+  const row = {
+    Number: '',
+    'Allergen Haz': item.latex === 'Y' ? 'LATEX' : '',
+    'Common Name': item.brandName || '',
+    Description1: cut(fullDesc, 30),
+    Description2: cut(fullDesc.slice(30), 30),
+    Category: item.category || '',
+    'Ext Description': item.description || item.product || '',
+    Form: '',
+    Implantable: item.implantable || '',
+    'PO Type': '',
+    UNSPSC: '',
+    Packaging: item.packaging || '',
+    'Pur Facility': '<MASTER>',
+    'Charge Code': '',
+    'Excl CDM Updates': '',
+    HCPCS: '',
+    EOC: '',
+    'Mark Up %': '',
+    'Patient EOC': '',
+    'Patient UI': 'EA',
+    'Tax Code': '',
+    Taxable: '',
+    'Vendor Num': '',
+    'Vendor Order': '1',
+    'Vendor UP': '',
+    'Vendor Cost/UP': '',
+    'Vendor Cat Num': '',
+    Manufacturer: mfr?.code || '',
+    'Manufacturer Cat Num': item.catalogNumber || '',
+    GTIN: item.gtin || '',
+    'GTIN Unit': '',
+    'GTIN Manufacturer': '',
+  };
+  return row;
+}
+
+/** Which mandatory/facility columns are still empty for an item (for UI flags). */
+export function missingRequired(item, lookups = {}) {
+  const row = buildMeditechRow(item, lookups);
+  return MEDITECH_COLUMNS.filter(
+    (c) =>
+      (c.req === 'mandatory' || c.req === 'facility') &&
+      !FINANCE_BLANK.has(c.header) &&
+      !AUTO_BLANK.has(c.header) &&
+      !row[c.header]
+  ).map((c) => c.header);
+}
+
+/** Build the Meditech-format CSV (exact ItemTemplate column order). */
+export function buildMeditechCsv(items, lookups = {}) {
+  const head = MEDITECH_HEADERS.map(csvCell).join(',');
+  const rows = items.map((it) => {
+    const r = buildMeditechRow(it, lookups);
+    return MEDITECH_HEADERS.map((h) => csvCell(r[h])).join(',');
+  });
+  return [head, ...rows].join('\r\n');
+}
+
+/** Lazy-load the (large) Meditech lookup tables only when needed. */
+export async function loadLookups() {
+  const mod = await import('../data/meditechLookups.json');
+  return mod.default || mod;
 }
 
 /** Quote a CSV field if it contains a comma, quote, or newline. */
