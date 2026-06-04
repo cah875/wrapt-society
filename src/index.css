@@ -93,7 +93,20 @@ body {
 }
 .egg-trail {
   position: absolute;
-  top: calc(28% + 14px);
+  top: calc(28% - 22px);
+  left: 0;
+  width: 112vw;
+  height: 7px;
+  border-radius: 9999px;
+  transform-origin: left center;
+  transform: scaleX(0);
+  background: linear-gradient(to left, rgba(255, 255, 255, 0.85), rgba(255, 255, 255, 0));
+  filter: blur(1.5px);
+  animation: trailGrow 4.2s linear forwards;
+}
+.egg-trail-2 {
+  position: absolute;
+  top: calc(28% + 50px);
   left: 0;
   width: 112vw;
   height: 7px;

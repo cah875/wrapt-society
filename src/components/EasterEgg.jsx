@@ -75,6 +75,7 @@ export default function EasterEgg({ egg, onClose }) {
       {type === 'plane' && (
         <>
           <div className="egg-trail" />
+          <div className="egg-trail-2" />
           <Plane />
           {src && (
             <img
