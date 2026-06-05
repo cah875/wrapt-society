@@ -53,7 +53,8 @@ export default function CatalogConfirm({ item, lookups, busy, onSave, onCancel }
     if (suggestedEoc && !eocCode) setEocCode(suggestedEoc.code);
   }, [suggestedEoc]); // eslint-disable-line react-hooks/exhaustive-deps
   useEffect(() => {
-    if (matchedMfr && !mfrName) setMfrName(matchedMfr.name);
+    // Update to Meditech-matched name even when field has the raw GUDID company name.
+    if (matchedMfr && (!mfrName || mfrName === item.manufacturer)) setMfrName(matchedMfr.name);
   }, [matchedMfr]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const built = {
