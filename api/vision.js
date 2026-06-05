@@ -10,7 +10,7 @@ import Anthropic from '@anthropic-ai/sdk';
 import { readJsonBody, sendJson, requirePost } from './_lib.js';
 import { isAuthed } from './_auth.js';
 
-const DEFAULT_MODEL = process.env.CLAUDE_VISION_MODEL || 'claude-haiku-4-5-20251001';
+const DEFAULT_MODEL = process.env.CLAUDE_VISION_MODEL || 'claude-sonnet-4-6';
 
 const EXTRACTION_PROMPT = `You are reading a photo of medical implant or biologic packaging at a hospital loading dock. Extract these fields exactly as printed:
 
@@ -19,7 +19,7 @@ const EXTRACTION_PROMPT = `You are reading a photo of medical implant or biologi
 - lot_number: the lot / batch number (labeled LOT, Lot #, Batch, or the UDI "(10)" value). Many tissue/allograft products have NO lot — return null if there isn't one.
 - serial_number: the serial / unique unit ID. Often labeled "ID", "SN", "S/N", or the UDI "(21)" value (e.g. "2110913-1072"). Allografts are usually serialized. Return null if none.
 - reference_code: the catalog / reference / product code, often labeled "Code", "REF", "Catalog", or "Ref #" (e.g. "VG2C-T57P"). Return null if none.
-- gtin: the GTIN / device identifier — the 14-digit number in the UDI line after "(01)" (e.g. "00889858589321"). Read ONLY the digits. Return null if not visible.
+- gtin: the GTIN / device identifier. Find the human-readable text printed near any barcode or QR code and look for the "(01)" application identifier — the exactly 14 digits immediately after "(01)" are the GTIN (e.g. the text "(01)10884522000147" → GTIN is "10884522000147"). CRITICAL: read only the printed numeric text — do NOT attempt to visually decode barcode or QR code patterns. If the printed text shows "(01)XXXXXXXXXXXXXX", transcribe those 14 digits exactly, character by character. Return null if no "(01)..." text is visible in the image.
 
 Also assess:
 - confidence: one of "high", "medium", "low" reflecting how legible the packaging is.
