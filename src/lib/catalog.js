@@ -199,7 +199,8 @@ const SUPPLY = [
  * OTHER bucket. The tech confirms/overrides in a dropdown.
  * @param {string} [family] - 'OP' | 'IP' | 'OVERNIGHT' (implants only).
  */
-export function suggestEOC(item, eocList = [], family = 'OP') {
+export function suggestEOC(item, eocList = null, family = 'OP') {
+  eocList = eocList ?? [];
   const find = (pred) => eocList.find((e) => pred(e.name.toUpperCase()));
   const isImplant = item.implantable === 'Y' || item.implantable === true || item.hctp === 'Y';
 
@@ -267,7 +268,8 @@ export function matchManufacturer(company, manufacturers = []) {
 }
 
 /** Suggest a Meditech category by matching GMDN/keywords to the 69 categories. */
-export function suggestCategory(item, categories = []) {
+export function suggestCategory(item, categories = null) {
+  categories = categories ?? [];
   const hay = `${item.gmdnTerm} ${item.productCodeName} ${item.product} ${item.description}`.toLowerCase();
   if (!hay.trim()) return null;
   let best = null;
@@ -288,7 +290,8 @@ export function suggestCategory(item, categories = []) {
  * product-identity columns; mandatory finance fields are left blank for MM.
  */
 export function buildMeditechRow(item, lookups = {}) {
-  const mfr = matchManufacturer(item.manufacturer, lookups.manufacturers);
+  const lk = lookups ?? {};
+  const mfr = matchManufacturer(item.manufacturer, lk.manufacturers);
   const name = item.product || item.description || '';
   const { head: desc1, rest } = wordCut(name, 30);
   const desc2 = wordCut(rest, 30).head;
@@ -338,7 +341,7 @@ export function buildMeditechRow(item, lookups = {}) {
 
 /** Which mandatory/facility columns are still empty for an item (for UI flags). */
 export function missingRequired(item, lookups = {}) {
-  const row = buildMeditechRow(item, lookups);
+  const row = buildMeditechRow(item, lookups ?? {});
   return MEDITECH_COLUMNS.filter(
     (c) =>
       (c.req === 'mandatory' || c.req === 'facility') &&
