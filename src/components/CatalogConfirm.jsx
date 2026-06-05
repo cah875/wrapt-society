@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { CheckIcon, XIcon, AlertIcon } from './Icons.jsx';
 import LookupCombo from './LookupCombo.jsx';
 import { matchManufacturer, suggestCategory, suggestEOC, missingRequired } from '../lib/catalog.js';
@@ -43,6 +43,18 @@ export default function CatalogConfirm({ item, lookups, busy, onSave, onCancel }
   const [gtin, setGtin] = useState(item.gtin || '');
   const [packaging, setPackaging] = useState(item.packaging || '');
   const [notes, setNotes] = useState(item.notes || '');
+
+  // Lookups arrive asynchronously — update auto-derived fields when they load,
+  // but only if the tech hasn't already made a manual selection.
+  useEffect(() => {
+    if (suggestedCat && !categoryCode) setCategoryCode(suggestedCat.code);
+  }, [suggestedCat]); // eslint-disable-line react-hooks/exhaustive-deps
+  useEffect(() => {
+    if (suggestedEoc && !eocCode) setEocCode(suggestedEoc.code);
+  }, [suggestedEoc]); // eslint-disable-line react-hooks/exhaustive-deps
+  useEffect(() => {
+    if (matchedMfr && !mfrName) setMfrName(matchedMfr.name);
+  }, [matchedMfr]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const built = {
     ...item,

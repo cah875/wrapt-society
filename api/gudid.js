@@ -126,8 +126,15 @@ function normalizeOpenFda(r) {
     .filter((id) => id.type === 'Package')
     .map((id) => ({ gtin: str(id.id), type: str(id.package_type), quantity: str(id.quantity_per_package), contains: '', status: str(id.package_status) }));
 
+  // openFDA's GMDN record includes an explicit implantable flag — surface it so
+  // the catalog can set Implantable: N without requiring keyword guessing.
   const gmdn = r.gmdn_terms?.[0]
-    ? { term: str(r.gmdn_terms[0].name), definition: str(r.gmdn_terms[0].definition), code: str(r.gmdn_terms[0].code) }
+    ? {
+        term: str(r.gmdn_terms[0].name),
+        definition: str(r.gmdn_terms[0].definition),
+        code: str(r.gmdn_terms[0].code),
+        implantable: bool(r.gmdn_terms[0].is_implantable ?? r.gmdn_terms[0].implantable),
+      }
     : null;
 
   const pc = r.product_codes?.[0]
