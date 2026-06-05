@@ -31,10 +31,10 @@ const UOM = {
 function toMeditechPackaging(packaging = []) {
   const levels = packaging
     .map((p) => ({
-      uom: UOM[(p.type || '').toLowerCase()] || (p.type || '').slice(0, 2).toUpperCase(),
+      uom: UOM[(p.type || '').toLowerCase()], // undefined for unrecognised types (pallet, etc.)
       qty: parseInt(p.quantity, 10),
     }))
-    .filter((l) => l.uom && l.qty)
+    .filter((l) => l.uom && l.uom !== 'EA' && l.qty > 0) // skip unit-level and unknowns
     .sort((a, b) => b.qty - a.qty);
   if (!levels.length) return '';
   return [...levels.map((l) => `${l.uom}/${l.qty}`), 'EA'].join(' ');
@@ -53,7 +53,9 @@ function guessImplantable(g) {
   // Keyword inference for GUDID (which doesn't expose the GMDN implantable flag).
   const hay = `${g?.gmdn?.term} ${g?.description}`.toLowerCase();
   if (/(implant|screw|plate|prosth|anchor|cage|stent|graft|allograft|pedicle|fusion)/.test(hay)) return 'Y';
-  if (g?.source === 'openFDA') return 'N'; // openFDA returned but no implant keywords → non-implant
+  // Any FDA-registered device with no implant keywords is non-implant.
+  // (Blank is worse than N — the tech can always override via dropdown.)
+  if (g?.found === true) return 'N';
   return '';
 }
 
@@ -91,7 +93,9 @@ export function buildCatalogItem(vision = {}, gudid = null, extras = {}) {
     category: extras.category ?? '',
     eoc: extras.eoc ?? '',
     implantable: extras.implantable ?? guessImplantable(g),
-    product: g.name || vision.product || '',
+    // Priority: vision label text (most specific) → GUDID device description
+    // → brand+model. Never include company name — that belongs in Manufacturer.
+    product: vision.product || g.description || [g.brandName, g.model].filter(Boolean).join(' ') || '',
     brandName: g.brandName || '',
     manufacturer: g.company || '',
     model: g.model || '',
@@ -115,7 +119,7 @@ export function buildCatalogItem(vision = {}, gudid = null, extras = {}) {
     capturesSerial: g.hasSerial ?? null,
     capturesExpiration: g.hasExpiration ?? null,
     distributionStatus: g.distributionStatus || '',
-    source: g.found ? 'GUDID' : 'Manual',
+    source: g.source || (g.found ? 'GUDID' : 'Manual'),
     notes: extras.notes || '',
     ...extras.overrides,
   };
@@ -436,12 +440,13 @@ function csvCell(value) {
  * @param {Array<string>} [headers] - column headers for the output.
  * @param {Array<string>} [fields] - item keys to pull per column (parallel to headers).
  */
+// Must stay in sync with ITEM_MASTER_HEADER column order in excel.js.
 const DEFAULT_FIELDS = [
-  'catalogued', 'category', 'product', 'brandName', 'manufacturer', 'model',
-  'catalogNumber', 'gtin', 'description', 'gmdnTerm', 'gmdnDefinition',
+  'catalogued', 'category', 'implantable', 'product', 'brandName', 'manufacturer',
+  'model', 'catalogNumber', 'gtin', 'description', 'gmdnTerm', 'gmdnDefinition',
   'productCode', 'productCodeName', 'sterile', 'sterilizationMethod', 'singleUse',
   'hctp', 'latex', 'mriSafety', 'rxOtc', 'sizes', 'packaging', 'capturesLot',
-  'capturesSerial', 'capturesExpiration', 'distributionStatus', 'source', 'notes',
+  'capturesSerial', 'capturesExpiration', 'distributionStatus', 'source', 'eoc', 'notes',
 ];
 
 export function catalogToCsv(items, headers = ITEM_MASTER_HEADER, fields = DEFAULT_FIELDS) {
