@@ -68,16 +68,21 @@ export async function logout() {
 }
 
 /**
- * Look up a product name for a GTIN via the FDA GUDID database.
- * @returns {Promise<{gtin, name, brandName, company, model}>}
+ * Look up a device record via GUDID → openFDA waterfall.
+ * Pass ref (catalog/REF number) alongside gtin so the fallback chain can
+ * search by REF when the GTIN doesn't match the FDA-registered DI.
+ * @returns {Promise<{found, source, gtin, name, company, ...}>}
  * @throws if not found / lookup failed.
  */
-export async function lookupGtin(gtin) {
+export async function lookupGtin(gtin, ref = '') {
   try {
-    const { data } = await client.get('/gudid', { params: { gtin } });
+    const params = {};
+    if (gtin) params.gtin = gtin;
+    if (ref) params.ref = ref;
+    const { data } = await client.get('/gudid', { params });
     return data;
   } catch (err) {
-    throw unwrapError(err, 'GTIN lookup failed.');
+    throw unwrapError(err, 'Device lookup failed.');
   }
 }
 
