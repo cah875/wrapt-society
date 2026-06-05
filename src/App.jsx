@@ -64,7 +64,7 @@ export default function App() {
   // Enrich an extraction/scan via GUDID → openFDA waterfall and open for review.
   const draftCatalogItem = useCallback(async (visionLike) => {
     const gtin = visionLike.gtin || '';
-    const ref = visionLike.catalogNumber || visionLike.ref || '';
+    const ref = visionLike.reference_code || visionLike.catalogNumber || visionLike.ref || '';
     let gudid = null;
     if (gtin || ref) {
       try {

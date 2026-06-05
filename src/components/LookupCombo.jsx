@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 
 /**
  * Searchable combobox over a {name, code} lookup list (Category, EOC, …).
@@ -21,6 +21,13 @@ export default function LookupCombo({
   }, [options]);
 
   const [text, setText] = useState(nameByCode.get(value) || '');
+
+  // When options load (async) or value is set externally, sync the display text.
+  useEffect(() => {
+    const name = nameByCode.get(value) || '';
+    if (name && text !== name) setText(name);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [value, nameByCode]);
 
   const resolve = (t) => {
     const lc = t.trim().toLowerCase();

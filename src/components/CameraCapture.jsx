@@ -146,7 +146,8 @@ export default function CameraCapture({
     ctx.drawImage(video, 0, 0);
     const img = canvas.toDataURL('image/jpeg', 0.92);
     if (phase === 'second') { setShot2(img); setPhase('both'); }
-    else { setShot1(img); setPhase(allowSecondSide ? 'decide' : 'first'); }
+    else if (allowSecondSide) { setShot1(img); setPhase('decide'); }
+    else { onCapture(img); }
   };
 
   const retake = () => {
