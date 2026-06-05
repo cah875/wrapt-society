@@ -88,6 +88,18 @@ function largestUnit(packaging) {
 export function buildCatalogItem(vision = {}, gudid = null, extras = {}) {
   const g = gudid || {};
   const rxOtc = g.rx === true ? 'Rx' : g.otc === true ? 'OTC' : '';
+
+  // If the GUDID catalogNumber doesn't match the REF Vision read off the label,
+  // the GTIN was likely misread. Surface a warning so the tech can verify.
+  let autoNote = extras.notes || '';
+  if (gudid?.found && vision.reference_code && g.catalogNumber) {
+    const vRef = vision.reference_code.trim().toUpperCase();
+    const gRef = g.catalogNumber.trim().toUpperCase();
+    if (vRef !== gRef && !gRef.includes(vRef) && !vRef.includes(gRef)) {
+      autoNote = `⚠ GTIN may be misread — label REF "${vision.reference_code}" ≠ GUDID REF "${g.catalogNumber}". Verify GTIN field and re-scan if needed.` + (autoNote ? ' ' + autoNote : '');
+    }
+  }
+
   return {
     catalogued: new Date().toISOString().slice(0, 16).replace('T', ' '),
     category: extras.category ?? '',
@@ -120,7 +132,7 @@ export function buildCatalogItem(vision = {}, gudid = null, extras = {}) {
     capturesExpiration: g.hasExpiration ?? null,
     distributionStatus: g.distributionStatus || '',
     source: g.source || (g.found ? 'GUDID' : 'Manual'),
-    notes: extras.notes || '',
+    notes: autoNote,
     ...extras.overrides,
   };
 }
