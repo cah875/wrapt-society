@@ -1,0 +1,15 @@
+{
+  "case_id": "SYNTH-KNEE-001",
+  "patient": "Example, Knee (synthetic)",
+  "date_of_service": "2026-06-04",
+  "case_type": "knee",
+  "side": "Right",
+  "submitted_total": 3900.0,
+  "note": "Synthetic case — NOT from a real billsheet — included only to show the engine generalizes to the knee construct schedule.",
+  "items": [
+    { "ref": "KNEE-FEM-P", "qty": 1, "description": "ATTUNE FEMORAL COMPONENT POROUS CEMENTLESS RIGHT SIZE 5" },
+    { "ref": "KNEE-INS-FB", "qty": 1, "description": "ATTUNE FB AOX FIXED BEARING INSERT 5/10MM" },
+    { "ref": "KNEE-TIB-P", "qty": 1, "description": "ATTUNE TIBIAL BASE POROUS FB SIZE 5" },
+    { "ref": "KNEE-PAT", "qty": 1, "description": "ATTUNE ALL POLY DOME PATELLA 38MM" }
+  ]
+}

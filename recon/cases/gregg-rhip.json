@@ -1,0 +1,17 @@
+{
+  "case_id": "NW0001591185",
+  "patient": "Gregg, Vernon L",
+  "mrn": "MR00234473",
+  "date_of_service": "2026-06-01",
+  "surgeon": "Smith, J Luke, DO",
+  "case_type": "hip",
+  "side": "Right",
+  "rep_reference": { "optimize": "351048", "vhn_cup": "44/25", "vhn_gross": "+0/+5" },
+  "submitted_total": null,
+  "items": [
+    { "ref": "1365-40-720", "lot": "5069982", "qty": 1, "description": "BIOLOX DELTA TS CERAMIC FEMORAL HEAD REVISION 40mm +5 12/14 TAPER" },
+    { "ref": "1010-12-060", "lot": "D25071616", "qty": 1, "description": "ACTIS DUOFIX HIP PROSTHESIS FEMORAL STEM 12/14 TAPER CEMENTLESS SIZE 6 HIGH COLLAR" },
+    { "ref": "1217-32-058", "lot": "D26032664", "qty": 1, "description": "PINNACLE GRIPTION ACETABULAR SHELL SECTOR 58mm OD" },
+    { "ref": "1221-40-058", "lot": "D26032210", "qty": 1, "description": "PINNACLE ALTRX POLYETHYLENE ACETABULAR LINER NEUTRAL 40mm ID 58mm OD" }
+  ]
+}

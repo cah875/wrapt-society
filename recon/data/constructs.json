@@ -1,0 +1,1729 @@
+[
+  {
+    "construct_id": "OSC364409",
+    "name": "MOP",
+    "price": 4250,
+    "type": "hip",
+    "core_slots": [
+      "Stem",
+      "Head",
+      "Liner",
+      "Cup"
+    ],
+    "slots": {
+      "Stem": [
+        {
+          "family": "C-Stem",
+          "sizeTier": null,
+          "raw": "C-Stem"
+        },
+        {
+          "family": "Summit Cemented",
+          "sizeTier": null,
+          "raw": "Summit Cemented"
+        },
+        {
+          "family": "AML",
+          "sizeTier": null,
+          "raw": "AML"
+        },
+        {
+          "family": "Summit Porous",
+          "sizeTier": null,
+          "raw": "Summit Porous"
+        },
+        {
+          "family": "Summit Duofix",
+          "sizeTier": null,
+          "raw": "Summit Duofix"
+        },
+        {
+          "family": "TriLock",
+          "sizeTier": null,
+          "raw": "TriLock"
+        },
+        {
+          "family": "Corail",
+          "sizeTier": null,
+          "raw": "Corail"
+        },
+        {
+          "family": "Emphasys",
+          "sizeTier": null,
+          "raw": "Emphasys"
+        },
+        {
+          "family": "Actis",
+          "sizeTier": null,
+          "raw": "Actis"
+        }
+      ],
+      "Head": [
+        {
+          "family": "Metal",
+          "sizeTier": {
+            "op": "<=",
+            "mm": 36
+          },
+          "raw": "Metal <= 36mm"
+        },
+        {
+          "family": "Metal",
+          "sizeTier": {
+            "op": ">",
+            "mm": 36
+          },
+          "raw": "Metal > 36mm"
+        }
+      ],
+      "Liner": [
+        {
+          "family": "AltrX",
+          "sizeTier": {
+            "op": "<=",
+            "mm": 36
+          },
+          "raw": "AltrX <= 36mm"
+        },
+        {
+          "family": "AltrX",
+          "sizeTier": {
+            "op": ">",
+            "mm": 36
+          },
+          "raw": "AltrX > 36mm"
+        }
+      ],
+      "Cup": [
+        {
+          "family": "Duofix",
+          "sizeTier": null,
+          "raw": "Duofix"
+        },
+        {
+          "family": "Porocoat",
+          "sizeTier": null,
+          "raw": "Porocoat"
+        },
+        {
+          "family": "Porocoat Multihole",
+          "sizeTier": null,
+          "raw": "Porocoat Multihole"
+        },
+        {
+          "family": "Gription",
+          "sizeTier": null,
+          "raw": "Gription"
+        }
+      ],
+      "Acetab. Screw": [],
+      "Hole Eliminator": [],
+      "Cementralizer": [],
+      "Centralizer": [],
+      "Drill Bit": [],
+      "Cement Restrictor": []
+    },
+    "slots_raw": {
+      "Stem": "C-Stem, Summit Cemented, AML, Summit Porous, Summit Duofix, TriLock, Corail, Emphasys, Actis",
+      "Head": "Metal <= 36mm, Metal > 36mm",
+      "Liner": "AltrX <= 36mm, AltrX > 36mm",
+      "Cup": "Duofix, Porocoat, Porocoat Multihole, Gription",
+      "Acetab. Screw": "QTY 3",
+      "Hole Eliminator": "QTY 1",
+      "Cementralizer": "QTY 1",
+      "Centralizer": "QTY 1",
+      "Drill Bit": "QTY 2",
+      "Cement Restrictor": "QTY 1"
+    }
+  },
+  {
+    "construct_id": "OSC10723",
+    "name": "COP",
+    "price": 4250,
+    "type": "hip",
+    "core_slots": [
+      "Stem",
+      "Head",
+      "Liner",
+      "Cup"
+    ],
+    "slots": {
+      "Stem": [
+        {
+          "family": "C-Stem",
+          "sizeTier": null,
+          "raw": "C-Stem"
+        },
+        {
+          "family": "Summit Cemented",
+          "sizeTier": null,
+          "raw": "Summit Cemented"
+        },
+        {
+          "family": "AML",
+          "sizeTier": null,
+          "raw": "AML"
+        },
+        {
+          "family": "Summit Porous",
+          "sizeTier": null,
+          "raw": "Summit Porous"
+        },
+        {
+          "family": "Summit Duofix",
+          "sizeTier": null,
+          "raw": "Summit Duofix"
+        },
+        {
+          "family": "TriLock",
+          "sizeTier": null,
+          "raw": "TriLock"
+        },
+        {
+          "family": "Corail",
+          "sizeTier": null,
+          "raw": "Corail"
+        }
+      ],
+      "Head": [
+        {
+          "family": "Ceramic Delta (not TS)",
+          "sizeTier": {
+            "op": "<=",
+            "mm": 36
+          },
+          "raw": "Ceramic Delta (not TS) <= 36mm"
+        },
+        {
+          "family": "Ceramic Delta TS",
+          "sizeTier": {
+            "op": ">",
+            "mm": 36
+          },
+          "raw": "Ceramic Delta TS > 36mm"
+        },
+        {
+          "family": "Ceramic ARTICULEZE",
+          "sizeTier": null,
+          "raw": "Ceramic ARTICULEZE"
+        }
+      ],
+      "Liner": [
+        {
+          "family": "Marathon",
+          "sizeTier": {
+            "op": "<=",
+            "mm": 36
+          },
+          "raw": "Marathon <= 36mm"
+        },
+        {
+          "family": "AltrX",
+          "sizeTier": {
+            "op": "<=",
+            "mm": 36
+          },
+          "raw": "AltrX <= 36mm"
+        },
+        {
+          "family": "AltrX",
+          "sizeTier": {
+            "op": ">",
+            "mm": 36
+          },
+          "raw": "AltrX > 36mm"
+        }
+      ],
+      "Cup": [
+        {
+          "family": "Duofix",
+          "sizeTier": null,
+          "raw": "Duofix"
+        },
+        {
+          "family": "Porocoat",
+          "sizeTier": null,
+          "raw": "Porocoat"
+        },
+        {
+          "family": "Porocoat Multihole",
+          "sizeTier": null,
+          "raw": "Porocoat Multihole"
+        },
+        {
+          "family": "Gription",
+          "sizeTier": null,
+          "raw": "Gription"
+        }
+      ],
+      "Acetab. Screw": [],
+      "Hole Eliminator": [],
+      "Cementralizer": [],
+      "Centralizer": [],
+      "Cement Restrictor": []
+    },
+    "slots_raw": {
+      "Stem": "C-Stem, Summit Cemented, AML, Summit Porous, Summit Duofix, TriLock, Corail",
+      "Head": "Ceramic Delta (not TS) <= 36mm, Ceramic Delta TS > 36mm, Ceramic ARTICULEZE",
+      "Liner": "Marathon <= 36mm, AltrX <= 36mm, AltrX > 36mm",
+      "Cup": "Duofix, Porocoat, Porocoat Multihole, Gription",
+      "Acetab. Screw": "QTY 3",
+      "Hole Eliminator": "QTY 1",
+      "Cementralizer": "QTY 1",
+      "Centralizer": "QTY 1",
+      "Cement Restrictor": "QTY 1"
+    }
+  },
+  {
+    "construct_id": "OSC363669",
+    "name": "COP",
+    "price": 4250,
+    "type": "hip",
+    "core_slots": [
+      "Stem",
+      "Head",
+      "Liner",
+      "Cup"
+    ],
+    "slots": {
+      "Stem": [
+        {
+          "family": "C-Stem",
+          "sizeTier": null,
+          "raw": "C-Stem"
+        },
+        {
+          "family": "Summit Cemented",
+          "sizeTier": null,
+          "raw": "Summit Cemented"
+        },
+        {
+          "family": "AML",
+          "sizeTier": null,
+          "raw": "AML"
+        },
+        {
+          "family": "Summit Porous",
+          "sizeTier": null,
+          "raw": "Summit Porous"
+        },
+        {
+          "family": "Summit Duofix",
+          "sizeTier": null,
+          "raw": "Summit Duofix"
+        },
+        {
+          "family": "TriLock",
+          "sizeTier": null,
+          "raw": "TriLock"
+        },
+        {
+          "family": "Corail",
+          "sizeTier": null,
+          "raw": "Corail"
+        },
+        {
+          "family": "Emphasys",
+          "sizeTier": null,
+          "raw": "Emphasys"
+        },
+        {
+          "family": "Actis",
+          "sizeTier": null,
+          "raw": "Actis"
+        },
+        {
+          "family": "S-Rom",
+          "sizeTier": null,
+          "raw": "S-Rom"
+        }
+      ],
+      "Sleeve Modular": [
+        {
+          "family": "S-Rom",
+          "sizeTier": null,
+          "raw": "S-Rom"
+        }
+      ],
+      "Head": [
+        {
+          "family": "Ceramic Delta (not TS)",
+          "sizeTier": {
+            "op": "<=",
+            "mm": 36
+          },
+          "raw": "Ceramic Delta (not TS) <= 36mm"
+        },
+        {
+          "family": "Ceramic Delta TS",
+          "sizeTier": {
+            "op": ">",
+            "mm": 36
+          },
+          "raw": "Ceramic Delta TS > 36mm"
+        },
+        {
+          "family": "Ceramic ARTICULEZE",
+          "sizeTier": null,
+          "raw": "Ceramic ARTICULEZE"
+        }
+      ],
+      "Liner": [
+        {
+          "family": "Marathon",
+          "sizeTier": {
+            "op": "<=",
+            "mm": 36
+          },
+          "raw": "Marathon <= 36mm"
+        },
+        {
+          "family": "AltrX",
+          "sizeTier": {
+            "op": "<=",
+            "mm": 36
+          },
+          "raw": "AltrX <= 36mm"
+        },
+        {
+          "family": "AltrX",
+          "sizeTier": {
+            "op": ">",
+            "mm": 36
+          },
+          "raw": "AltrX > 36mm"
+        }
+      ],
+      "Cup": [
+        {
+          "family": "Duofix",
+          "sizeTier": null,
+          "raw": "Duofix"
+        },
+        {
+          "family": "Porocoat",
+          "sizeTier": null,
+          "raw": "Porocoat"
+        },
+        {
+          "family": "Porocoat Multihole",
+          "sizeTier": null,
+          "raw": "Porocoat Multihole"
+        },
+        {
+          "family": "Gription",
+          "sizeTier": null,
+          "raw": "Gription"
+        }
+      ],
+      "Acetab. Screw": [],
+      "Hole Eliminator": [],
+      "Drill Bit": []
+    },
+    "slots_raw": {
+      "Stem": "C-Stem, Summit Cemented, AML, Summit Porous, Summit Duofix, TriLock, Corail, Emphasys, Actis, S-Rom",
+      "Sleeve Modular": "S-Rom",
+      "Head": "Ceramic Delta (not TS) <= 36mm, Ceramic Delta TS > 36mm, Ceramic ARTICULEZE",
+      "Liner": "Marathon <= 36mm, AltrX <= 36mm, AltrX > 36mm",
+      "Cup": "Duofix, Porocoat, Porocoat Multihole, Gription",
+      "Acetab. Screw": "QTY 3",
+      "Hole Eliminator": "QTY 1",
+      "Drill Bit": "QTY 2"
+    }
+  },
+  {
+    "construct_id": "OSC367606",
+    "name": "COP Delta TS Heads",
+    "price": 4750,
+    "type": "hip",
+    "core_slots": [
+      "Stem",
+      "Head",
+      "Liner",
+      "Cup"
+    ],
+    "slots": {
+      "Stem": [
+        {
+          "family": "C-Stem",
+          "sizeTier": null,
+          "raw": "C-Stem"
+        },
+        {
+          "family": "Summit Cemented",
+          "sizeTier": null,
+          "raw": "Summit Cemented"
+        },
+        {
+          "family": "AML",
+          "sizeTier": null,
+          "raw": "AML"
+        },
+        {
+          "family": "Summit Porous",
+          "sizeTier": null,
+          "raw": "Summit Porous"
+        },
+        {
+          "family": "Summit Duofix",
+          "sizeTier": null,
+          "raw": "Summit Duofix"
+        },
+        {
+          "family": "TriLock",
+          "sizeTier": null,
+          "raw": "TriLock"
+        },
+        {
+          "family": "Corail",
+          "sizeTier": null,
+          "raw": "Corail"
+        },
+        {
+          "family": "Emphasys",
+          "sizeTier": null,
+          "raw": "Emphasys"
+        },
+        {
+          "family": "Actis",
+          "sizeTier": null,
+          "raw": "Actis"
+        }
+      ],
+      "Head": [
+        {
+          "family": "Ceramic Delta TS",
+          "sizeTier": {
+            "op": "<=",
+            "mm": 36
+          },
+          "raw": "Ceramic Delta TS <= 36mm"
+        },
+        {
+          "family": "Ceramic Delta TS",
+          "sizeTier": {
+            "op": ">",
+            "mm": 36
+          },
+          "raw": "Ceramic Delta TS > 36mm"
+        }
+      ],
+      "Liner": [
+        {
+          "family": "Marathon",
+          "sizeTier": {
+            "op": "<=",
+            "mm": 36
+          },
+          "raw": "Marathon <= 36mm"
+        },
+        {
+          "family": "AltrX",
+          "sizeTier": {
+            "op": "<=",
+            "mm": 36
+          },
+          "raw": "AltrX <= 36mm"
+        },
+        {
+          "family": "AltrX",
+          "sizeTier": {
+            "op": ">",
+            "mm": 36
+          },
+          "raw": "AltrX > 36mm"
+        }
+      ],
+      "Cup": [
+        {
+          "family": "Duofix",
+          "sizeTier": null,
+          "raw": "Duofix"
+        },
+        {
+          "family": "Porocoat",
+          "sizeTier": null,
+          "raw": "Porocoat"
+        },
+        {
+          "family": "Porocoat Multihole",
+          "sizeTier": null,
+          "raw": "Porocoat Multihole"
+        },
+        {
+          "family": "Gription",
+          "sizeTier": null,
+          "raw": "Gription"
+        }
+      ],
+      "Acetab. Screw": [],
+      "Hole Eliminator": [],
+      "Cementralizer": [],
+      "Centralizer": [],
+      "Drill Bit": [],
+      "Cement Restrictor": []
+    },
+    "slots_raw": {
+      "Stem": "C-Stem, Summit Cemented, AML, Summit Porous, Summit Duofix, TriLock, Corail, Emphasys, Actis",
+      "Head": "Ceramic Delta TS <= 36mm, Ceramic Delta TS > 36mm",
+      "Liner": "Marathon <= 36mm, AltrX <= 36mm, AltrX > 36mm",
+      "Cup": "Duofix, Porocoat, Porocoat Multihole, Gription",
+      "Acetab. Screw": "QTY 3",
+      "Hole Eliminator": "QTY 1",
+      "Cementralizer": "QTY 1",
+      "Centralizer": "QTY 1",
+      "Drill Bit": "QTY 2",
+      "Cement Restrictor": "QTY 1"
+    }
+  },
+  {
+    "construct_id": "OSC366404",
+    "name": "UPCHARGE: Gription Multihole",
+    "price": 500,
+    "type": "addon",
+    "core_slots": [
+      "Stem",
+      "Head",
+      "Liner",
+      "Cup"
+    ],
+    "slots": {},
+    "slots_raw": {}
+  },
+  {
+    "construct_id": "OSC382195",
+    "name": "UPCH: Emphasys Acetabular",
+    "price": 240,
+    "type": "hip",
+    "core_slots": [
+      "Stem",
+      "Head",
+      "Liner",
+      "Cup"
+    ],
+    "slots": {
+      "Liner": [
+        {
+          "family": "Emphasys AOX",
+          "sizeTier": {
+            "op": "<=",
+            "mm": 36
+          },
+          "raw": "Emphasys AOX <= 36mm"
+        },
+        {
+          "family": "Emphasys AOX",
+          "sizeTier": {
+            "op": "=",
+            "mm": 40
+          },
+          "raw": "Emphasys AOX 40MM"
+        }
+      ],
+      "Cup": [
+        {
+          "family": "Emphasys Gription S",
+          "sizeTier": null,
+          "raw": "Emphasys Gription S"
+        }
+      ]
+    },
+    "slots_raw": {
+      "Liner": "Emphasys AOX <= 36mm, Emphasys AOX 40MM",
+      "Cup": "Emphasys Gription S"
+    }
+  },
+  {
+    "construct_id": "OSC381983",
+    "name": "BI-MENTUM Altrx Metal Head",
+    "price": 4825,
+    "type": "hip",
+    "core_slots": [
+      "Stem",
+      "Head",
+      "Liner",
+      "Cup"
+    ],
+    "slots": {
+      "Stem": [
+        {
+          "family": "AML",
+          "sizeTier": null,
+          "raw": "AML"
+        },
+        {
+          "family": "Summit Porous",
+          "sizeTier": null,
+          "raw": "Summit Porous"
+        },
+        {
+          "family": "Summit Duofix",
+          "sizeTier": null,
+          "raw": "Summit Duofix"
+        },
+        {
+          "family": "TriLock",
+          "sizeTier": null,
+          "raw": "TriLock"
+        },
+        {
+          "family": "Corail",
+          "sizeTier": null,
+          "raw": "Corail"
+        },
+        {
+          "family": "Emphasys",
+          "sizeTier": null,
+          "raw": "Emphasys"
+        },
+        {
+          "family": "Actis",
+          "sizeTier": null,
+          "raw": "Actis"
+        }
+      ],
+      "Head": [
+        {
+          "family": "Metal",
+          "sizeTier": null,
+          "raw": "Metal"
+        }
+      ],
+      "Liner": [
+        {
+          "family": "BI-MENTUM Liner",
+          "sizeTier": null,
+          "raw": "BI-MENTUM Liner"
+        },
+        {
+          "family": "BI-MENTUM AltrX",
+          "sizeTier": null,
+          "raw": "BI-MENTUM AltrX"
+        }
+      ],
+      "Cup": [
+        {
+          "family": "BI-MENTUM Pressfit Cup",
+          "sizeTier": null,
+          "raw": "BI-MENTUM Pressfit Cup"
+        },
+        {
+          "family": "BI-MENTUM Pressfit Plus Cup",
+          "sizeTier": null,
+          "raw": "BI-MENTUM Pressfit Plus Cup"
+        }
+      ],
+      "Acetab. Screw": [
+        {
+          "family": "BI-MENTUM Screw",
+          "sizeTier": null,
+          "raw": "BI-MENTUM Screw"
+        }
+      ]
+    },
+    "slots_raw": {
+      "Stem": "AML, Summit Porous, Summit Duofix, TriLock, Corail, Emphasys, Actis",
+      "Head": "Metal",
+      "Liner": "BI-MENTUM Liner, BI-MENTUM AltrX",
+      "Cup": "BI-MENTUM Pressfit Cup, BI-MENTUM Pressfit Plus Cup",
+      "Acetab. Screw": "BI-MENTUM Screw QTY 1"
+    }
+  },
+  {
+    "construct_id": "OSC378461",
+    "name": "BI-MENTUM Pressfit Ceramic Head",
+    "price": 4825,
+    "type": "hip",
+    "core_slots": [
+      "Stem",
+      "Head",
+      "Liner",
+      "Cup"
+    ],
+    "slots": {
+      "Stem": [
+        {
+          "family": "AML",
+          "sizeTier": null,
+          "raw": "AML"
+        },
+        {
+          "family": "Summit Porous",
+          "sizeTier": null,
+          "raw": "Summit Porous"
+        },
+        {
+          "family": "Summit Duofix",
+          "sizeTier": null,
+          "raw": "Summit Duofix"
+        },
+        {
+          "family": "TriLock",
+          "sizeTier": null,
+          "raw": "TriLock"
+        },
+        {
+          "family": "Corail",
+          "sizeTier": null,
+          "raw": "Corail"
+        },
+        {
+          "family": "Emphasys",
+          "sizeTier": null,
+          "raw": "Emphasys"
+        },
+        {
+          "family": "Actis",
+          "sizeTier": null,
+          "raw": "Actis"
+        }
+      ],
+      "Head": [
+        {
+          "family": "Ceramic Delta (not TS)",
+          "sizeTier": null,
+          "raw": "Ceramic Delta (not TS)"
+        },
+        {
+          "family": "Ceramic ARTICULEZE",
+          "sizeTier": null,
+          "raw": "Ceramic ARTICULEZE"
+        }
+      ],
+      "Liner": [
+        {
+          "family": "BI-MENTUM Liner",
+          "sizeTier": null,
+          "raw": "BI-MENTUM Liner"
+        },
+        {
+          "family": "BI-MENTUM AltrX",
+          "sizeTier": null,
+          "raw": "BI-MENTUM AltrX"
+        }
+      ],
+      "Cup": [
+        {
+          "family": "BI-MENTUM Pressfit Cup",
+          "sizeTier": null,
+          "raw": "BI-MENTUM Pressfit Cup"
+        }
+      ]
+    },
+    "slots_raw": {
+      "Stem": "AML, Summit Porous, Summit Duofix, TriLock, Corail, Emphasys, Actis",
+      "Head": "Ceramic Delta (not TS), Ceramic ARTICULEZE",
+      "Liner": "BI-MENTUM Liner, BI-MENTUM AltrX",
+      "Cup": "BI-MENTUM Pressfit Cup"
+    }
+  },
+  {
+    "construct_id": "OSC382068",
+    "name": "Pinnacle Modular Dual Mobility - Metal",
+    "price": 5525,
+    "type": "hip",
+    "core_slots": [
+      "Stem",
+      "Head",
+      "Liner",
+      "Cup"
+    ],
+    "slots": {
+      "Stem": [
+        {
+          "family": "C-Stem",
+          "sizeTier": null,
+          "raw": "C-Stem"
+        },
+        {
+          "family": "Summit Cemented",
+          "sizeTier": null,
+          "raw": "Summit Cemented"
+        },
+        {
+          "family": "AML",
+          "sizeTier": null,
+          "raw": "AML"
+        },
+        {
+          "family": "Summit Porous",
+          "sizeTier": null,
+          "raw": "Summit Porous"
+        },
+        {
+          "family": "Summit Duofix",
+          "sizeTier": null,
+          "raw": "Summit Duofix"
+        },
+        {
+          "family": "TriLock",
+          "sizeTier": null,
+          "raw": "TriLock"
+        },
+        {
+          "family": "Corail",
+          "sizeTier": null,
+          "raw": "Corail"
+        },
+        {
+          "family": "Emphasys",
+          "sizeTier": null,
+          "raw": "Emphasys"
+        },
+        {
+          "family": "Actis",
+          "sizeTier": null,
+          "raw": "Actis"
+        }
+      ],
+      "Head": [
+        {
+          "family": "Metal",
+          "sizeTier": null,
+          "raw": "Metal"
+        }
+      ],
+      "Liner": [
+        {
+          "family": "BI-MENTUM Liner",
+          "sizeTier": null,
+          "raw": "BI-MENTUM Liner"
+        },
+        {
+          "family": "BI-MENTUM AltrX",
+          "sizeTier": null,
+          "raw": "BI-MENTUM AltrX"
+        }
+      ],
+      "Metal Liner": [
+        {
+          "family": "Pinnacle DM",
+          "sizeTier": null,
+          "raw": "Pinnacle DM"
+        }
+      ],
+      "Cup": [
+        {
+          "family": "Duofix",
+          "sizeTier": null,
+          "raw": "Duofix"
+        },
+        {
+          "family": "Porocoat",
+          "sizeTier": null,
+          "raw": "Porocoat"
+        },
+        {
+          "family": "Porocoat Multihole",
+          "sizeTier": null,
+          "raw": "Porocoat Multihole"
+        },
+        {
+          "family": "Gription",
+          "sizeTier": null,
+          "raw": "Gription"
+        }
+      ],
+      "Acetab. Screw": [],
+      "Hole Eliminator": [],
+      "Cementralizer": [],
+      "Centralizer": [],
+      "Cement Restrictor": [
+        {
+          "family": "Plastic Cement Restrictors",
+          "sizeTier": null,
+          "raw": "Plastic Cement Restrictors"
+        }
+      ]
+    },
+    "slots_raw": {
+      "Stem": "C-Stem, Summit Cemented, AML, Summit Porous, Summit Duofix, TriLock, Corail, Emphasys, Actis",
+      "Head": "Metal",
+      "Liner": "BI-MENTUM Liner, BI-MENTUM AltrX",
+      "Metal Liner": "Pinnacle DM",
+      "Cup": "Duofix, Porocoat, Porocoat Multihole, Gription",
+      "Acetab. Screw": "QTY 3",
+      "Hole Eliminator": "QTY 1",
+      "Cementralizer": "QTY 1",
+      "Centralizer": "QTY 1",
+      "Cement Restrictor": "QTY 1, Plastic Cement Restrictors"
+    }
+  },
+  {
+    "construct_id": "OSC382067",
+    "name": "Pinnacle Modular Dual Mobility - Ceramic",
+    "price": 5525,
+    "type": "hip",
+    "core_slots": [
+      "Stem",
+      "Head",
+      "Liner",
+      "Cup"
+    ],
+    "slots": {
+      "Stem": [
+        {
+          "family": "C-Stem",
+          "sizeTier": null,
+          "raw": "C-Stem"
+        },
+        {
+          "family": "Summit Cemented",
+          "sizeTier": null,
+          "raw": "Summit Cemented"
+        },
+        {
+          "family": "AML",
+          "sizeTier": null,
+          "raw": "AML"
+        },
+        {
+          "family": "Summit Porous",
+          "sizeTier": null,
+          "raw": "Summit Porous"
+        },
+        {
+          "family": "Summit Duofix",
+          "sizeTier": null,
+          "raw": "Summit Duofix"
+        },
+        {
+          "family": "TriLock",
+          "sizeTier": null,
+          "raw": "TriLock"
+        },
+        {
+          "family": "Corail",
+          "sizeTier": null,
+          "raw": "Corail"
+        },
+        {
+          "family": "Emphasys",
+          "sizeTier": null,
+          "raw": "Emphasys"
+        },
+        {
+          "family": "Actis",
+          "sizeTier": null,
+          "raw": "Actis"
+        }
+      ],
+      "Head": [
+        {
+          "family": "Ceramic Delta (not TS)",
+          "sizeTier": null,
+          "raw": "Ceramic Delta (not TS)"
+        },
+        {
+          "family": "Ceramic ARTICULEZE",
+          "sizeTier": null,
+          "raw": "Ceramic ARTICULEZE"
+        }
+      ],
+      "Liner": [
+        {
+          "family": "BI-MENTUM Liner",
+          "sizeTier": null,
+          "raw": "BI-MENTUM Liner"
+        },
+        {
+          "family": "BI-MENTUM AltrX",
+          "sizeTier": null,
+          "raw": "BI-MENTUM AltrX"
+        }
+      ],
+      "Metal Liner": [
+        {
+          "family": "Pinnacle DM",
+          "sizeTier": null,
+          "raw": "Pinnacle DM"
+        }
+      ],
+      "Cup": [
+        {
+          "family": "Duofix",
+          "sizeTier": null,
+          "raw": "Duofix"
+        },
+        {
+          "family": "Porocoat",
+          "sizeTier": null,
+          "raw": "Porocoat"
+        },
+        {
+          "family": "Porocoat Multihole",
+          "sizeTier": null,
+          "raw": "Porocoat Multihole"
+        },
+        {
+          "family": "Gription",
+          "sizeTier": null,
+          "raw": "Gription"
+        }
+      ],
+      "Acetab. Screw": [],
+      "Hole Eliminator": [],
+      "Cementralizer": [],
+      "Centralizer": [],
+      "Cement Restrictor": [
+        {
+          "family": "Plastic Cement Restrictors",
+          "sizeTier": null,
+          "raw": "Plastic Cement Restrictors"
+        }
+      ]
+    },
+    "slots_raw": {
+      "Stem": "C-Stem, Summit Cemented, AML, Summit Porous, Summit Duofix, TriLock, Corail, Emphasys, Actis",
+      "Head": "Ceramic Delta (not TS), Ceramic ARTICULEZE",
+      "Liner": "BI-MENTUM Liner, BI-MENTUM AltrX",
+      "Metal Liner": "Pinnacle DM",
+      "Cup": "Duofix, Porocoat, Porocoat Multihole, Gription",
+      "Acetab. Screw": "QTY 3",
+      "Hole Eliminator": "QTY 1",
+      "Cementralizer": "QTY 1",
+      "Centralizer": "QTY 1",
+      "Cement Restrictor": "QTY 1, Plastic Cement Restrictors"
+    }
+  },
+  {
+    "construct_id": "OSC382391",
+    "name": "Emphasys Dual Mobility - Metal Head",
+    "price": 5905,
+    "type": "hip",
+    "core_slots": [
+      "Stem",
+      "Head",
+      "Liner",
+      "Cup"
+    ],
+    "slots": {
+      "Stem": [
+        {
+          "family": "C-Stem",
+          "sizeTier": null,
+          "raw": "C-Stem"
+        },
+        {
+          "family": "Summit Cemented",
+          "sizeTier": null,
+          "raw": "Summit Cemented"
+        },
+        {
+          "family": "AML",
+          "sizeTier": null,
+          "raw": "AML"
+        },
+        {
+          "family": "Summit Porous",
+          "sizeTier": null,
+          "raw": "Summit Porous"
+        },
+        {
+          "family": "Summit Duofix",
+          "sizeTier": null,
+          "raw": "Summit Duofix"
+        },
+        {
+          "family": "Corail",
+          "sizeTier": null,
+          "raw": "Corail"
+        },
+        {
+          "family": "Emphasys",
+          "sizeTier": null,
+          "raw": "Emphasys"
+        },
+        {
+          "family": "Actis",
+          "sizeTier": null,
+          "raw": "Actis"
+        }
+      ],
+      "Head": [
+        {
+          "family": "Metal",
+          "sizeTier": {
+            "op": "<=",
+            "mm": 36
+          },
+          "raw": "Metal <= 36mm"
+        }
+      ],
+      "Liner": [
+        {
+          "family": "Emphasys AOX DM",
+          "sizeTier": null,
+          "raw": "Emphasys AOX DM"
+        }
+      ],
+      "Metal Liner": [
+        {
+          "family": "Emphasys DM",
+          "sizeTier": null,
+          "raw": "Emphasys DM"
+        }
+      ],
+      "Cup": [
+        {
+          "family": "Emphasys Gription S",
+          "sizeTier": null,
+          "raw": "Emphasys Gription S"
+        }
+      ],
+      "Acetab. Screw": [],
+      "Cementralizer": [],
+      "Centralizer": [],
+      "Cement Restrictor": [
+        {
+          "family": "Plastic Cement Restrictors",
+          "sizeTier": null,
+          "raw": "Plastic Cement Restrictors"
+        }
+      ]
+    },
+    "slots_raw": {
+      "Stem": "C-Stem, Summit Cemented, AML, Summit Porous, Summit Duofix, Corail, Emphasys, Actis",
+      "Head": "Metal <= 36mm",
+      "Liner": "Emphasys AOX DM",
+      "Metal Liner": "Emphasys DM",
+      "Cup": "Emphasys Gription S",
+      "Acetab. Screw": "QTY 3",
+      "Cementralizer": "QTY 1",
+      "Centralizer": "QTY 1",
+      "Cement Restrictor": "QTY 1, Plastic Cement Restrictors"
+    }
+  },
+  {
+    "construct_id": "OSC382382",
+    "name": "Emphasys Dual Mobility - Ceramic Head",
+    "price": 5905,
+    "type": "hip",
+    "core_slots": [
+      "Stem",
+      "Head",
+      "Liner",
+      "Cup"
+    ],
+    "slots": {
+      "Stem": [
+        {
+          "family": "C-Stem",
+          "sizeTier": null,
+          "raw": "C-Stem"
+        },
+        {
+          "family": "Summit Cemented",
+          "sizeTier": null,
+          "raw": "Summit Cemented"
+        },
+        {
+          "family": "AML",
+          "sizeTier": null,
+          "raw": "AML"
+        },
+        {
+          "family": "Summit Porous",
+          "sizeTier": null,
+          "raw": "Summit Porous"
+        },
+        {
+          "family": "Summit Duofix",
+          "sizeTier": null,
+          "raw": "Summit Duofix"
+        },
+        {
+          "family": "Corail",
+          "sizeTier": null,
+          "raw": "Corail"
+        },
+        {
+          "family": "Emphasys",
+          "sizeTier": null,
+          "raw": "Emphasys"
+        },
+        {
+          "family": "Actis",
+          "sizeTier": null,
+          "raw": "Actis"
+        }
+      ],
+      "Head": [
+        {
+          "family": "Ceramic Delta (not TS)",
+          "sizeTier": {
+            "op": "<=",
+            "mm": 36
+          },
+          "raw": "Ceramic Delta (not TS) <= 36mm"
+        },
+        {
+          "family": "Ceramic ARTICULEZE",
+          "sizeTier": null,
+          "raw": "Ceramic ARTICULEZE"
+        }
+      ],
+      "Liner": [
+        {
+          "family": "Emphasys AOX DM",
+          "sizeTier": null,
+          "raw": "Emphasys AOX DM"
+        }
+      ],
+      "Metal Liner": [
+        {
+          "family": "Emphasys DM",
+          "sizeTier": null,
+          "raw": "Emphasys DM"
+        }
+      ],
+      "Cup": [
+        {
+          "family": "Emphasys Gription S",
+          "sizeTier": null,
+          "raw": "Emphasys Gription S"
+        }
+      ],
+      "Acetab. Screw": [],
+      "Cementralizer": [],
+      "Centralizer": [],
+      "Cement Restrictor": [
+        {
+          "family": "Plastic Cement Restrictors",
+          "sizeTier": null,
+          "raw": "Plastic Cement Restrictors"
+        }
+      ]
+    },
+    "slots_raw": {
+      "Stem": "C-Stem, Summit Cemented, AML, Summit Porous, Summit Duofix, Corail, Emphasys, Actis",
+      "Head": "Ceramic Delta (not TS) <= 36mm, Ceramic ARTICULEZE",
+      "Liner": "Emphasys AOX DM",
+      "Metal Liner": "Emphasys DM",
+      "Cup": "Emphasys Gription S",
+      "Acetab. Screw": "QTY 3",
+      "Cementralizer": "QTY 1",
+      "Centralizer": "QTY 1",
+      "Cement Restrictor": "QTY 1, Plastic Cement Restrictors"
+    }
+  },
+  {
+    "construct_id": "OSC2481",
+    "name": "Sigma HP UNI - Metal Backed",
+    "price": 3200,
+    "type": "knee",
+    "core_slots": [
+      "Femur",
+      "Insert",
+      "Tib Tray"
+    ],
+    "slots": {
+      "Femur": [
+        {
+          "family": "HP UNI",
+          "sizeTier": null,
+          "raw": "HP UNI"
+        }
+      ],
+      "Insert": [
+        {
+          "family": "HP UNI",
+          "sizeTier": null,
+          "raw": "HP UNI"
+        }
+      ],
+      "Tib Tray": [
+        {
+          "family": "HP UNI Metal",
+          "sizeTier": null,
+          "raw": "HP UNI Metal"
+        }
+      ],
+      "Pin Non Sterile": [],
+      "Pin Sterile": []
+    },
+    "slots_raw": {
+      "Femur": "HP UNI",
+      "Insert": "HP UNI",
+      "Tib Tray": "HP UNI Metal",
+      "Pin Non Sterile": "QTY 6",
+      "Pin Sterile": "QTY 2"
+    }
+  },
+  {
+    "construct_id": "OSC357818",
+    "name": "Attune FB Cemented",
+    "price": 3200,
+    "type": "knee",
+    "core_slots": [
+      "Femur",
+      "Insert",
+      "Tib Tray"
+    ],
+    "slots": {
+      "Femur": [
+        {
+          "family": "Cemented",
+          "sizeTier": null,
+          "raw": "Cemented"
+        }
+      ],
+      "Insert": [
+        {
+          "family": "FB AOX",
+          "sizeTier": null,
+          "raw": "FB AOX"
+        }
+      ],
+      "Tib Tray": [
+        {
+          "family": "Cemented FB",
+          "sizeTier": null,
+          "raw": "Cemented FB"
+        }
+      ],
+      "Patella": [
+        {
+          "family": "All Poly Anatomic",
+          "sizeTier": null,
+          "raw": "All Poly Anatomic"
+        },
+        {
+          "family": "All Poly Dome",
+          "sizeTier": null,
+          "raw": "All Poly Dome"
+        }
+      ],
+      "Drill Bit": [],
+      "Pin Non Sterile": [],
+      "Pin Sterile": []
+    },
+    "slots_raw": {
+      "Femur": "Cemented",
+      "Insert": "FB AOX",
+      "Tib Tray": "Cemented FB",
+      "Patella": "All Poly Anatomic, All Poly Dome",
+      "Drill Bit": "QTY 2",
+      "Pin Non Sterile": "QTY 6",
+      "Pin Sterile": "QTY 2"
+    }
+  },
+  {
+    "construct_id": "OSC371227",
+    "name": "Attune FB Hybrid",
+    "price": 3650,
+    "type": "knee",
+    "core_slots": [
+      "Femur",
+      "Insert",
+      "Tib Tray"
+    ],
+    "slots": {
+      "Femur": [
+        {
+          "family": "Porous",
+          "sizeTier": null,
+          "raw": "Porous"
+        }
+      ],
+      "Insert": [
+        {
+          "family": "FB AOX",
+          "sizeTier": null,
+          "raw": "FB AOX"
+        }
+      ],
+      "Tib Tray": [
+        {
+          "family": "Cemented FB",
+          "sizeTier": null,
+          "raw": "Cemented FB"
+        }
+      ],
+      "Patella": [
+        {
+          "family": "All Poly Anatomic",
+          "sizeTier": null,
+          "raw": "All Poly Anatomic"
+        },
+        {
+          "family": "All Poly Dome",
+          "sizeTier": null,
+          "raw": "All Poly Dome"
+        }
+      ],
+      "Drill Bit": [],
+      "Pin Non Sterile": [],
+      "Pin Sterile": []
+    },
+    "slots_raw": {
+      "Femur": "Porous",
+      "Insert": "FB AOX",
+      "Tib Tray": "Cemented FB",
+      "Patella": "All Poly Anatomic, All Poly Dome",
+      "Drill Bit": "QTY 2",
+      "Pin Non Sterile": "QTY 6",
+      "Pin Sterile": "QTY 2"
+    }
+  },
+  {
+    "construct_id": "OSC378862",
+    "name": "Attune FB Cementless",
+    "price": 3900,
+    "type": "knee",
+    "core_slots": [
+      "Femur",
+      "Insert",
+      "Tib Tray"
+    ],
+    "slots": {
+      "Femur": [
+        {
+          "family": "Porous",
+          "sizeTier": null,
+          "raw": "Porous"
+        }
+      ],
+      "Insert": [
+        {
+          "family": "FB AOX",
+          "sizeTier": null,
+          "raw": "FB AOX"
+        }
+      ],
+      "Tib Tray": [
+        {
+          "family": "Porous FB",
+          "sizeTier": null,
+          "raw": "Porous FB"
+        }
+      ],
+      "Patella": [
+        {
+          "family": "All Poly Anatomic",
+          "sizeTier": null,
+          "raw": "All Poly Anatomic"
+        },
+        {
+          "family": "All Poly Dome",
+          "sizeTier": null,
+          "raw": "All Poly Dome"
+        }
+      ],
+      "Drill Bit": [],
+      "Pin Non Sterile": [],
+      "Pin Sterile": []
+    },
+    "slots_raw": {
+      "Femur": "Porous",
+      "Insert": "FB AOX",
+      "Tib Tray": "Porous FB",
+      "Patella": "All Poly Anatomic, All Poly Dome",
+      "Drill Bit": "QTY 2",
+      "Pin Non Sterile": "QTY 6",
+      "Pin Sterile": "QTY 2"
+    }
+  },
+  {
+    "construct_id": "OSC381931",
+    "name": "Attune FB MS Insert",
+    "price": 250,
+    "type": "addon",
+    "core_slots": [
+      "Stem",
+      "Head",
+      "Liner",
+      "Cup"
+    ],
+    "slots": {},
+    "slots_raw": {}
+  },
+  {
+    "construct_id": "OSC357858",
+    "name": "Attune RP Cemented",
+    "price": 3700,
+    "type": "knee",
+    "core_slots": [
+      "Femur",
+      "Insert",
+      "Tib Tray"
+    ],
+    "slots": {
+      "Femur": [
+        {
+          "family": "Cemented",
+          "sizeTier": null,
+          "raw": "Cemented"
+        }
+      ],
+      "Insert": [
+        {
+          "family": "RP AOX",
+          "sizeTier": null,
+          "raw": "RP AOX"
+        }
+      ],
+      "Tib Tray": [
+        {
+          "family": "Cemented RP",
+          "sizeTier": null,
+          "raw": "Cemented RP"
+        }
+      ],
+      "Patella": [
+        {
+          "family": "All Poly Anatomic",
+          "sizeTier": null,
+          "raw": "All Poly Anatomic"
+        },
+        {
+          "family": "All Poly Dome",
+          "sizeTier": null,
+          "raw": "All Poly Dome"
+        }
+      ],
+      "Drill Bit": [],
+      "Pin Non Sterile": [],
+      "Pin Sterile": []
+    },
+    "slots_raw": {
+      "Femur": "Cemented",
+      "Insert": "RP AOX",
+      "Tib Tray": "Cemented RP",
+      "Patella": "All Poly Anatomic, All Poly Dome",
+      "Drill Bit": "QTY 2",
+      "Pin Non Sterile": "QTY 6",
+      "Pin Sterile": "QTY 2"
+    }
+  },
+  {
+    "construct_id": "OSC370788",
+    "name": "Attune RP Hybrid",
+    "price": 4200,
+    "type": "knee",
+    "core_slots": [
+      "Femur",
+      "Insert",
+      "Tib Tray"
+    ],
+    "slots": {
+      "Femur": [
+        {
+          "family": "Porous",
+          "sizeTier": null,
+          "raw": "Porous"
+        }
+      ],
+      "Insert": [
+        {
+          "family": "RP AOX",
+          "sizeTier": null,
+          "raw": "RP AOX"
+        }
+      ],
+      "Tib Tray": [
+        {
+          "family": "Cemented RP",
+          "sizeTier": null,
+          "raw": "Cemented RP"
+        }
+      ],
+      "Patella": [
+        {
+          "family": "All Poly Anatomic",
+          "sizeTier": null,
+          "raw": "All Poly Anatomic"
+        },
+        {
+          "family": "All Poly Dome",
+          "sizeTier": null,
+          "raw": "All Poly Dome"
+        }
+      ],
+      "Drill Bit": [],
+      "Pin Non Sterile": [],
+      "Pin Sterile": []
+    },
+    "slots_raw": {
+      "Femur": "Porous",
+      "Insert": "RP AOX",
+      "Tib Tray": "Cemented RP",
+      "Patella": "All Poly Anatomic, All Poly Dome",
+      "Drill Bit": "QTY 2",
+      "Pin Non Sterile": "QTY 6",
+      "Pin Sterile": "QTY 2"
+    }
+  },
+  {
+    "construct_id": "OSC367989",
+    "name": "Attune RP Porous",
+    "price": 4450,
+    "type": "knee",
+    "core_slots": [
+      "Femur",
+      "Insert",
+      "Tib Tray"
+    ],
+    "slots": {
+      "Femur": [
+        {
+          "family": "Porous",
+          "sizeTier": null,
+          "raw": "Porous"
+        }
+      ],
+      "Insert": [
+        {
+          "family": "RP AOX",
+          "sizeTier": null,
+          "raw": "RP AOX"
+        }
+      ],
+      "Tib Tray": [
+        {
+          "family": "Porous RP",
+          "sizeTier": null,
+          "raw": "Porous RP"
+        }
+      ],
+      "Patella": [
+        {
+          "family": "All Poly Anatomic",
+          "sizeTier": null,
+          "raw": "All Poly Anatomic"
+        },
+        {
+          "family": "All Poly Dome",
+          "sizeTier": null,
+          "raw": "All Poly Dome"
+        }
+      ],
+      "Drill Bit": [],
+      "Pin Non Sterile": [],
+      "Pin Sterile": []
+    },
+    "slots_raw": {
+      "Femur": "Porous",
+      "Insert": "RP AOX",
+      "Tib Tray": "Porous RP",
+      "Patella": "All Poly Anatomic, All Poly Dome",
+      "Drill Bit": "QTY 2",
+      "Pin Non Sterile": "QTY 6",
+      "Pin Sterile": "QTY 2"
+    }
+  },
+  {
+    "construct_id": "OSC382436",
+    "name": "Affixium Patella",
+    "price": 180,
+    "type": "addon",
+    "core_slots": [
+      "Stem",
+      "Head",
+      "Liner",
+      "Cup"
+    ],
+    "slots": {},
+    "slots_raw": {}
+  }
+]

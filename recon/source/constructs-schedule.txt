@@ -1,0 +1,187 @@
+MOP 	OSC364409
+Stem: C-Stem, Summit Cemented, AML, Summit Porous, Summit Duofix,
+TriLock, Corail, Emphasys, Actis
+Head: Metal <= 36mm, Metal > 36mm
+Liner: AltrX <= 36mm, AltrX > 36mm
+Cup: Duofix, Porocoat, Porocoat Multihole, Gription
+Acetab. Screw: QTY 3
+Hole Eliminator: QTY 1
+Cementralizer: QTY 1
+Centralizer: QTY 1
+Drill Bit: QTY 2
+Cement Restrictor: QTY 1
+$4,250.00
+COP 	OSC10723
+Stem: C-Stem, Summit Cemented, AML, Summit Porous, Summit Duofix,
+TriLock, Corail
+Head: Ceramic Delta (not TS) <= 36mm, Ceramic Delta TS > 36mm, Ceramic
+ARTICULEZE
+Liner: Marathon <= 36mm, AltrX <= 36mm, AltrX > 36mm
+Cup: Duofix, Porocoat, Porocoat Multihole, Gription
+Acetab. Screw: QTY 3
+Hole Eliminator: QTY 1
+Cementralizer: QTY 1
+Centralizer: QTY 1
+Cement Restrictor: QTY 1
+$4,250.00
+COP 	OSC363669
+Stem: C-Stem, Summit Cemented, AML, Summit Porous, Summit Duofix,
+TriLock, Corail, Emphasys, Actis, S-Rom
+Sleeve Modular: S-Rom
+Head: Ceramic Delta (not TS) <= 36mm, Ceramic Delta TS > 36mm, Ceramic
+ARTICULEZE
+Liner: Marathon <= 36mm, AltrX <= 36mm, AltrX > 36mm
+Cup: Duofix, Porocoat, Porocoat Multihole, Gription
+Acetab. Screw: QTY 3
+Hole Eliminator: QTY 1
+Drill Bit: QTY 2
+$4,250.00
+COP Delta TS Heads 	OSC367606
+Stem: C-Stem, Summit Cemented, AML, Summit Porous, Summit Duofix,
+TriLock, Corail, Emphasys, Actis
+Head: Ceramic Delta TS <= 36mm, Ceramic Delta TS > 36mm
+Liner: Marathon <= 36mm, AltrX <= 36mm, AltrX > 36mm
+Cup: Duofix, Porocoat, Porocoat Multihole, Gription
+Acetab. Screw: QTY 3
+Hole Eliminator: QTY 1
+Cementralizer: QTY 1
+Centralizer: QTY 1
+Drill Bit: QTY 2
+Cement Restrictor: QTY 1
+$4,750.00
+UPCHARGE: Gription Multihole 	OSC366404 	Cup: Gription Multihole 	$500.00
+UPCH: Emphasys Acetabular 	OSC382195
+Liner: Emphasys AOX <= 36mm, Emphasys AOX 40MM
+Cup: Emphasys Gription S
+$240.00
+BI-MENTUM Altrx Metal Head 	OSC381983
+Stem: AML, Summit Porous, Summit Duofix, TriLock, Corail, Emphasys, Actis
+Head: Metal
+Liner: BI-MENTUM Liner, BI-MENTUM AltrX
+Cup: BI-MENTUM Pressfit Cup, BI-MENTUM Pressfit Plus Cup
+Acetab. Screw: BI-MENTUM Screw QTY 1
+$4,825.00
+BI-MENTUM Pressfit Ceramic
+Head OSC378461
+Stem: AML, Summit Porous, Summit Duofix, TriLock, Corail, Emphasys, Actis
+Head: Ceramic Delta (not TS), Ceramic ARTICULEZE
+Liner: BI-MENTUM Liner, BI-MENTUM AltrX
+Cup: BI-MENTUM Pressfit Cup
+$4,825.00
+Pinnacle Modular Dual Mobility
+- Metal OSC382068
+Stem: C-Stem, Summit Cemented, AML, Summit Porous, Summit Duofix,
+TriLock, Corail, Emphasys, Actis
+Head: Metal
+Liner: BI-MENTUM Liner, BI-MENTUM AltrX
+Metal Liner: Pinnacle DM
+Cup: Duofix, Porocoat, Porocoat Multihole, Gription
+Acetab. Screw: QTY 3
+Hole Eliminator: QTY 1
+Cementralizer: QTY 1
+Centralizer: QTY 1
+Cement Restrictor: QTY 1, Plastic Cement Restrictors
+$5,525.00
+Pinnacle Modular Dual Mobility
+- Ceramic OSC382067
+Stem: C-Stem, Summit Cemented, AML, Summit Porous, Summit Duofix,
+TriLock, Corail, Emphasys, Actis
+Head: Ceramic Delta (not TS), Ceramic ARTICULEZE
+Liner: BI-MENTUM Liner, BI-MENTUM AltrX
+Metal Liner: Pinnacle DM
+Cup: Duofix, Porocoat, Porocoat Multihole, Gription
+Acetab. Screw: QTY 3
+Hole Eliminator: QTY 1
+Cementralizer: QTY 1
+Centralizer: QTY 1
+Cement Restrictor: QTY 1, Plastic Cement Restrictors
+$5,525.00
+Emphasys Dual Mobility - Metal
+Head OSC382391
+Stem: C-Stem, Summit Cemented, AML, Summit Porous, Summit Duofix,
+Corail, Emphasys, Actis
+Head: Metal <= 36mm
+Liner: Emphasys AOX DM
+Metal Liner: Emphasys DM
+Cup: Emphasys Gription S
+Acetab. Screw: QTY 3
+Cementralizer: QTY 1
+Centralizer: QTY 1
+Cement Restrictor: QTY 1, Plastic Cement Restrictors
+$5,905.00
+Emphasys Dual Mobility -
+Ceramic Head OSC382382
+Stem: C-Stem, Summit Cemented, AML, Summit Porous, Summit Duofix,
+Corail, Emphasys, Actis
+Head: Ceramic Delta (not TS) <= 36mm, Ceramic ARTICULEZE
+Liner: Emphasys AOX DM
+Metal Liner: Emphasys DM
+Cup: Emphasys Gription S
+Acetab. Screw: QTY 3
+Cementralizer: QTY 1
+Centralizer: QTY 1
+Cement Restrictor: QTY 1, Plastic Cement Restrictors
+$5,905.00
+Sigma HP UNI - Metal Backed 	OSC2481
+Femur: HP UNI
+Insert: HP UNI
+Tib Tray: HP UNI Metal
+Pin Non Sterile: QTY 6
+Pin Sterile: QTY 2
+$3,200.00
+Attune FB Cemented 	OSC357818
+Femur: Cemented
+Insert: FB AOX
+Tib Tray: Cemented FB
+Patella: All Poly Anatomic, All Poly Dome
+Drill Bit: QTY 2
+Pin Non Sterile: QTY 6
+Pin Sterile: QTY 2
+$3,200.00
+Attune FB Hybrid 	OSC371227
+Femur: Porous
+Insert: FB AOX
+Tib Tray: Cemented FB
+Patella: All Poly Anatomic, All Poly Dome
+Drill Bit: QTY 2
+Pin Non Sterile: QTY 6
+Pin Sterile: QTY 2
+$3,650.00
+Attune FB Cementless 	OSC378862
+Femur: Porous
+Insert: FB AOX
+Tib Tray: Porous FB
+Patella: All Poly Anatomic, All Poly Dome
+Drill Bit: QTY 2
+Pin Non Sterile: QTY 6
+Pin Sterile: QTY 2
+$3,900.00
+Attune FB MS Insert 	OSC381931 	Insert: FB Medial Stabilized AOX 	$250.00
+Attune RP Cemented 	OSC357858
+Femur: Cemented
+Insert: RP AOX
+Tib Tray: Cemented RP
+Patella: All Poly Anatomic, All Poly Dome
+Drill Bit: QTY 2
+Pin Non Sterile: QTY 6
+Pin Sterile: QTY 2
+$3,700.00
+Attune RP Hybrid 	OSC370788
+Femur: Porous
+Insert: RP AOX
+Tib Tray: Cemented RP
+Patella: All Poly Anatomic, All Poly Dome
+Drill Bit: QTY 2
+Pin Non Sterile: QTY 6
+Pin Sterile: QTY 2
+$4,200.00
+Attune RP Porous 	OSC367989
+Femur: Porous
+Insert: RP AOX
+Tib Tray: Porous RP
+Patella: All Poly Anatomic, All Poly Dome
+Drill Bit: QTY 2
+Pin Non Sterile: QTY 6
+Pin Sterile: QTY 2
+$4,450.00
+Affixium Patella 	OSC382436 	Patella: Affixium Anatomic, Affixium Dome 	$180.00
