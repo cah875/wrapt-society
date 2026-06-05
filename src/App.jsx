@@ -61,15 +61,16 @@ export default function App() {
     }
   }, [mode, lookups, notify]);
 
-  // Enrich an extraction/scan via GUDID and open it for review in Catalog mode.
+  // Enrich an extraction/scan via GUDID → openFDA waterfall and open for review.
   const draftCatalogItem = useCallback(async (visionLike) => {
-    const gtin = visionLike.gtin;
+    const gtin = visionLike.gtin || '';
+    const ref = visionLike.catalogNumber || visionLike.ref || '';
     let gudid = null;
-    if (gtin) {
+    if (gtin || ref) {
       try {
-        gudid = await lookupGtin(gtin);
+        gudid = await lookupGtin(gtin, ref);
       } catch {
-        // No GUDID match — the tech fills/edits the record manually.
+        // No match in either database — tech fills/edits the record manually.
       }
     }
     setCatalogDraft(buildCatalogItem(visionLike, gudid));
@@ -77,11 +78,27 @@ export default function App() {
   }, []);
 
   // --- Vision capture -------------------------------------------------------
+  // imageOrImages: a single data-URL string, or [front, back] for two-side scan.
   const handleCapture = useCallback(
-    async (imageDataUrl) => {
+    async (imageOrImages) => {
       setBusy(true);
       try {
-        const result = await extractFromImage(imageDataUrl, settings);
+        let result;
+        if (Array.isArray(imageOrImages)) {
+          // Two-photo path: extract each side then merge, preferring non-empty
+          // fields — the second scan typically fills lot/expiry/REF blanks.
+          const [r1, r2] = await Promise.all(
+            imageOrImages.map((img) => extractFromImage(img, settings))
+          );
+          result = { ...r1 };
+          for (const [k, v] of Object.entries(r2)) {
+            if (v !== '' && v !== null && v !== undefined && !result[k]) result[k] = v;
+          }
+          result.blurry = r1.blurry || r2.blurry;
+        } else {
+          result = await extractFromImage(imageOrImages, settings);
+        }
+
         if (mode === 'catalog') {
           await draftCatalogItem(result);
         } else {
@@ -127,13 +144,13 @@ export default function App() {
     let name = lookupGtinName(parsed.gtin);
     if (!name && parsed.gtin) {
       try {
-        const r = await lookupGtin(parsed.gtin);
+        const r = await lookupGtin(parsed.gtin, parsed.ref || '');
         if (r?.name) {
           name = r.name;
           rememberGtinName(parsed.gtin, name);
         }
       } catch {
-        // No GUDID match — leave the name blank for the tech to fill in.
+        // No match — leave the name blank for the tech to fill in.
       }
     }
     setExtracted({
@@ -366,6 +383,7 @@ export default function App() {
                     onManualEntry={handleManualEntry}
                     onSelectDevice={(id) => update({ cameraDeviceId: id })}
                     onCamerasEnumerated={setCameras}
+                    allowSecondSide={mode === 'catalog'}
                   />
                 )}
               </>
