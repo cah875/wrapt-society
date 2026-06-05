@@ -40,13 +40,20 @@ function toMeditechPackaging(packaging = []) {
   return [...levels.map((l) => `${l.uom}/${l.qty}`), 'EA'].join(' ');
 }
 
-/** Is this product implantable, per GUDID signals? Returns 'Y' / 'N' / ''. */
+/**
+ * Derive implantable flag from FDA data. Returns 'Y', 'N', or '' (unknown).
+ * openFDA surfaces gmdn.implantable directly; GUDID requires keyword inference.
+ */
 function guessImplantable(g) {
-  const term = (g?.gmdn?.term || '').toLowerCase();
-  const desc = (g?.description || '').toLowerCase();
-  if (/(implant|screw|plate|prosth|anchor|cage|stent|graft|allograft)/.test(term + ' ' + desc)) {
-    return 'Y';
-  }
+  // openFDA sets gmdn.implantable from the GMDN record — trust it explicitly.
+  if (g?.gmdn?.implantable === true) return 'Y';
+  if (g?.gmdn?.implantable === false) return 'N';
+  // hctp (human cell/tissue product) is always implantable.
+  if (g?.hctp === true) return 'Y';
+  // Keyword inference for GUDID (which doesn't expose the GMDN implantable flag).
+  const hay = `${g?.gmdn?.term} ${g?.description}`.toLowerCase();
+  if (/(implant|screw|plate|prosth|anchor|cage|stent|graft|allograft|pedicle|fusion)/.test(hay)) return 'Y';
+  if (g?.source === 'openFDA') return 'N'; // openFDA returned but no implant keywords → non-implant
   return '';
 }
 
@@ -215,6 +222,17 @@ export function suggestEOC(item, eocList = null, family = 'OP') {
   }
 
   const hay = `${item.gmdnTerm} ${item.productCodeName} ${item.product} ${item.description}`.toLowerCase();
+
+  // Anesthesia supplies (gas lines, circuits, airways, etc.) have their own EOC family.
+  if (/gas.sampl|sampl.*line|breath.*circuit|anesthes|endotrach|laryngoscop|airway manag|gas monitor|capnograph/.test(hay)) {
+    if (/endotrach/.test(hay)) return find((n) => n.startsWith('ANESTHESIA ENDOTRACH')) || find((n) => n.startsWith('ANESTHESIA'));
+    if (/laryngoscop/.test(hay)) return find((n) => n.startsWith('ANESTHESIA LARYNGO')) || find((n) => n.startsWith('ANESTHESIA'));
+    if (/airway|cannula|mask/.test(hay)) return find((n) => n.startsWith('ANESTHESIA AIRWAYS')) || find((n) => n.startsWith('ANESTHESIA'));
+    // Gas sampling lines connect to the breathing circuit.
+    return find((n) => n.startsWith('ANESTHESIA CIRCUIT')) || find((n) => n.startsWith('ANESTHESIA OTHER')) || find((n) => n.startsWith('ANESTHESIA'));
+  }
+
+  // Respiratory (non-anesthesia) — no dedicated EOC bucket, falls to MED SUPPLIES.
   for (const [token, re] of SUPPLY) {
     if (re.test(hay)) {
       const hit = find((n) => n.startsWith('MED SUPPLIES') && n.includes(token));
@@ -267,20 +285,56 @@ export function matchManufacturer(company, manufacturers = []) {
   return bestScore >= 40 ? best : null;
 }
 
-/** Suggest a Meditech category by matching GMDN/keywords to the 69 categories. */
+// Ordered keyword rules: first match wins. Tuples of [categoryCode, regex].
+// More specific patterns go first; broad fallbacks go last.
+const CATEGORY_RULES = [
+  ['ANES',    /gas.sampl|sampl.*line|breath.*circuit|anesthes|endotrach|laryngoscop|airway manag|gas monitor|capnograph/],
+  ['RESP',    /\brespir|ventilat|oxygen.*mask|nebuliz|spirometr|trach.*collar|suction.*catheter/],
+  ['CATH',    /\bcatheter\b/],
+  ['MS SUT',  /\bsuture\b/],
+  ['SUTURE',  /\bsuture\b/],
+  ['WOUND',   /wound.*care|wound.*dress|wound.*manag/],
+  ['BAND',    /bandage|dressing|gauze/],
+  ['GLOVES',  /\bglove\b/],
+  ['MS NESY', /\bneedle\b|\bsyringe\b/],
+  ['SYR',     /\bsyringe\b/],
+  ['IV SUP',  /iv.*supply|iv.*set|infusion.*set|iv.*line/],
+  ['IV SOL',  /intravenous.*solution|iv.*fluid|saline.*solution/],
+  ['IMPL',    /implant|bone.*screw|bone.*plate|prosthes|anchor|interbody|pedicle|allograft|graft/],
+  ['ORTHO',   /orthoped|bone.*saw|bone.*drill|fracture|osteotom/],
+  ['KITS',    /\bkit\b|\btray\b/],
+  ['INST',    /instrument|retractor|forcep|scissor|clamp|trocar|cannula/],
+  ['DIAL',    /dialysis/],
+  ['LAB',     /laboratory|reagent|specimen|culture|biopsy/],
+  ['UROL',    /urology|urethr|bladder|prostat/],
+  ['OB/GYN',  /obstet|gynecol|uterine|cervical/],
+  ['LENS',    /intraocular.*lens|\biol\b|ophthalm.*lens/],
+  ['FILM',    /x.ray.*film|radiograph.*film/],
+  ['MED',     /\bpharmac|\bmedication\b|\bdrug\b/],
+  ['MS MISC', /med.*surg|surgical.*supply/],
+];
+
+/** Suggest a Meditech category using priority keyword rules, then word-overlap fallback. */
 export function suggestCategory(item, categories = null) {
   categories = categories ?? [];
   const hay = `${item.gmdnTerm} ${item.productCodeName} ${item.product} ${item.description}`.toLowerCase();
   if (!hay.trim()) return null;
+
+  // 1. Try explicit keyword rules first.
+  for (const [code, re] of CATEGORY_RULES) {
+    if (re.test(hay)) {
+      const cat = categories.find((c) => c.code === code);
+      if (cat) return cat;
+    }
+  }
+
+  // 2. Fall back to word-overlap scoring against category names.
   let best = null;
   let bestScore = 0;
   for (const c of categories) {
     const words = c.name.toLowerCase().split(/[\s,/]+/).filter((w) => w.length > 3);
     const score = words.filter((w) => hay.includes(w)).length;
-    if (score > bestScore) {
-      bestScore = score;
-      best = c;
-    }
+    if (score > bestScore) { bestScore = score; best = c; }
   }
   return bestScore > 0 ? best : null;
 }
