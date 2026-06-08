@@ -5,8 +5,8 @@
 //   2. GUDID v3  — by GTIN with packaging-indicator digit stripped (some
 //                  labels print the package-level GTIN, not the primary DI)
 //   3. openFDA   — by GTIN  (covers Class II devices not yet in GUDID)
-//   4. openFDA   — by catalog/REF number (handles GTIN drift — same product,
-//                  updated barcode, stale FDA registration)
+//   4. openFDA   — by catalog/REF number (exact match, only when GTIN was
+//                  absent from vision — avoids false matches on short REFs)
 //
 // GET /api/gudid?gtin=10884389129159&ref=DYNJAA04
 //   → { found, source, gtin, name, company, ...enriched fields }
@@ -184,6 +184,19 @@ function normalizeOpenFda(r) {
 // ── GTIN variant helpers ──────────────────────────────────────────────────────
 
 /**
+ * Normalize a raw GTIN string from vision:
+ * - Strip any non-digit characters
+ * - Zero-pad to 14 digits (handles GTIN-13, GTIN-12 from some labels)
+ * - Return empty string if result is not 13-14 digits before padding
+ */
+function normalizeGtin(raw) {
+  if (!raw) return '';
+  const digits = raw.replace(/\D/g, '');
+  if (digits.length < 12 || digits.length > 14) return '';
+  return digits.padStart(14, '0');
+}
+
+/**
  * A GTIN-14 whose first digit is the packaging-level indicator (1–8) can be
  * stripped to derive the base GTIN-13 (zero-padded to 14). Some labels print
  * the package-level GTIN while the FDA records the item-level DI.
@@ -200,38 +213,47 @@ function stripPackagingIndicator(gtin14) {
 export default async function handler(req, res) {
   if (!isAuthed(req)) return sendJson(res, 401, { error: 'Please log in.' });
 
-  const gtin = (req.query?.gtin || '').toString().replace(/\D/g, '');
+  const rawGtin = (req.query?.gtin || '').toString().trim();
   const ref = (req.query?.ref || '').toString().trim();
 
-  if (!gtin && !ref) return sendJson(res, 400, { error: 'Missing gtin or ref parameter.' });
+  if (!rawGtin && !ref) return sendJson(res, 400, { error: 'Missing gtin or ref parameter.' });
+
+  // Normalize GTIN: strip non-digits, zero-pad to 14.
+  // If normalization fails (too short/long), treat as absent.
+  const gtin = normalizeGtin(rawGtin);
+  const hasGtin = gtin.length === 14;
 
   try {
     let result = null;
 
-    // 1. GUDID by GTIN as scanned
-    if (gtin) result = await fromGudid(gtin);
+    // 1. GUDID by GTIN as scanned (normalized to 14 digits)
+    if (hasGtin) result = await fromGudid(gtin);
 
     // 2. GUDID by GTIN with packaging indicator stripped
-    if (!result && gtin) {
+    if (!result && hasGtin) {
       const alt = stripPackagingIndicator(gtin);
       if (alt) result = await fromGudid(alt);
     }
 
     // 3. openFDA by GTIN
-    if (!result && gtin) result = await fromOpenFda(`identifiers.id:${gtin}`);
+    if (!result && hasGtin) result = await fromOpenFda(`identifiers.id:${gtin}`);
 
-    // 4. openFDA by REF/catalog number
-    if (!result && ref) result = await fromOpenFda(`catalog_number:${ref}`);
+    // 4. openFDA by REF/catalog number — ONLY when vision returned no GTIN.
+    //    Uses exact match ("ref") to avoid false positives on short/common REF
+    //    numbers like "3382" which can match unrelated products.
+    if (!result && ref && !hasGtin) {
+      result = await fromOpenFda(`catalog_number:"${ref}"`);
+    }
 
     if (!result) {
       return sendJson(res, 404, {
         error: 'Device not found in GUDID or openFDA.',
-        gtin, ref, found: false,
+        gtin: rawGtin, ref, found: false,
       });
     }
 
     return sendJson(res, 200, { found: true, ...result });
   } catch (err) {
-    return sendJson(res, 502, { error: err.message || 'Device lookup error.', gtin, ref });
+    return sendJson(res, 502, { error: err.message || 'Device lookup error.', gtin: rawGtin, ref });
   }
 }
