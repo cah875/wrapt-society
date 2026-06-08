@@ -12,14 +12,18 @@ import { isAuthed } from './_auth.js';
 
 const DEFAULT_MODEL = process.env.CLAUDE_VISION_MODEL || 'claude-sonnet-4-6';
 
-const EXTRACTION_PROMPT = `You are reading a photo of medical implant or biologic packaging at a hospital loading dock. Extract these fields exactly as printed:
+const EXTRACTION_PROMPT = `You are reading a photo of medical supply or implant packaging at a hospital. Extract these fields exactly as printed:
 
-- product: the product/device name and manufacturer (e.g. "VG2 Cervical T57P, LifeNet Health VertiGRAFT"). Combine brand + model/description if visible.
-- expiration_date: the use-by / expiration date in strict YYYY-MM-DD format. If only month and year are printed, use the LAST day of that month. Look for "EXP", "Use By", an hourglass symbol, or the UDI "(17)" value (format YYMMDD → 20YY-MM-DD).
-- lot_number: the lot / batch number (labeled LOT, Lot #, Batch, or the UDI "(10)" value). Many tissue/allograft products have NO lot — return null if there isn't one.
-- serial_number: the serial / unique unit ID. Often labeled "ID", "SN", "S/N", or the UDI "(21)" value (e.g. "2110913-1072"). Allografts are usually serialized. Return null if none.
-- reference_code: the catalog / reference / product code, often labeled "Code", "REF", "Catalog", or "Ref #" (e.g. "VG2C-T57P"). Return null if none.
-- gtin: the GTIN / device identifier. Find the human-readable text printed near any barcode or QR code and look for the "(01)" application identifier — the exactly 14 digits immediately after "(01)" are the GTIN (e.g. the text "(01)10884522000147" → GTIN is "10884522000147"). CRITICAL: read only the printed numeric text — do NOT attempt to visually decode barcode or QR code patterns. If the printed text shows "(01)XXXXXXXXXXXXXX", transcribe those 14 digits exactly, character by character. Return null if no "(01)..." text is visible in the image.
+- product: the product/device name and manufacturer (e.g. "VG2 Cervical T57P, LifeNet Health VertiGRAFT"). Combine brand + model/description if visible. If two sides of a package are shown and one shows a kit manufacturer (e.g. "LSL Healthcare") and the other shows a component brand (e.g. "3M Tegaderm"), use the KIT MANUFACTURER and product name as the primary product, noting the brand inside.
+- expiration_date: the use-by / expiration date in strict YYYY-MM-DD format. If only month and year are printed, use the LAST day of that month. Look for "EXP", "Exp:", "Use By", an hourglass symbol, or the UDI "(17)" value (format YYMMDD → 20YY-MM-DD).
+- lot_number: the lot / batch number (labeled LOT, Lot #, Lot:, Batch, or the UDI "(10)" value). Return null if there isn't one.
+- serial_number: the serial / unique unit ID. Often labeled "ID", "SN", "S/N", or the UDI "(21)" value. Return null if none.
+- reference_code: the catalog / reference / product code, often labeled "Code", "REF", "REORDER NO.", "Catalog", or "Ref #". Return null if none.
+- gtin: the GTIN / device identifier. Look for numeric digits printed near any barcode or QR code. Accept ANY of these formats:
+    1. GS1 Application Identifier format: the text "(01)" followed by digits — the GTIN is the digits immediately after "(01)" (e.g. "(01)10884522000147" → "10884522000147")
+    2. Bare 13- or 14-digit number printed directly below or beside a barcode or QR code with no prefix (e.g. "00661392045262")
+    3. A clearly grouped number of 12–14 digits near a barcode even without a label
+  CRITICAL: Read only the printed numeric text — do NOT attempt to visually decode barcode or QR code patterns. Transcribe the digits exactly as printed, character by character. Return null ONLY if no numeric sequence of 12–14 digits is visible anywhere near a barcode or QR code in the image.
 
 Also assess:
 - confidence: one of "high", "medium", "low" reflecting how legible the packaging is.
