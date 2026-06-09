@@ -37,7 +37,7 @@ export interface VialRecord {
 }
 
 export interface CalculatorResult {
-  mode: 1 | 2 | 3;
+  mode: number; // 1, 2, or 3 (kept as number for broad transpiler support)
   vialMg: number;
   bacWaterMl: number;
   concentrationMgPerMl: number;

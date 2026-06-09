@@ -30,7 +30,7 @@ import { DoseUnit } from '../../types';
 import { colors } from '../../theme/colors';
 import { fontFamily, cardStyle } from '../../theme/typography';
 
-type Mode = 1 | 2 | 3;
+type Mode = number; // 1 | 2 | 3
 type Level = 'low' | 'moderate' | 'high';
 
 const MODES: { key: Mode; label: string }[] = [
