@@ -3936,4 +3936,282 @@ export const peptideDatabase: PeptideEntry[] = [
     disclaimer: "For research use only. Not approved for human therapeutic use.",
   },
 
+  {
+    id: "wolverine-blend",
+    name: "Wolverine Blend (BPC-157 + TB-500)",
+    aliases: ["Wolverine", "Wolverine Stack", "BPC TB Wolverine", "Recovery Wolverine"],
+    category: ["Recovery & Repair"],
+    mechanism: "The 'Wolverine' blend is the popular nickname for a 1:1 combination of BPC-157 and TB-500 in a single vial, named for its accelerated-healing reputation. BPC-157 drives localized tissue repair by upregulating VEGF, eNOS, EGF, and FGF, promoting angiogenesis and collagen synthesis while suppressing pro-inflammatory cytokines (TNF-α, IL-6). TB-500 (a synthetic Thymosin Beta-4 fragment) sequesters G-actin to regulate cytoskeletal dynamics, driving systemic cell migration and distal tissue repair. Together they cover both local (BPC-157) and systemic (TB-500) healing — the most widely used recovery pairing in peptide research.",
+    researchStatus: "Both components preclinical; blend is Research Use Only; exact ratios vary by supplier",
+    dosingRanges: {
+      low: 250,
+      moderate: 500,
+      high: 1000,
+      unit: "mcg",
+      perDose: true,
+      titrationNotes: "Doses refer to total blend (split roughly evenly between BPC-157 and TB-500). Typical research protocol: 250–500 mcg total once daily, often loaded at the higher end for the first 2–4 weeks then tapered. Inject subcutaneously, rotating near the injury site when practical.",
+      route: ["subcutaneous", "intramuscular"],
+    },
+    frequency: "Once daily (loading), then 2–3x weekly maintenance",
+    cycleLength: "4–8 weeks",
+    halfLife: "BPC-157 ~4 hours; TB-500 ~2–3 days (component dependent)",
+    storageInfo: {
+      powder: "Store lyophilized blend at -20°C, dry and dark. Keep desiccated.",
+      reconstituted: "Refrigerate at 2–8°C, protected from light. Use within ~30 days.",
+      notes: "Add BAC water slowly down the vial wall and swirl gently — never shake. Both peptides are stable together in solution.",
+    },
+    stability: {
+      powderDays: 730,
+      reconstitutedFridgeDays: 30,
+      reconstitutedFreezerDays: null,
+    },
+    commonVialSizes: [
+      { mg: 10, unit: "mg", isCommon: true },
+      { mg: 16, unit: "mg", isCommon: true },
+      { mg: 20, unit: "mg", isCommon: false },
+    ],
+    reconstitutionRatios: [
+      {
+        // 10mg / 2mL = 5 mg/mL | mcgPerUnit = 50 | unitsFor100mcg = 2
+        vialMg: 10,
+        recommendedBacWaterMl: 2,
+        concentrationMgPerMl: 5.0,
+        mcgPerUnit: 50,
+        unitsFor100mcg: 2,
+        alternativeDilutions: [
+          {
+            bacWaterMl: 5,
+            concentrationMgPerMl: 2.0,
+            mcgPerUnit: 20,
+            notes: "Lower concentration for finer measurement of sub-300mcg total doses",
+          },
+        ],
+        notes: "2 mL is standard for a 10mg (5+5) blend. 500mcg total = 10 units on U-100.",
+      },
+      {
+        // 16mg / 2mL = 8 mg/mL | mcgPerUnit = 80 | unitsFor100mcg = 1.25
+        vialMg: 16,
+        recommendedBacWaterMl: 2,
+        concentrationMgPerMl: 8.0,
+        mcgPerUnit: 80,
+        unitsFor100mcg: 1.25,
+        alternativeDilutions: [
+          {
+            bacWaterMl: 4,
+            concentrationMgPerMl: 4.0,
+            mcgPerUnit: 40,
+            notes: "Higher volume, cleaner low-dose measurement",
+          },
+        ],
+        notes: "16mg (8+8) blend. At 8 mg/mL, 500mcg total = 6.25 units.",
+      },
+      {
+        // 20mg / 2mL = 10 mg/mL | mcgPerUnit = 100 | unitsFor100mcg = 1
+        vialMg: 20,
+        recommendedBacWaterMl: 2,
+        concentrationMgPerMl: 10.0,
+        mcgPerUnit: 100,
+        unitsFor100mcg: 1,
+        alternativeDilutions: [
+          {
+            bacWaterMl: 4,
+            concentrationMgPerMl: 5.0,
+            mcgPerUnit: 50,
+            notes: "4 mL halves concentration for easier low dosing",
+          },
+        ],
+        notes: "20mg (10+10) blend provides multiple full-dose sessions.",
+      },
+    ],
+    sideEffects: [
+      "Mild injection site redness, irritation, or warmth",
+      "Transient fatigue or head-rush (more associated with TB-500)",
+      "Nausea (uncommon)",
+      "Lightheadedness (rare)",
+    ],
+    contraindications: [
+      "Active malignancy or cancer history (theoretical — both promote angiogenesis)",
+      "Pregnancy or breastfeeding",
+      "Known hypersensitivity to either component",
+      "See individual BPC-157 and TB-500 contraindications",
+    ],
+    researchNotes: "Functionally identical to the BPC-157 + TB-500 blend, 'Wolverine' is the common commercial/community name. Component ratios and total mg differ between suppliers (commonly 1:1). No human RCTs of the combination exist; data is extrapolated from the individual peptides.",
+    stackNotes: "KPV is sometimes added to make a tri-component recovery blend (see Tri-Heal). GHK-Cu is added in 'GLOW' / 'KLOW' style blends for skin and connective-tissue support. GH secretagogues (CJC-1295 + Ipamorelin) pair well for recovery plus body composition.",
+    disclaimer: "For research use only. Not approved for human therapeutic use. Not intended to diagnose, treat, cure, or prevent any disease. Consult a licensed healthcare provider.",
+  },
+
+  {
+    id: "klow-blend",
+    name: "KLOW Blend (GHK-Cu + KPV + BPC-157 + TB-500)",
+    aliases: ["KLOW", "K-LOW", "KLOW Stack", "GHK KPV BPC TB Blend"],
+    category: ["Recovery & Repair", "Immune", "Skin / Cosmetic"],
+    mechanism: "KLOW is a four-component repair blend combining GHK-Cu, KPV, BPC-157, and TB-500 (a representative composition is GHK-Cu 50mg + KPV 10mg + BPC-157 10mg + TB-500 10mg). GHK-Cu is a copper-binding tripeptide that stimulates collagen, elastin, and glycosaminoglycan synthesis and supports skin/connective-tissue remodeling. KPV is an anti-inflammatory tripeptide fragment of α-MSH that suppresses NF-κB and pro-inflammatory signaling. BPC-157 provides local tissue repair and GI protection; TB-500 provides systemic actin-mediated healing. The combination targets skin/cosmetic remodeling, inflammation resolution, and both local and systemic tissue repair in a single vial.",
+    researchStatus: "All components preclinical / Research Use Only; blend ratios vary by supplier",
+    dosingRanges: {
+      low: 1,
+      moderate: 2,
+      high: 3,
+      unit: "mg",
+      perDose: true,
+      titrationNotes: "Doses are expressed as total blend in mg (GHK-Cu dominates the mass). Typical research protocol: 1–2 mg total once daily, usually subcutaneously near the target area. Because GHK-Cu can sting, many dilute generously. Start low and assess injection-site tolerance.",
+      route: ["subcutaneous"],
+    },
+    frequency: "Once daily",
+    cycleLength: "4–8 weeks",
+    halfLife: "Component dependent (GHK-Cu minutes–hours; TB-500 ~2–3 days)",
+    storageInfo: {
+      powder: "Store lyophilized blend at -20°C, dry and dark. GHK-Cu is light-sensitive — keep fully protected from light.",
+      reconstituted: "Refrigerate at 2–8°C, protected from light. Use within ~30 days.",
+      notes: "Reconstitute with extra BAC water (3–4 mL) to lower concentration and reduce GHK-Cu sting. Swirl gently — never shake.",
+    },
+    stability: {
+      powderDays: 730,
+      reconstitutedFridgeDays: 30,
+      reconstitutedFreezerDays: null,
+    },
+    commonVialSizes: [
+      { mg: 80, unit: "mg", isCommon: true },
+      { mg: 70, unit: "mg", isCommon: false },
+    ],
+    reconstitutionRatios: [
+      {
+        // 80mg / 2mL = 40 mg/mL | mcgPerUnit = 400 | unitsFor100mcg = 0.25
+        vialMg: 80,
+        recommendedBacWaterMl: 2,
+        concentrationMgPerMl: 40.0,
+        mcgPerUnit: 400,
+        unitsFor100mcg: 0.25,
+        alternativeDilutions: [
+          {
+            bacWaterMl: 4,
+            concentrationMgPerMl: 20.0,
+            mcgPerUnit: 200,
+            notes: "4 mL halves concentration — gentler injection, easier measurement. 2mg total = 10 units.",
+          },
+        ],
+        notes: "80mg total blend (e.g. GHK-Cu 50 + KPV 10 + BPC 10 + TB 10). At 40 mg/mL, 2mg total = 5 units on U-100.",
+      },
+      {
+        // 70mg / 2mL = 35 mg/mL | mcgPerUnit = 350 | unitsFor100mcg ≈ 0.29
+        vialMg: 70,
+        recommendedBacWaterMl: 2,
+        concentrationMgPerMl: 35.0,
+        mcgPerUnit: 350,
+        unitsFor100mcg: 0.29,
+        alternativeDilutions: [
+          {
+            bacWaterMl: 3.5,
+            concentrationMgPerMl: 20.0,
+            mcgPerUnit: 200,
+            notes: "3.5 mL gives 20 mg/mL for cleaner dosing math",
+          },
+        ],
+        notes: "70mg total blend variant. At 35 mg/mL, 2mg total ≈ 5.7 units.",
+      },
+    ],
+    sideEffects: [
+      "Injection site stinging or burning (GHK-Cu related) — worse at high concentration",
+      "Temporary redness or warmth at the site",
+      "Metallic taste (rarely reported with copper peptides)",
+      "Fatigue or head-rush (TB-500 related)",
+    ],
+    contraindications: [
+      "Active malignancy or cancer history (angiogenic components)",
+      "Wilson's disease or copper dysregulation (GHK-Cu component)",
+      "Pregnancy or breastfeeding",
+      "Known hypersensitivity to any component",
+      "See individual GHK-Cu, KPV, BPC-157, and TB-500 contraindications",
+    ],
+    researchNotes: "KLOW is a community/commercial blend with no standardized formula — total mg and component ratios differ between suppliers; the composition shown is representative. No human trials of the combination exist; rationale is extrapolated from the individual peptides. The high GHK-Cu fraction makes total dosing mg-scale rather than mcg-scale.",
+    stackNotes: "A superset of the 'GLOW' blend (GHK-Cu + BPC-157 + TB-500) with KPV added for stronger inflammation resolution. Sometimes paired with a GH secretagogue blend for connective-tissue and skin protocols.",
+    disclaimer: "For research use only. Not approved for human therapeutic use. Not intended to diagnose, treat, cure, or prevent any disease. Consult a licensed healthcare provider.",
+  },
+
+  {
+    id: "glow-blend",
+    name: "GLOW Blend (GHK-Cu + BPC-157 + TB-500)",
+    aliases: ["GLOW", "GLOW Stack", "Skin Recovery Blend", "GHK BPC TB Blend"],
+    category: ["Recovery & Repair", "Skin / Cosmetic"],
+    mechanism: "GLOW combines GHK-Cu, BPC-157, and TB-500 (a representative composition is GHK-Cu 50mg + BPC-157 10mg + TB-500 10mg), marketed for skin quality and recovery. GHK-Cu drives collagen/elastin synthesis, antioxidant signaling, and connective-tissue remodeling; BPC-157 provides local tissue and GI repair via angiogenic growth-factor upregulation; TB-500 provides systemic actin-mediated healing and angiogenesis. The blend pairs cosmetic/skin remodeling (GHK-Cu) with broad tissue repair (BPC-157 + TB-500).",
+    researchStatus: "All components preclinical / Research Use Only; blend ratios vary by supplier",
+    dosingRanges: {
+      low: 1,
+      moderate: 2,
+      high: 3,
+      unit: "mg",
+      perDose: true,
+      titrationNotes: "Doses are total blend in mg (GHK-Cu dominates the mass). Typical research protocol: 1–2 mg total once daily subcutaneously. Dilute generously to reduce GHK-Cu sting. Start at the low end to assess injection-site tolerance.",
+      route: ["subcutaneous"],
+    },
+    frequency: "Once daily",
+    cycleLength: "4–8 weeks",
+    halfLife: "Component dependent (GHK-Cu minutes–hours; TB-500 ~2–3 days)",
+    storageInfo: {
+      powder: "Store lyophilized blend at -20°C, dry and dark. GHK-Cu is light-sensitive — keep protected from light.",
+      reconstituted: "Refrigerate at 2–8°C, protected from light. Use within ~30 days.",
+      notes: "Use 3–4 mL BAC water to lower concentration and reduce sting. Swirl gently — never shake.",
+    },
+    stability: {
+      powderDays: 730,
+      reconstitutedFridgeDays: 30,
+      reconstitutedFreezerDays: null,
+    },
+    commonVialSizes: [
+      { mg: 70, unit: "mg", isCommon: true },
+      { mg: 50, unit: "mg", isCommon: false },
+    ],
+    reconstitutionRatios: [
+      {
+        // 70mg / 2mL = 35 mg/mL | mcgPerUnit = 350 | unitsFor100mcg ≈ 0.29
+        vialMg: 70,
+        recommendedBacWaterMl: 2,
+        concentrationMgPerMl: 35.0,
+        mcgPerUnit: 350,
+        unitsFor100mcg: 0.29,
+        alternativeDilutions: [
+          {
+            bacWaterMl: 3.5,
+            concentrationMgPerMl: 20.0,
+            mcgPerUnit: 200,
+            notes: "3.5 mL gives a clean 20 mg/mL. 2mg total = 10 units on U-100.",
+          },
+        ],
+        notes: "70mg total blend (e.g. GHK-Cu 50 + BPC 10 + TB 10). At 35 mg/mL, 2mg total ≈ 5.7 units.",
+      },
+      {
+        // 50mg / 2mL = 25 mg/mL | mcgPerUnit = 250 | unitsFor100mcg = 0.4
+        vialMg: 50,
+        recommendedBacWaterMl: 2,
+        concentrationMgPerMl: 25.0,
+        mcgPerUnit: 250,
+        unitsFor100mcg: 0.4,
+        alternativeDilutions: [
+          {
+            bacWaterMl: 2.5,
+            concentrationMgPerMl: 20.0,
+            mcgPerUnit: 200,
+            notes: "2.5 mL gives 20 mg/mL for cleaner math",
+          },
+        ],
+        notes: "50mg total blend variant. At 25 mg/mL, 2mg total = 8 units.",
+      },
+    ],
+    sideEffects: [
+      "Injection site stinging or burning (GHK-Cu related)",
+      "Temporary redness or warmth at the site",
+      "Fatigue or head-rush (TB-500 related)",
+      "Metallic taste (rare, copper peptide)",
+    ],
+    contraindications: [
+      "Active malignancy or cancer history (angiogenic components)",
+      "Wilson's disease or copper dysregulation (GHK-Cu component)",
+      "Pregnancy or breastfeeding",
+      "Known hypersensitivity to any component",
+      "See individual GHK-Cu, BPC-157, and TB-500 contraindications",
+    ],
+    researchNotes: "GLOW is a community/commercial blend without a standardized formula — total mg and ratios vary by supplier; the composition shown is representative. Add KPV to make the four-component 'KLOW' blend. No human trials of the combination exist.",
+    stackNotes: "The 'KLOW' blend adds KPV for stronger anti-inflammatory action. GLOW is frequently run for skin-quality and connective-tissue protocols and pairs with GH secretagogue blends.",
+    disclaimer: "For research use only. Not approved for human therapeutic use. Not intended to diagnose, treat, cure, or prevent any disease. Consult a licensed healthcare provider.",
+  },
+
 ];
