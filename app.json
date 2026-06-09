@@ -7,11 +7,9 @@
     "scheme": "peptidevault",
     "userInterfaceStyle": "dark",
     "backgroundColor": "#0F1117",
-    "splash": {
-      "resizeMode": "contain",
-      "backgroundColor": "#0F1117"
-    },
-    "assetBundlePatterns": ["**/*"],
+    "assetBundlePatterns": [
+      "**/*"
+    ],
     "ios": {
       "supportsTablet": true,
       "bundleIdentifier": "com.peptidevault.app"
@@ -25,7 +23,9 @@
         {
           "color": "#00D4AA"
         }
-      ]
+      ],
+      "@react-native-community/datetimepicker",
+      "expo-font"
     ]
   }
 }
