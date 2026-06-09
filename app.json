@@ -4,32 +4,20 @@
     "slug": "peptidevault",
     "version": "1.0.0",
     "orientation": "portrait",
-    "icon": "./assets/icon.png",
     "scheme": "peptidevault",
     "userInterfaceStyle": "dark",
     "backgroundColor": "#0F1117",
     "splash": {
-      "image": "./assets/splash.png",
       "resizeMode": "contain",
       "backgroundColor": "#0F1117"
     },
     "assetBundlePatterns": ["**/*"],
     "ios": {
       "supportsTablet": true,
-      "bundleIdentifier": "com.peptidevault.app",
-      "infoPlist": {
-        "UIBackgroundModes": []
-      }
+      "bundleIdentifier": "com.peptidevault.app"
     },
     "android": {
-      "package": "com.peptidevault.app",
-      "adaptiveIcon": {
-        "foregroundImage": "./assets/adaptive-icon.png",
-        "backgroundColor": "#0F1117"
-      }
-    },
-    "web": {
-      "favicon": "./assets/favicon.png"
+      "package": "com.peptidevault.app"
     },
     "plugins": [
       [
