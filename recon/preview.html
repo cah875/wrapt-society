@@ -1,0 +1,247 @@
+<!doctype html>
+<html lang="en"><head>
+<meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Implant Billsheet Reconciliation — Prototype</title>
+<style>
+  :root { --ink:#0f172a; --mut:#64748b; --line:#e2e8f0; --bg:#f1f5f9;
+    --ok:#059669; --okbg:#ecfdf5; --warn:#b45309; --warnbg:#fffbeb; --bad:#dc2626; --badbg:#fef2f2; --brand:#1d4ed8; }
+  * { box-sizing:border-box; }
+  body { margin:0; font:15px/1.5 -apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;
+    color:var(--ink); background:var(--bg); }
+  .wrap { max-width:1080px; margin:0 auto; padding:32px 24px 64px; }
+  .top h1 { margin:0 0 4px; font-size:26px; letter-spacing:-.02em; }
+  .top p { margin:0; color:var(--mut); }
+  .proto { display:inline-block; margin-top:10px; font-size:12px; font-weight:600; color:var(--brand);
+    background:#eff6ff; border:1px solid #bfdbfe; padding:3px 10px; border-radius:999px; }
+  .kpis { display:grid; grid-template-columns:repeat(4,1fr); gap:14px; margin:24px 0 8px; }
+  .kpi { background:#fff; border:1px solid var(--line); border-radius:14px; padding:16px 18px; }
+  .kpi .n { font-size:30px; font-weight:700; letter-spacing:-.02em; }
+  .kpi .l { color:var(--mut); font-size:13px; }
+  .kpi.save .n { color:var(--ok); }
+  .card { background:#fff; border:1px solid var(--line); border-radius:16px; padding:22px 24px; margin:18px 0;
+    box-shadow:0 1px 2px rgba(15,23,42,.04); }
+  .card-h { display:flex; justify-content:space-between; align-items:flex-start; gap:16px; }
+  .card-h h2 { margin:0; font-size:19px; }
+  .meta { color:var(--mut); font-size:13px; margin-top:3px; }
+  .badge { font-weight:600; font-size:13px; padding:6px 12px; border-radius:999px; white-space:nowrap; }
+  .badge.ok { color:var(--ok); background:var(--okbg); border:1px solid #a7f3d0; }
+  .badge.warn { color:var(--warn); background:var(--warnbg); border:1px solid #fde68a; }
+  .badge.bad { color:var(--bad); background:var(--badbg); border:1px solid #fecaca; }
+  .synthetic { margin:10px 0 0; font-size:12px; color:var(--mut); }
+  .grid { display:grid; grid-template-columns:1.15fr 1fr; gap:26px; margin:16px 0 4px; }
+  h3 { font-size:12px; text-transform:uppercase; letter-spacing:.06em; color:var(--mut); margin:18px 0 8px; }
+  table.comp { width:100%; border-collapse:collapse; font-size:13px; }
+  table.comp td { padding:6px 8px; border-bottom:1px solid var(--line); vertical-align:top; }
+  td.slot { color:var(--mut); width:62px; }
+  td.ref { color:var(--mut); font-family:ui-monospace,Menlo,monospace; font-size:12px; white-space:nowrap; }
+  td.desc { color:var(--mut); font-size:11px; max-width:0; }
+  ul.cands { list-style:none; margin:0; padding:0; }
+  ul.cands li { display:flex; align-items:center; gap:10px; padding:7px 10px; border:1px solid var(--line);
+    border-radius:10px; margin-bottom:6px; font-size:13px; }
+  ul.cands li.sel { border-color:#a7f3d0; background:var(--okbg); }
+  ul.cands li.none { color:var(--bad); background:var(--badbg); border-color:#fecaca; }
+  .cid { font-family:ui-monospace,Menlo,monospace; font-size:12px; color:var(--mut); }
+  .cprice { font-weight:700; }
+  .cname { flex:1; }
+  .pill { font-size:11px; font-weight:600; color:var(--ok); background:#fff; border:1px solid #a7f3d0; padding:2px 8px; border-radius:999px; }
+  .price-line { display:flex; justify-content:space-between; align-items:baseline; margin-top:12px; padding-top:12px;
+    border-top:1px solid var(--line); }
+  .price-line .big { font-size:24px; font-weight:700; letter-spacing:-.02em; }
+  .price-line.sub { border:0; margin-top:2px; padding-top:0; color:var(--mut); font-size:13px; }
+  .finding { font-size:13px; padding:9px 12px; border-radius:10px; margin-bottom:6px; }
+  .finding .code { font-family:ui-monospace,Menlo,monospace; font-size:11px; font-weight:600; margin-right:10px;
+    padding:2px 7px; border-radius:6px; background:rgba(0,0,0,.05); }
+  .finding.error { background:var(--badbg); color:#7f1d1d; }
+  .finding.warn { background:var(--warnbg); color:#7c2d12; }
+  .finding.ok { background:var(--okbg); color:#065f46; }
+  footer { color:var(--mut); font-size:12px; margin-top:28px; text-align:center; }
+  @media (max-width:760px){ .kpis{grid-template-columns:repeat(2,1fr)} .grid{grid-template-columns:1fr} }
+</style></head>
+<body><div class="wrap">
+  <div class="top">
+    <h1>Consignment Implant Billsheet Reconciliation</h1>
+    <p>Automatically pricing surgical cases against our DePuy Synthes contract — line-item, capitated construct, and upcharge regimes.</p>
+    <span class="proto">Working prototype · 2 real billsheets · live contract data</span>
+  </div>
+
+  <div class="kpis">
+    <div class="kpi"><div class="n">3</div><div class="l">Cases reconciled</div></div>
+    <div class="kpi"><div class="n">2</div><div class="l">Auto-verified</div></div>
+    <div class="kpi"><div class="n">1</div><div class="l">Flagged for review</div></div>
+    <div class="kpi save"><div class="n">$500.00</div><div class="l">Overcharge caught</div></div>
+  </div>
+
+  
+    <section class="card">
+      <header class="card-h">
+        <div>
+          <h2>Example, Knee (synthetic)</h2>
+          <div class="meta">Right KNEE · DOS 2026-06-04 · case SYNTH-KNEE-001</div>
+        </div>
+        <div class="badge ok">Auto-verified</div>
+      </header>
+      <div class="synthetic">⚙︎ Synthetic case — included to show the engine also handles knee constructs</div>
+      <div class="grid">
+        <div>
+          <h3>Components scanned from billsheet</h3>
+          <table class="comp"><tbody>
+      <tr>
+        <td class="slot">Femur</td>
+        <td><strong>Porous</strong></td>
+        <td class="ref">KNEE-FEM-P</td>
+        <td class="desc">ATTUNE FEMORAL COMPONENT POROUS CEMENTLESS RIGHT SIZE 5</td>
+      </tr>
+      <tr>
+        <td class="slot">Insert</td>
+        <td><strong>FB AOX</strong> · 10 mm</td>
+        <td class="ref">KNEE-INS-FB</td>
+        <td class="desc">ATTUNE FB AOX FIXED BEARING INSERT 5/10MM</td>
+      </tr>
+      <tr>
+        <td class="slot">Tib Tray</td>
+        <td><strong>Porous FB</strong></td>
+        <td class="ref">KNEE-TIB-P</td>
+        <td class="desc">ATTUNE TIBIAL BASE POROUS FB SIZE 5</td>
+      </tr>
+      <tr>
+        <td class="slot">Patella</td>
+        <td><strong>All Poly Dome</strong> · 38 mm</td>
+        <td class="ref">KNEE-PAT</td>
+        <td class="desc">ATTUNE ALL POLY DOME PATELLA 38MM</td>
+      </tr></tbody></table>
+        </div>
+        <div>
+          <h3>Contract price match</h3>
+          <ul class="cands"><li class="sel"><span class="cid">OSC378862</span>
+        <span class="cprice">$3,900.00</span>
+        <span class="cname">Attune FB Cementless</span><span class="pill">selected</span></li></ul>
+          <div class="price-line">
+            <span>Expected case price</span>
+            <span class="big">$3,900.00</span>
+          </div>
+          <div class="price-line sub"><span>Vendor submitted</span><span>$3,900.00</span></div>
+        </div>
+      </div>
+      <h3>Findings</h3>
+      <div class="finding ok"><span class="code">CLEAN</span>No discrepancies — priced exactly to contract.</div>
+    </section>
+    <section class="card">
+      <header class="card-h">
+        <div>
+          <h2>Gregg, Vernon L</h2>
+          <div class="meta">Right HIP · DOS 2026-06-01 · case NW0001591185</div>
+        </div>
+        <div class="badge warn">Needs review</div>
+      </header>
+      
+      <div class="grid">
+        <div>
+          <h3>Components scanned from billsheet</h3>
+          <table class="comp"><tbody>
+      <tr>
+        <td class="slot">Head</td>
+        <td><strong>Ceramic Delta TS</strong> · 40 mm</td>
+        <td class="ref">1365-40-720</td>
+        <td class="desc">BIOLOX DELTA TS CERAMIC FEMORAL HEAD REVISION 40mm +5 12/14 TAPER</td>
+      </tr>
+      <tr>
+        <td class="slot">Stem</td>
+        <td><strong>Actis</strong></td>
+        <td class="ref">1010-12-060</td>
+        <td class="desc">ACTIS DUOFIX HIP PROSTHESIS FEMORAL STEM 12/14 TAPER CEMENTLESS SIZE 6 HIGH COLLAR</td>
+      </tr>
+      <tr>
+        <td class="slot">Cup</td>
+        <td><strong>Gription</strong> · 58 mm</td>
+        <td class="ref">1217-32-058</td>
+        <td class="desc">PINNACLE GRIPTION ACETABULAR SHELL SECTOR 58mm OD</td>
+      </tr>
+      <tr>
+        <td class="slot">Liner</td>
+        <td><strong>AltrX</strong> · 40 mm</td>
+        <td class="ref">1221-40-058</td>
+        <td class="desc">PINNACLE ALTRX POLYETHYLENE ACETABULAR LINER NEUTRAL 40mm ID 58mm OD</td>
+      </tr></tbody></table>
+        </div>
+        <div>
+          <h3>Contract price match</h3>
+          <ul class="cands"><li class="sel"><span class="cid">OSC363669</span>
+        <span class="cprice">$4,250.00</span>
+        <span class="cname">COP</span><span class="pill">selected</span></li><li class=""><span class="cid">OSC367606</span>
+        <span class="cprice">$4,750.00</span>
+        <span class="cname">COP Delta TS Heads</span></li></ul>
+          <div class="price-line">
+            <span>Expected case price</span>
+            <span class="big">$4,250.00</span>
+          </div>
+          
+        </div>
+      </div>
+      <h3>Findings</h3>
+      
+      <div class="finding warn">
+        <span class="code">AMBIGUOUS_CONSTRUCT</span>Build matches 2 constructs spanning $4250–$4750; policy="lowest" selected $4250
+      </div>
+    </section>
+    <section class="card">
+      <header class="card-h">
+        <div>
+          <h2>Griese, Leslie R</h2>
+          <div class="meta">Left HIP · DOS 2026-06-03 · case NW0001503171</div>
+        </div>
+        <div class="badge ok">Auto-verified</div>
+      </header>
+      
+      <div class="grid">
+        <div>
+          <h3>Components scanned from billsheet</h3>
+          <table class="comp"><tbody>
+      <tr>
+        <td class="slot">Head</td>
+        <td><strong>Ceramic Delta (not TS)</strong> · 32 mm</td>
+        <td class="ref">1365-32-310</td>
+        <td class="desc">BIOLOX DELTA CERAMIC FEMORAL HEAD +1 32mm DIA 12/14 TAPER</td>
+      </tr>
+      <tr>
+        <td class="slot">Stem</td>
+        <td><strong>Actis</strong></td>
+        <td class="ref">1010-12-050</td>
+        <td class="desc">ACTIS DUOFIX HIP PROSTHESIS FEMORAL STEM 12/14 TAPER CEMENTLESS SIZE 5 HIGH COLLAR</td>
+      </tr>
+      <tr>
+        <td class="slot">Cup</td>
+        <td><strong>Gription</strong> · 52 mm</td>
+        <td class="ref">1217-32-052</td>
+        <td class="desc">PINNACLE GRIPTION ACETABULAR SHELL SECTOR 52mm OD</td>
+      </tr>
+      <tr>
+        <td class="slot">Liner</td>
+        <td><strong>AltrX</strong> · 32 mm</td>
+        <td class="ref">1221-32-052</td>
+        <td class="desc">PINNACLE ALTRX POLYETHYLENE ACETABULAR LINER NEUTRAL 32mm ID 52mm OD</td>
+      </tr></tbody></table>
+        </div>
+        <div>
+          <h3>Contract price match</h3>
+          <ul class="cands"><li class="sel"><span class="cid">OSC363669</span>
+        <span class="cprice">$4,250.00</span>
+        <span class="cname">COP</span><span class="pill">selected</span></li></ul>
+          <div class="price-line">
+            <span>Expected case price</span>
+            <span class="big">$4,250.00</span>
+          </div>
+          
+        </div>
+      </div>
+      <h3>Findings</h3>
+      
+      <div class="finding warn">
+        <span class="code">EXPIRED_CONTRACT_WINDOW</span>REF 1221-32-052: line-price windows exist but none active on 2026-06-03
+      </div>
+    </section>
+
+  <footer>
+    Matched against 18,495 contracted line items and 21 capitated constructs ·
+    Generated 6/18/2026, 6:32:41 PM · Prototype, internal use
+  </footer>
+</div></body></html>
