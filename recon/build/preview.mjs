@@ -9,6 +9,8 @@ import { readFileSync, writeFileSync, readdirSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { dirname, join } from 'node:path';
 import { reconcile } from '../lib/engine.mjs';
+import { classify } from '../lib/classify.mjs';
+import { normalizeCatalog } from '../lib/normalize.mjs';
 
 const HERE = dirname(fileURLToPath(import.meta.url));
 const ROOT = join(HERE, '..');
@@ -107,6 +109,115 @@ function caseCard({ raw, r }) {
         <h3 class="findings-h">Findings</h3>
         <div class="findings">${findings}</div>
       </section>`;
+}
+
+// ── "How it works" section ────────────────────────────────────────────────
+// Built from the real data so the worked example is truthful, not a mockup.
+const canon = (f) => String(f || '').toLowerCase().replace(/[^a-z0-9]/g, '');
+function tierOk(mm, t) {
+  if (!t) return true;
+  if (mm == null) return null;
+  switch (t.op) { case '<=': return mm <= t.mm; case '>=': return mm >= t.mm;
+    case '<': return mm < t.mm; case '>': return mm > t.mm; default: return mm === t.mm; }
+}
+function matchedRule(construct, comp) {
+  for (const e of (construct.slots[comp.slot] || []))
+    if (canon(e.family) === canon(comp.family) && tierOk(comp.sizeMm, e.sizeTier) === true) return e;
+  return null;
+}
+const lineRowFor = (ref) => (data.lineprices.index[normalizeCatalog(ref)] || [])[0] || null;
+
+function howItWorks() {
+  // Use the first real hip case (Gregg) as the worked example.
+  const ex = results.find((x) => !x.raw.note && x.r.case_type === 'hip') || results[0];
+  const con = data.constructs.find((c) => c.construct_id === (ex.r.selected && ex.r.selected.construct_id));
+  const items = ex.raw.items.map((it) => ({ raw: it, c: classify(it), line: lineRowFor(it.ref) }));
+  // Headline line for the close-up: the head, where the size tier matters.
+  const focus = items.find((i) => i.c.slot === 'Head') || items[0];
+  const rule = con ? matchedRule(con, focus.c) : null;
+
+  const stages = [
+    ['1', 'Read the billsheet', 'Each line gives a catalog number (REF) and the printed description.', '📄'],
+    ['2', 'Classify the component', 'Reduce each line to the three things a contract cares about: slot, family, size.', '🏷️'],
+    ['3', 'Match to the contract', 'Look the build up in both pricing sources — construct schedule and line-price file.', '🔎'],
+    ['4', 'Price &amp; verify', 'Output the contract price and a status: auto-verified or flagged for review.', '✓'],
+  ].map(([n, t, d, ic]) => `
+        <div class="stage">
+          <div class="stage-ic">${ic}</div>
+          <div class="stage-n">Step ${n}</div>
+          <div class="stage-t">${t}</div>
+          <div class="stage-d">${d}</div>
+        </div>`).join('<div class="chev">&rsaquo;</div>');
+
+  // Full-build match table: every component -> the construct rule it satisfies.
+  const rows = items.map(({ raw, c }) => {
+    const r = con ? matchedRule(con, c) : null;
+    const ln = lineRowFor(raw.ref);
+    const lineNote = ln ? (ln.line_priced ? `line price ${money(ln.contracted_price)}` : 'priced inside construct') : 'not found';
+    return `
+        <tr>
+          <td class="mono small">${esc(raw.ref)}</td>
+          <td><span class="slot-chip">${esc(c.slot || '?')}</span> <strong>${esc(c.family || 'UNKNOWN')}</strong>${c.sizeMm != null ? ` · ${c.sizeMm} mm` : ''}</td>
+          <td>${r ? `<span class="rule">${esc(r.raw)}</span> <span class="okmark">✓</span>` : '<span class="nomark">no rule</span>'}</td>
+          <td class="small muted">${lineNote}</td>
+        </tr>`;
+  }).join('');
+
+  return `
+    <section class="card how">
+      <h3 class="how-h">How a case is priced</h3>
+      <div class="pipeline">${stages}</div>
+      <div class="sources">
+        <span class="src-cap">Step&nbsp;3 reads from two contract sources:</span>
+        <span class="src"><b>Construct schedule</b> — ${data.constructs.length} bundled builds <span class="muted">(from the agreement)</span></span>
+        <span class="src"><b>Line-price file</b> — ${data.lineprices.meta.rows.toLocaleString('en-US')} catalog items <span class="muted">(CSV)</span></span>
+      </div>
+
+      <div class="trace-h">Worked example &mdash; following one line from <b>${esc(ex.raw.patient)}</b></div>
+      <div class="trace">
+        <div class="t-col">
+          <div class="t-cap">1 · On the billsheet</div>
+          <div class="t-box">
+            <div class="mono small muted">REF ${esc(focus.raw.ref)}</div>
+            <div class="t-desc">${esc(focus.raw.description)}</div>
+          </div>
+        </div>
+        <div class="t-arrow"><span>classify</span>&rarr;</div>
+        <div class="t-col">
+          <div class="t-cap">2 · Engine reads it as</div>
+          <div class="t-box chips">
+            <span class="chip"><i>slot</i>${esc(focus.c.slot)}</span>
+            <span class="chip"><i>family</i>${esc(focus.c.family)}</span>
+            <span class="chip"><i>size</i>${focus.c.sizeMm} mm</span>
+          </div>
+        </div>
+        <div class="t-arrow"><span>look up</span>&rarr;</div>
+        <div class="t-col wide">
+          <div class="t-cap">3 · Matched against the contract</div>
+          <div class="t-box src-read">
+            <div class="sr-title">Line-price file <span class="mono muted">· ${esc(normalizeCatalog(focus.raw.ref))}</span></div>
+            <div class="sr-body">${focus.line ? (focus.line.line_priced
+              ? `standalone price ${money(focus.line.contracted_price)}`
+              : `found, no standalone price &rarr; <b>priced inside a construct</b>`) : 'not found'}</div>
+          </div>
+          <div class="t-box src-read ok">
+            <div class="sr-title">Construct schedule <span class="mono muted">· ${esc(con ? con.construct_id : '')} ${esc(con ? con.name : '')}</span></div>
+            <div class="sr-body">${focus.c.slot} rule <span class="rule">${rule ? esc(rule.raw) : 'n/a'}</span>
+              <span class="okmark">✓</span> ${rule && rule.sizeTier ? `<span class="muted">(${focus.c.sizeMm} ${rule.sizeTier.op} ${rule.sizeTier.mm})</span>` : ''}</div>
+          </div>
+        </div>
+      </div>
+
+      <div class="trace-h">All ${items.length} components must fit the same construct</div>
+      <table class="match"><thead><tr>
+        <th>Catalog #</th><th>Classified as</th><th>Construct rule satisfied</th><th>Line-price file</th>
+      </tr></thead><tbody>${rows}</tbody></table>
+      <div class="match-foot">
+        All ${items.length} fit <b>${esc(con ? con.construct_id : '')} ${esc(con ? con.name : '')}</b>
+        &rarr; one bundled price of <b>${money(con ? con.price : ex.r.expected_total)}</b>
+        <span class="muted">— not the sum of individual parts.</span>
+      </div>
+    </section>`;
 }
 
 const generated = new Date().toLocaleDateString('en-US', { year: 'numeric', month: 'long', day: 'numeric' });
@@ -213,6 +324,46 @@ const html = `<!doctype html>
   .finding.warn{background:var(--warnbg); color:#7c2d12;} .finding.warn .fdot{background:var(--warn);} .finding.warn .code{color:var(--warn);}
   .finding.ok{background:var(--okbg); color:#14532d;} .finding.ok .fdot{background:var(--green);} .finding.ok .code{color:var(--ok);}
 
+  /* How it works */
+  .how{margin-top:18px;}
+  .how-h{font-size:13px; color:var(--c700); margin-bottom:16px;}
+  .pipeline{display:flex; align-items:stretch; gap:0;}
+  .stage{flex:1; background:var(--c50); border:1px solid var(--c200); border-radius:14px; padding:14px 15px;}
+  .stage-ic{font-size:20px; line-height:1;}
+  .stage-n{font-size:11px; font-weight:700; letter-spacing:.05em; text-transform:uppercase; color:var(--c500); margin-top:8px;}
+  .stage-t{font-size:14px; font-weight:700; color:var(--c800); margin-top:2px;}
+  .stage-d{font-size:12px; color:var(--c600); margin-top:5px; line-height:1.45;}
+  .chev{display:flex; align-items:center; padding:0 8px; font-size:26px; color:var(--c300); font-weight:700;}
+  .sources{display:flex; flex-wrap:wrap; align-items:center; gap:10px; margin-top:14px; padding:12px 14px;
+    background:#fff; border:1px dashed var(--c300); border-radius:12px; font-size:12px;}
+  .src-cap{font-weight:700; color:var(--c700);}
+  .src{background:var(--c50); border:1px solid var(--c200); border-radius:999px; padding:5px 12px; color:var(--c800);}
+  .src b{color:var(--c700);}
+
+  .trace-h{font-size:11px; text-transform:uppercase; letter-spacing:.07em; color:var(--c500); font-weight:700; margin:22px 0 10px;}
+  .trace{display:flex; align-items:stretch; gap:0;}
+  .t-col{flex:1; min-width:0;} .t-col.wide{flex:1.5;}
+  .t-cap{font-size:11px; font-weight:700; color:var(--c600); margin-bottom:6px;}
+  .t-box{background:var(--c50); border:1px solid var(--c200); border-radius:12px; padding:11px 13px; margin-bottom:8px;}
+  .t-desc{font-size:12px; color:var(--c900); margin-top:4px; line-height:1.4;}
+  .t-box.chips{display:flex; flex-direction:column; gap:7px;}
+  .chip{display:flex; align-items:baseline; gap:8px; background:#fff; border:1px solid var(--c200); border-radius:8px; padding:5px 10px; font-size:13px; font-weight:600; color:var(--c900);}
+  .chip i{font-style:normal; font-size:10px; text-transform:uppercase; letter-spacing:.05em; color:var(--c400); width:42px; font-weight:700;}
+  .t-arrow{display:flex; flex-direction:column; align-items:center; justify-content:center; padding:0 12px; color:var(--c400); font-size:20px; font-weight:700;}
+  .t-arrow span{font-size:9px; text-transform:uppercase; letter-spacing:.05em; color:var(--c400); margin-bottom:2px; font-weight:700;}
+  .src-read{margin-bottom:8px;} .src-read.ok{border-color:#a7e3b4; background:#f3fcf5;}
+  .sr-title{font-size:12px; font-weight:700; color:var(--c700);}
+  .sr-body{font-size:12px; color:var(--c800); margin-top:4px; line-height:1.45;}
+  .rule{font-family:ui-monospace,Menlo,monospace; font-size:11px; background:var(--c100); color:var(--c800); padding:2px 7px; border-radius:6px;}
+  .okmark{color:var(--green); font-weight:700;} .nomark{color:var(--danger); font-size:12px;}
+
+  table.match{width:100%; border-collapse:collapse; font-size:13px; margin-top:2px;}
+  table.match th{text-align:left; font-size:10px; text-transform:uppercase; letter-spacing:.05em; color:var(--c500); font-weight:700; padding:6px 8px; border-bottom:1px solid var(--c200);}
+  table.match td{padding:8px 8px; border-bottom:1px solid var(--c100); vertical-align:middle;}
+  .slot-chip{display:inline-block; font-size:10px; font-weight:700; text-transform:uppercase; letter-spacing:.04em; color:var(--c600); background:var(--c100); padding:2px 7px; border-radius:6px; margin-right:4px;}
+  .small{font-size:11px;} .muted{color:var(--c400);}
+  .match-foot{margin-top:12px; padding:11px 14px; background:#f3fcf5; border:1px solid #a7e3b4; border-radius:12px; font-size:13px; color:var(--c800);}
+
   footer{margin-top:30px; padding-top:18px; border-top:1px solid var(--c200); color:var(--c400); font-size:12px; text-align:center; line-height:1.6;}
   footer .dot{color:var(--c300); margin:0 6px;}
 
@@ -220,6 +371,10 @@ const html = `<!doctype html>
     .kpis{grid-template-columns:repeat(2,1fr);}
     .case-grid{grid-template-columns:1fr;}
     .brand p{display:none;}
+    .pipeline,.trace{flex-direction:column;}
+    .chev{transform:rotate(90deg); padding:6px 0; align-self:center;}
+    .t-arrow{flex-direction:row; transform:rotate(90deg); padding:6px 0; align-self:center;}
+    .t-arrow span{margin:0 4px 0 0;}
   }
 </style></head>
 <body>
@@ -249,6 +404,8 @@ const html = `<!doctype html>
       <div class="kpi warn"><div class="n">${flagged}</div><div class="l">Flagged for review</div><div class="s">routed to staff</div></div>
       <div class="kpi save"><div class="n">${money(identified)}</div><div class="l">Overcharge caught</div><div class="s">on a single case</div></div>
     </div>
+
+    ${howItWorks()}
 
     ${results.map(caseCard).join('')}
 

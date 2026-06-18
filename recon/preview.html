@@ -100,6 +100,46 @@
   .finding.warn{background:var(--warnbg); color:#7c2d12;} .finding.warn .fdot{background:var(--warn);} .finding.warn .code{color:var(--warn);}
   .finding.ok{background:var(--okbg); color:#14532d;} .finding.ok .fdot{background:var(--green);} .finding.ok .code{color:var(--ok);}
 
+  /* How it works */
+  .how{margin-top:18px;}
+  .how-h{font-size:13px; color:var(--c700); margin-bottom:16px;}
+  .pipeline{display:flex; align-items:stretch; gap:0;}
+  .stage{flex:1; background:var(--c50); border:1px solid var(--c200); border-radius:14px; padding:14px 15px;}
+  .stage-ic{font-size:20px; line-height:1;}
+  .stage-n{font-size:11px; font-weight:700; letter-spacing:.05em; text-transform:uppercase; color:var(--c500); margin-top:8px;}
+  .stage-t{font-size:14px; font-weight:700; color:var(--c800); margin-top:2px;}
+  .stage-d{font-size:12px; color:var(--c600); margin-top:5px; line-height:1.45;}
+  .chev{display:flex; align-items:center; padding:0 8px; font-size:26px; color:var(--c300); font-weight:700;}
+  .sources{display:flex; flex-wrap:wrap; align-items:center; gap:10px; margin-top:14px; padding:12px 14px;
+    background:#fff; border:1px dashed var(--c300); border-radius:12px; font-size:12px;}
+  .src-cap{font-weight:700; color:var(--c700);}
+  .src{background:var(--c50); border:1px solid var(--c200); border-radius:999px; padding:5px 12px; color:var(--c800);}
+  .src b{color:var(--c700);}
+
+  .trace-h{font-size:11px; text-transform:uppercase; letter-spacing:.07em; color:var(--c500); font-weight:700; margin:22px 0 10px;}
+  .trace{display:flex; align-items:stretch; gap:0;}
+  .t-col{flex:1; min-width:0;} .t-col.wide{flex:1.5;}
+  .t-cap{font-size:11px; font-weight:700; color:var(--c600); margin-bottom:6px;}
+  .t-box{background:var(--c50); border:1px solid var(--c200); border-radius:12px; padding:11px 13px; margin-bottom:8px;}
+  .t-desc{font-size:12px; color:var(--c900); margin-top:4px; line-height:1.4;}
+  .t-box.chips{display:flex; flex-direction:column; gap:7px;}
+  .chip{display:flex; align-items:baseline; gap:8px; background:#fff; border:1px solid var(--c200); border-radius:8px; padding:5px 10px; font-size:13px; font-weight:600; color:var(--c900);}
+  .chip i{font-style:normal; font-size:10px; text-transform:uppercase; letter-spacing:.05em; color:var(--c400); width:42px; font-weight:700;}
+  .t-arrow{display:flex; flex-direction:column; align-items:center; justify-content:center; padding:0 12px; color:var(--c400); font-size:20px; font-weight:700;}
+  .t-arrow span{font-size:9px; text-transform:uppercase; letter-spacing:.05em; color:var(--c400); margin-bottom:2px; font-weight:700;}
+  .src-read{margin-bottom:8px;} .src-read.ok{border-color:#a7e3b4; background:#f3fcf5;}
+  .sr-title{font-size:12px; font-weight:700; color:var(--c700);}
+  .sr-body{font-size:12px; color:var(--c800); margin-top:4px; line-height:1.45;}
+  .rule{font-family:ui-monospace,Menlo,monospace; font-size:11px; background:var(--c100); color:var(--c800); padding:2px 7px; border-radius:6px;}
+  .okmark{color:var(--green); font-weight:700;} .nomark{color:var(--danger); font-size:12px;}
+
+  table.match{width:100%; border-collapse:collapse; font-size:13px; margin-top:2px;}
+  table.match th{text-align:left; font-size:10px; text-transform:uppercase; letter-spacing:.05em; color:var(--c500); font-weight:700; padding:6px 8px; border-bottom:1px solid var(--c200);}
+  table.match td{padding:8px 8px; border-bottom:1px solid var(--c100); vertical-align:middle;}
+  .slot-chip{display:inline-block; font-size:10px; font-weight:700; text-transform:uppercase; letter-spacing:.04em; color:var(--c600); background:var(--c100); padding:2px 7px; border-radius:6px; margin-right:4px;}
+  .small{font-size:11px;} .muted{color:var(--c400);}
+  .match-foot{margin-top:12px; padding:11px 14px; background:#f3fcf5; border:1px solid #a7e3b4; border-radius:12px; font-size:13px; color:var(--c800);}
+
   footer{margin-top:30px; padding-top:18px; border-top:1px solid var(--c200); color:var(--c400); font-size:12px; text-align:center; line-height:1.6;}
   footer .dot{color:var(--c300); margin:0 6px;}
 
@@ -107,6 +147,10 @@
     .kpis{grid-template-columns:repeat(2,1fr);}
     .case-grid{grid-template-columns:1fr;}
     .brand p{display:none;}
+    .pipeline,.trace{flex-direction:column;}
+    .chev{transform:rotate(90deg); padding:6px 0; align-self:center;}
+    .t-arrow{flex-direction:row; transform:rotate(90deg); padding:6px 0; align-self:center;}
+    .t-arrow span{margin:0 4px 0 0;}
   }
 </style></head>
 <body>
@@ -136,6 +180,108 @@
       <div class="kpi warn"><div class="n">1</div><div class="l">Flagged for review</div><div class="s">routed to staff</div></div>
       <div class="kpi save"><div class="n">$500.00</div><div class="l">Overcharge caught</div><div class="s">on a single case</div></div>
     </div>
+
+    
+    <section class="card how">
+      <h3 class="how-h">How a case is priced</h3>
+      <div class="pipeline">
+        <div class="stage">
+          <div class="stage-ic">📄</div>
+          <div class="stage-n">Step 1</div>
+          <div class="stage-t">Read the billsheet</div>
+          <div class="stage-d">Each line gives a catalog number (REF) and the printed description.</div>
+        </div><div class="chev">&rsaquo;</div>
+        <div class="stage">
+          <div class="stage-ic">🏷️</div>
+          <div class="stage-n">Step 2</div>
+          <div class="stage-t">Classify the component</div>
+          <div class="stage-d">Reduce each line to the three things a contract cares about: slot, family, size.</div>
+        </div><div class="chev">&rsaquo;</div>
+        <div class="stage">
+          <div class="stage-ic">🔎</div>
+          <div class="stage-n">Step 3</div>
+          <div class="stage-t">Match to the contract</div>
+          <div class="stage-d">Look the build up in both pricing sources — construct schedule and line-price file.</div>
+        </div><div class="chev">&rsaquo;</div>
+        <div class="stage">
+          <div class="stage-ic">✓</div>
+          <div class="stage-n">Step 4</div>
+          <div class="stage-t">Price &amp; verify</div>
+          <div class="stage-d">Output the contract price and a status: auto-verified or flagged for review.</div>
+        </div></div>
+      <div class="sources">
+        <span class="src-cap">Step&nbsp;3 reads from two contract sources:</span>
+        <span class="src"><b>Construct schedule</b> — 21 bundled builds <span class="muted">(from the agreement)</span></span>
+        <span class="src"><b>Line-price file</b> — 18,495 catalog items <span class="muted">(CSV)</span></span>
+      </div>
+
+      <div class="trace-h">Worked example &mdash; following one line from <b>Gregg, Vernon L</b></div>
+      <div class="trace">
+        <div class="t-col">
+          <div class="t-cap">1 · On the billsheet</div>
+          <div class="t-box">
+            <div class="mono small muted">REF 1365-40-720</div>
+            <div class="t-desc">BIOLOX DELTA TS CERAMIC FEMORAL HEAD REVISION 40mm +5 12/14 TAPER</div>
+          </div>
+        </div>
+        <div class="t-arrow"><span>classify</span>&rarr;</div>
+        <div class="t-col">
+          <div class="t-cap">2 · Engine reads it as</div>
+          <div class="t-box chips">
+            <span class="chip"><i>slot</i>Head</span>
+            <span class="chip"><i>family</i>Ceramic Delta TS</span>
+            <span class="chip"><i>size</i>40 mm</span>
+          </div>
+        </div>
+        <div class="t-arrow"><span>look up</span>&rarr;</div>
+        <div class="t-col wide">
+          <div class="t-cap">3 · Matched against the contract</div>
+          <div class="t-box src-read">
+            <div class="sr-title">Line-price file <span class="mono muted">· 136540720</span></div>
+            <div class="sr-body">found, no standalone price &rarr; <b>priced inside a construct</b></div>
+          </div>
+          <div class="t-box src-read ok">
+            <div class="sr-title">Construct schedule <span class="mono muted">· OSC363669 COP</span></div>
+            <div class="sr-body">Head rule <span class="rule">Ceramic Delta TS &gt; 36mm</span>
+              <span class="okmark">✓</span> <span class="muted">(40 > 36)</span></div>
+          </div>
+        </div>
+      </div>
+
+      <div class="trace-h">All 4 components must fit the same construct</div>
+      <table class="match"><thead><tr>
+        <th>Catalog #</th><th>Classified as</th><th>Construct rule satisfied</th><th>Line-price file</th>
+      </tr></thead><tbody>
+        <tr>
+          <td class="mono small">1365-40-720</td>
+          <td><span class="slot-chip">Head</span> <strong>Ceramic Delta TS</strong> · 40 mm</td>
+          <td><span class="rule">Ceramic Delta TS &gt; 36mm</span> <span class="okmark">✓</span></td>
+          <td class="small muted">priced inside construct</td>
+        </tr>
+        <tr>
+          <td class="mono small">1010-12-060</td>
+          <td><span class="slot-chip">Stem</span> <strong>Actis</strong></td>
+          <td><span class="rule">Actis</span> <span class="okmark">✓</span></td>
+          <td class="small muted">priced inside construct</td>
+        </tr>
+        <tr>
+          <td class="mono small">1217-32-058</td>
+          <td><span class="slot-chip">Cup</span> <strong>Gription</strong> · 58 mm</td>
+          <td><span class="rule">Gription</span> <span class="okmark">✓</span></td>
+          <td class="small muted">priced inside construct</td>
+        </tr>
+        <tr>
+          <td class="mono small">1221-40-058</td>
+          <td><span class="slot-chip">Liner</span> <strong>AltrX</strong> · 40 mm</td>
+          <td><span class="rule">AltrX &gt; 36mm</span> <span class="okmark">✓</span></td>
+          <td class="small muted">priced inside construct</td>
+        </tr></tbody></table>
+      <div class="match-foot">
+        All 4 fit <b>OSC363669 COP</b>
+        &rarr; one bundled price of <b>$4,250.00</b>
+        <span class="muted">— not the sum of individual parts.</span>
+      </div>
+    </section>
 
     
       <section class="card case">
