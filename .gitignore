@@ -43,6 +43,9 @@ Thumbs.db
 recon/*.jpg
 recon/*.jpeg
 recon/*.png
+# Reconciliation export — has patient name + MRN. (Only top-level recon/*.csv;
+# the source contract price list under recon/source/ stays tracked.)
+recon/*.csv
 recon/billsheets/*
 !recon/billsheets/README.md
 # Self-contained dashboard with those scans embedded — also PHI, local only.
