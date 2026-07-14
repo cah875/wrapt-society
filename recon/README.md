@@ -67,7 +67,28 @@ node recon/reconcile.mjs recon/cases/griese-lhip.json --json
 # Rebuild the bundled JSON from source (after a contract update):
 node recon/build/parse-constructs.mjs
 node recon/build/parse-lineprices.mjs
+
+# Build the offline single-file scanner app (photo -> OCR -> priced case):
+npm run app:build          # -> recon/billsheet-app.html (~16MB, gitignored)
 ```
+
+## Offline scanner app (`recon/billsheet-app.html`)
+
+One self-contained HTML file: open it in any modern browser (double-click,
+`file://` is fine), drop in a billsheet **photo**, and it OCRs the stickers
+locally (Tesseract wasm embedded in the file), extracts REF/LOT/description,
+validates each catalog number against the price file, and prices the case
+through the same engine as the CLI — **with zero network access**. Photos and
+patient data never leave the machine.
+
+- Sources: `recon/app/app.js` (UI + offline OCR bootstrap), `recon/app/app.css`,
+  `recon/lib/extract.mjs` (OCR text → header/items), built by
+  `recon/build/app.mjs` from `node_modules` + `recon/app/vendor/`.
+- Extracted fields are editable before pricing; unreadable stickers can be
+  keyed by REF (green dot = found in the price file).
+- OCR layout modes (Auto / Sparse stickers / Single block) for tricky photos.
+- Verified end-to-end in headless Chromium under `file://` with all network
+  blocked, including a rotated/noisy photo simulation.
 
 ## What it found on the real billsheets
 

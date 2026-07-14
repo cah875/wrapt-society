@@ -51,6 +51,9 @@ recon/billsheets/*
 # Self-contained dashboard with those scans embedded — also PHI, local only.
 recon/preview.local.html
 
+# Built single-file scanner app (~16MB, no PHI) — regenerate with `npm run app:build`.
+recon/billsheet-app.html
+
 # Compiled binaries
 *.com
 *.class
@@ -63,6 +66,8 @@ recon/preview.local.html
 *.7z
 *.dmg
 *.gz
+# …except the vendored OCR language data the offline scanner build needs
+!recon/app/vendor/eng.traineddata.gz
 *.iso
 *.jar
 *.rar
