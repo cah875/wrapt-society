@@ -34,28 +34,34 @@ const cases = readdirSync(caseDir).filter((f) => f.endsWith('.json')).sort();
 // A case's source billsheet scan (PHI — gitignored, local only) is matched by
 // filename: recon/billsheets/<case-stem>.{jpg,jpeg,png}. If present, the case
 // card gets a "View billsheet" link. Absent (e.g. on a hosted build), no link.
-const BILLSHEET_DIR = join(ROOT, 'billsheets');
 const IMG_MIME = { jpg: 'image/jpeg', jpeg: 'image/jpeg', png: 'image/png' };
-function billsheetFor(caseFile) {
-  const stem = caseFile.replace(/\.json$/, '');
-  for (const ext of ['jpg', 'jpeg', 'png']) {
-    const abs = join(BILLSHEET_DIR, `${stem}.${ext}`);
-    if (existsSync(abs)) return { rel: `billsheets/${stem}.${ext}`, abs, ext };
-  }
-  return null;
+// A case declares its billsheet scan by filename (e.g. "gregg-rhip.jpg"). The
+// dashboard links to that name in the SAME folder as the HTML, so you just drop
+// the two photos next to preview.html. The link renders from the declared name
+// whether or not the file is present here — you supply the images locally.
+function billsheetFor(raw) {
+  const name = raw.billsheet;
+  if (!name) return null;
+  const ext = name.split('.').pop().toLowerCase();
+  const abs = join(ROOT, name);            // look beside preview.html for embedding
+  return { rel: name, abs, ext, exists: existsSync(abs) };
 }
-// A billsheet link's href: for the shareable file, a relative path (no image
-// bytes committed); for the local file, the image inlined as a data URI so the
-// single HTML is fully self-contained and prints straight to PDF.
+// Link href: normally the plain filename (same-folder relative). In 'local'
+// mode, if the image is actually present, inline it as a data URI so the file
+// is fully self-contained and prints straight to PDF.
 function sheetHref(billsheet, mode) {
   if (!billsheet) return null;
-  if (mode !== 'local') return billsheet.rel;
-  return `data:${IMG_MIME[billsheet.ext]};base64,${readFileSync(billsheet.abs).toString('base64')}`;
+  if (mode === 'local' && billsheet.exists) {
+    return `data:${IMG_MIME[billsheet.ext] || 'image/jpeg'};base64,${readFileSync(billsheet.abs).toString('base64')}`;
+  }
+  return billsheet.rel;
 }
 
-const results = cases.map((f) => ({ file: f, raw: load(join(caseDir, f)),
-  billsheet: billsheetFor(f),
-  r: reconcile(load(join(caseDir, f)), data, { pricingPolicy: 'lowest' }) }));
+const results = cases.map((f) => {
+  const raw = load(join(caseDir, f));
+  return { file: f, raw, billsheet: billsheetFor(raw),
+    r: reconcile(raw, data, { pricingPolicy: 'lowest' }) };
+});
 
 const money = (n) => (n == null ? '—' : '$' + Number(n).toLocaleString('en-US', { minimumFractionDigits: 2 }));
 const esc = (s) => String(s ?? '').replace(/[&<>]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;' }[c]));
@@ -464,7 +470,7 @@ console.log(`Wrote ${OUT}  (${summary})`);
 
 // Self-contained local copy with billsheet scans embedded — for local viewing
 // or printing straight to PDF. Gitignored (contains PHI). Only when scans exist.
-const withScans = results.filter((x) => x.billsheet);
+const withScans = results.filter((x) => x.billsheet && x.billsheet.exists);
 if (withScans.length) {
   const LOCAL = join(ROOT, 'preview.local.html');
   writeFileSync(LOCAL, renderHtml('local'));

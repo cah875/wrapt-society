@@ -7,6 +7,7 @@
   "case_type": "hip",
   "side": "Right",
   "rep_reference": { "optimize": "351048", "vhn_cup": "44/25", "vhn_gross": "+0/+5" },
+  "billsheet": "gregg-rhip.jpg",
   "submitted_total": null,
   "items": [
     { "ref": "1365-40-720", "lot": "5069982", "qty": 1, "description": "BIOLOX DELTA TS CERAMIC FEMORAL HEAD REVISION 40mm +5 12/14 TAPER" },

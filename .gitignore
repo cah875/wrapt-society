@@ -39,6 +39,10 @@ Thumbs.db
 
 # Source billsheet scans — contain PHI (patient name, MRN, DOB). Kept local
 # only; the dashboard links to them but they must never be committed/deployed.
+# Dropped next to preview.html (recon/) and/or in recon/billsheets/.
+recon/*.jpg
+recon/*.jpeg
+recon/*.png
 recon/billsheets/*
 !recon/billsheets/README.md
 # Self-contained dashboard with those scans embedded — also PHI, local only.

@@ -7,6 +7,7 @@
   "case_type": "hip",
   "side": "Left",
   "rep_reference": { "optimize": "353412", "vhn_cup": "46/27", "vhn_gross": "-1/+4" },
+  "billsheet": "griese-lhip.jpg",
   "submitted_total": null,
   "items": [
     { "ref": "1365-32-310", "lot": "5149331", "qty": 1, "description": "BIOLOX DELTA CERAMIC FEMORAL HEAD +1 32mm DIA 12/14 TAPER" },
