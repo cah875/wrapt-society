@@ -408,6 +408,7 @@ const renderHtml = (mode) => `<!doctype html>
   .match-foot{margin-top:12px; padding:11px 14px; background:#f3fcf5; border:1px solid #a7e3b4; border-radius:12px; font-size:13px; color:var(--c800);}
 
   footer{margin-top:30px; padding-top:18px; border-top:1px solid var(--c200); color:var(--c400); font-size:12px; text-align:center; line-height:1.6;}
+  footer .byline{margin-top:8px; font-weight:700; color:var(--c700); letter-spacing:.01em;}
   footer .dot{color:var(--c300); margin:0 6px;}
 
   @media (max-width:760px){
@@ -457,6 +458,7 @@ const renderHtml = (mode) => `<!doctype html>
       <span class="dot">&bull;</span> ${data.constructs.length} capitated constructs
       <span class="dot">&bull;</span> Generated ${generated}
       <span class="dot">&bull;</span> Prototype &mdash; internal use only
+      <div class="byline">Created by Chris Hill</div>
     </footer>
   </div>
 </body></html>`;
