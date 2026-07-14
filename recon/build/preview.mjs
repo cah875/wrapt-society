@@ -5,7 +5,7 @@
 //
 //   node recon/build/preview.mjs   ->   recon/preview.html
 
-import { readFileSync, writeFileSync, readdirSync } from 'node:fs';
+import { readFileSync, writeFileSync, readdirSync, existsSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { dirname, join } from 'node:path';
 import { reconcile } from '../lib/engine.mjs';
@@ -30,7 +30,31 @@ try {
 
 const caseDir = join(ROOT, 'cases');
 const cases = readdirSync(caseDir).filter((f) => f.endsWith('.json')).sort();
+
+// A case's source billsheet scan (PHI — gitignored, local only) is matched by
+// filename: recon/billsheets/<case-stem>.{jpg,jpeg,png}. If present, the case
+// card gets a "View billsheet" link. Absent (e.g. on a hosted build), no link.
+const BILLSHEET_DIR = join(ROOT, 'billsheets');
+const IMG_MIME = { jpg: 'image/jpeg', jpeg: 'image/jpeg', png: 'image/png' };
+function billsheetFor(caseFile) {
+  const stem = caseFile.replace(/\.json$/, '');
+  for (const ext of ['jpg', 'jpeg', 'png']) {
+    const abs = join(BILLSHEET_DIR, `${stem}.${ext}`);
+    if (existsSync(abs)) return { rel: `billsheets/${stem}.${ext}`, abs, ext };
+  }
+  return null;
+}
+// A billsheet link's href: for the shareable file, a relative path (no image
+// bytes committed); for the local file, the image inlined as a data URI so the
+// single HTML is fully self-contained and prints straight to PDF.
+function sheetHref(billsheet, mode) {
+  if (!billsheet) return null;
+  if (mode !== 'local') return billsheet.rel;
+  return `data:${IMG_MIME[billsheet.ext]};base64,${readFileSync(billsheet.abs).toString('base64')}`;
+}
+
 const results = cases.map((f) => ({ file: f, raw: load(join(caseDir, f)),
+  billsheet: billsheetFor(f),
   r: reconcile(load(join(caseDir, f)), data, { pricingPolicy: 'lowest' }) }));
 
 const money = (n) => (n == null ? '—' : '$' + Number(n).toLocaleString('en-US', { minimumFractionDigits: 2 }));
@@ -55,7 +79,8 @@ const STATUS = {
   NO_CONSTRUCT_MATCH: { label: 'No match', cls: 'bad', dot: '#b91c1c' },
 };
 
-function caseCard({ raw, r }) {
+function caseCard({ raw, r, billsheet }, mode) {
+  const sheet = sheetHref(billsheet, mode);
   const st = STATUS[r.status] || { label: r.status, cls: 'warn', dot: '#b45309' };
   const comps = r.components.map((c) => `
         <tr>
@@ -87,6 +112,9 @@ function caseCard({ raw, r }) {
           <div>
             <h2>${esc(raw.patient)}</h2>
             <div class="meta">${esc(raw.side || '')} ${esc(r.case_type.toUpperCase())} &middot; DOS ${esc(r.date_of_service)} &middot; <span class="mono">${esc(r.case_id)}</span></div>
+            ${sheet
+              ? `<a class="sheetlink" href="${esc(sheet)}" target="_blank" rel="noopener">📄 View source billsheet</a>`
+              : ''}
           </div>
           <span class="badge ${st.cls}"><span class="bdot" style="background:${st.dot}"></span>${st.label}</span>
         </div>
@@ -226,7 +254,7 @@ function howItWorks() {
 
 const generated = new Date().toLocaleDateString('en-US', { year: 'numeric', month: 'long', day: 'numeric' });
 
-const html = `<!doctype html>
+const renderHtml = (mode) => `<!doctype html>
 <html lang="en"><head>
 <meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Implant Billsheet Reconciliation — Northwest Specialty Hospital</title>
@@ -279,6 +307,8 @@ const html = `<!doctype html>
   .case{margin-top:18px;}
   .case-h{display:flex; justify-content:space-between; align-items:flex-start; gap:16px;}
   .case-h h2{margin:0; font-size:18px; font-weight:700; color:var(--c800);}
+  .sheetlink{display:inline-block; margin-top:6px; font-size:12px; font-weight:600; color:var(--c600); text-decoration:none; border:1px solid #dbeaf1; background:#f2f8fb; padding:3px 9px; border-radius:999px;}
+  .sheetlink:hover{background:#e4f1f7; border-color:var(--c500);}
   .meta{font-size:13px; color:var(--c500); margin-top:3px;}
 
   /* Badge — mirrors StatusBadge pill */
@@ -414,7 +444,7 @@ const html = `<!doctype html>
 
     ${howItWorks()}
 
-    ${results.map(caseCard).join('')}
+    ${results.map((x) => caseCard(x, mode)).join('')}
 
     <footer>
       Matched against ${data.lineprices.meta.rows.toLocaleString('en-US')} contracted line items
@@ -425,6 +455,18 @@ const html = `<!doctype html>
   </div>
 </body></html>`;
 
+const summary = `${results.length} cases: ${verified} verified, ${flagged} flagged, ${money(identified)} caught`;
+
+// Shareable dashboard — no PHI image bytes; safe to commit/deploy.
 const OUT = join(ROOT, 'preview.html');
-writeFileSync(OUT, html);
-console.log(`Wrote ${OUT}  (${results.length} cases: ${verified} verified, ${flagged} flagged, ${money(identified)} caught)`);
+writeFileSync(OUT, renderHtml('shareable'));
+console.log(`Wrote ${OUT}  (${summary})`);
+
+// Self-contained local copy with billsheet scans embedded — for local viewing
+// or printing straight to PDF. Gitignored (contains PHI). Only when scans exist.
+const withScans = results.filter((x) => x.billsheet);
+if (withScans.length) {
+  const LOCAL = join(ROOT, 'preview.local.html');
+  writeFileSync(LOCAL, renderHtml('local'));
+  console.log(`Wrote ${LOCAL}  (self-contained, ${withScans.length} billsheet scan(s) embedded — LOCAL ONLY, gitignored)`);
+}
