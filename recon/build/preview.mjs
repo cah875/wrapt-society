@@ -99,6 +99,10 @@ function caseCard({ raw, r }) {
           <div class="panel">
             <h3>Contract price match</h3>
             <ul class="cands">${candidates}</ul>
+            ${r.selected && r.selected.why && r.selected.why.some((w) => w.via && /[<>=]/.test(w.via))
+              ? `<div class="why">Qualifies via ${r.selected.why.filter((w) => w.via && /[<>=]/.test(w.via))
+                  .map((w) => `<b>${esc(w.slot)}</b> ${esc(w.family || '?')}${w.sizeMm != null ? ` ${w.sizeMm}mm` : ''} → &ldquo;${esc(w.via)}&rdquo;`).join(', ')}</div>`
+              : ''}
             <div class="price-line">
               <span>Expected case price</span>
               <span class="big">${money(r.expected_total)}</span>
@@ -323,6 +327,9 @@ const html = `<!doctype html>
   .finding.error{background:var(--dangerbg); color:#7f1d1d;} .finding.error .fdot{background:var(--danger);} .finding.error .code{color:var(--danger);}
   .finding.warn{background:var(--warnbg); color:#7c2d12;} .finding.warn .fdot{background:var(--warn);} .finding.warn .code{color:var(--warn);}
   .finding.ok{background:var(--okbg); color:#14532d;} .finding.ok .fdot{background:var(--green);} .finding.ok .code{color:var(--ok);}
+  .finding.info{background:#eef6fb; color:#0f3a52;} .finding.info .fdot{background:var(--c600);} .finding.info .code{color:var(--c600);}
+  .why{font-size:11.5px; color:var(--c700); background:#f2f8fb; border:1px solid #dbeaf1; border-radius:9px; padding:7px 10px; margin:8px 0 2px; line-height:1.5;}
+  .why b{color:var(--c800);}
 
   /* How it works */
   .how{margin-top:18px;}

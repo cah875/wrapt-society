@@ -57,6 +57,11 @@ function report(r) {
       const mark = sel ? `${C.green}▶${C.reset}` : ' ';
       console.log(`    ${mark} ${cand.construct_id.padEnd(10)} ${money(cand.price).padStart(10)}  ${cand.name}${cand.uncertain ? C.yellow + ' (size unverified)' + C.reset : ''}`);
     }
+    if (r.selected && r.selected.why && r.selected.why.length) {
+      console.log(`    ${C.dim}why ${r.selected.construct_id}: ${r.selected.why
+        .map((w) => `${w.slot} ${w.family || '?'}${w.sizeMm != null ? ' ' + w.sizeMm + 'mm' : ''}${w.via ? ` → "${w.via}"` : ''}`)
+        .join('  ·  ')}${C.reset}`);
+    }
   }
 
   const constructGoverned = r.line_lookups.filter((l) => l.governed_by_construct).length;
@@ -69,7 +74,7 @@ function report(r) {
   if (r.flags.length) {
     console.log(`\n  ${C.bold}Flags${C.reset}`);
     for (const f of r.flags) {
-      const col = f.level === 'error' ? C.red : C.yellow;
+      const col = f.level === 'error' ? C.red : f.level === 'info' ? C.cyan : C.yellow;
       console.log(`    ${col}● ${f.code}${C.reset} ${f.msg}`);
     }
   }

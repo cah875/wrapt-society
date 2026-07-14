@@ -99,6 +99,9 @@
   .finding.error{background:var(--dangerbg); color:#7f1d1d;} .finding.error .fdot{background:var(--danger);} .finding.error .code{color:var(--danger);}
   .finding.warn{background:var(--warnbg); color:#7c2d12;} .finding.warn .fdot{background:var(--warn);} .finding.warn .code{color:var(--warn);}
   .finding.ok{background:var(--okbg); color:#14532d;} .finding.ok .fdot{background:var(--green);} .finding.ok .code{color:var(--ok);}
+  .finding.info{background:#eef6fb; color:#0f3a52;} .finding.info .fdot{background:var(--c600);} .finding.info .code{color:var(--c600);}
+  .why{font-size:11.5px; color:var(--c700); background:#f2f8fb; border:1px solid #dbeaf1; border-radius:9px; padding:7px 10px; margin:8px 0 2px; line-height:1.5;}
+  .why b{color:var(--c800);}
 
   /* How it works */
   .how{margin-top:18px;}
@@ -176,8 +179,8 @@
 
     <div class="kpis">
       <div class="kpi"><div class="n">3</div><div class="l">Cases reconciled</div><div class="s">2 real billsheets</div></div>
-      <div class="kpi ok"><div class="n">2</div><div class="l">Auto-verified</div><div class="s">priced to contract</div></div>
-      <div class="kpi warn"><div class="n">1</div><div class="l">Flagged for review</div><div class="s">routed to staff</div></div>
+      <div class="kpi ok"><div class="n">3</div><div class="l">Auto-verified</div><div class="s">priced to contract</div></div>
+      <div class="kpi warn"><div class="n">0</div><div class="l">Flagged for review</div><div class="s">routed to staff</div></div>
       <div class="kpi save"><div class="n">$500.00</div><div class="l">Overcharge caught</div><div class="s">on a single case</div></div>
     </div>
 
@@ -324,6 +327,7 @@
           <span class="cid">OSC378862</span>
           <span class="cname">Attune FB Cementless</span>
           <span class="cprice">$3,900.00</span><span class="tick">✓</span></li></ul>
+            
             <div class="price-line">
               <span>Expected case price</span>
               <span class="big">$3,900.00</span>
@@ -340,7 +344,7 @@
             <h2>Gregg, Vernon L</h2>
             <div class="meta">Right HIP &middot; DOS 2026-06-01 &middot; <span class="mono">NW0001591185</span></div>
           </div>
-          <span class="badge warn"><span class="bdot" style="background:#b45309"></span>Needs review</span>
+          <span class="badge ok"><span class="bdot" style="background:#3E9D45"></span>Auto-verified</span>
         </div>
         
         <div class="case-grid">
@@ -377,6 +381,7 @@
           <span class="cid">OSC367606</span>
           <span class="cname">COP Delta TS Heads</span>
           <span class="cprice">$4,750.00</span><span class="tick muted"></span></li></ul>
+            <div class="why">Qualifies via <b>Head</b> Ceramic Delta TS 40mm → &ldquo;Ceramic Delta TS &gt; 36mm&rdquo;, <b>Liner</b> AltrX 40mm → &ldquo;AltrX &gt; 36mm&rdquo;</div>
             <div class="price-line">
               <span>Expected case price</span>
               <span class="big">$4,250.00</span>
@@ -386,8 +391,8 @@
         </div>
         <h3 class="findings-h">Findings</h3>
         <div class="findings">
-        <div class="finding warn">
-          <span class="fdot"></span><span class="code">AMBIGUOUS_CONSTRUCT</span><span>Build matches 2 constructs spanning $4250–$4750; policy="lowest" selected $4250</span>
+        <div class="finding info">
+          <span class="fdot"></span><span class="code">CONSTRUCT_RESOLVED</span><span>Selected OSC363669 "COP" ($4250) explicitly covers every component (Head "Ceramic Delta TS" 40mm via "Ceramic Delta TS &gt; 36mm"; Liner "AltrX" 40mm via "AltrX &gt; 36mm"). Higher-priced overlap OSC367606 "COP Delta TS Heads" ($4750) adds no required coverage at these sizes — not applicable; billing it would overcharge $500.</span>
         </div></div>
       </section>
       <section class="card case">
@@ -430,6 +435,7 @@
           <span class="cid">OSC363669</span>
           <span class="cname">COP</span>
           <span class="cprice">$4,250.00</span><span class="tick">✓</span></li></ul>
+            <div class="why">Qualifies via <b>Head</b> Ceramic Delta (not TS) 32mm → &ldquo;Ceramic Delta (not TS) &lt;= 36mm&rdquo;, <b>Liner</b> AltrX 32mm → &ldquo;AltrX &lt;= 36mm&rdquo;</div>
             <div class="price-line">
               <span>Expected case price</span>
               <span class="big">$4,250.00</span>
@@ -447,7 +453,7 @@
     <footer>
       Matched against 18,495 contracted line items
       <span class="dot">&bull;</span> 21 capitated constructs
-      <span class="dot">&bull;</span> Generated June 18, 2026
+      <span class="dot">&bull;</span> Generated July 14, 2026
       <span class="dot">&bull;</span> Prototype &mdash; internal use only
     </footer>
   </div>

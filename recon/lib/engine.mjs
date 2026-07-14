@@ -33,32 +33,37 @@ function sizeTierOk(mm, tier) {
   }
 }
 
-// Can `comp` fill `slot` of `construct`? Returns true / false / 'unknown'.
+// Can `comp` fill `slot` of `construct`? Returns { result, entry } where
+// result is true / false / 'unknown' and entry is the eligibility line that
+// admitted it (so callers can explain *why* a component qualified).
 function eligibleInSlot(comp, eligList) {
-  if (!eligList) return false;
-  let sawUnknown = false;
+  if (!eligList) return { result: false, entry: null };
+  let unknownEntry = null;
   for (const e of eligList) {
     if (canon(e.family) !== canon(comp.family)) continue;
     const ok = sizeTierOk(comp.sizeMm, e.sizeTier);
-    if (ok === true) return true;
-    if (ok === null) sawUnknown = true;
+    if (ok === true) return { result: true, entry: e };
+    if (ok === null && !unknownEntry) unknownEntry = e;
   }
-  return sawUnknown ? 'unknown' : false;
+  return unknownEntry ? { result: 'unknown', entry: unknownEntry } : { result: false, entry: null };
 }
 
 function matchConstruct(components, construct) {
   const reasons = [];
   const usedSlots = new Set();
+  const slotMatches = [];        // per-component: how it qualified (for explanation)
   let anyUnknown = false;
 
   // 1) every clinical component must fit some eligible slot
   for (const c of components) {
     const elig = construct.slots[c.slot];
-    const res = eligibleInSlot(c, elig);
+    const { result: res, entry } = eligibleInSlot(c, elig);
     if (res === false) {
       reasons.push(`${c.slot} "${c.family || '?'}"${c.sizeMm ? ` ${c.sizeMm}mm` : ''} not eligible`);
       return { match: false, reasons };
     }
+    slotMatches.push({ slot: c.slot, family: c.family, sizeMm: c.sizeMm ?? null,
+      via: entry ? entry.raw : null, definite: res === true });
     if (res === 'unknown') anyUnknown = true;
     usedSlots.add(c.slot);
   }
@@ -79,7 +84,7 @@ function matchConstruct(components, construct) {
     return { match: false, reasons };
   }
 
-  return { match: true, reasons, uncertain: anyUnknown };
+  return { match: true, reasons, uncertain: anyUnknown, slotMatches };
 }
 
 function dosWindowFor(windows, dosIso) {
@@ -113,7 +118,7 @@ export function reconcile(kase, data, opts = {}) {
   for (const con of data.constructs) {
     if (con.type !== type) continue;
     const r = matchConstruct(clinical, con);
-    if (r.match) candidates.push({ ...con, uncertain: r.uncertain });
+    if (r.match) candidates.push({ ...con, uncertain: r.uncertain, slotMatches: r.slotMatches });
   }
   candidates.sort((a, b) => a.price - b.price);
 
@@ -141,10 +146,31 @@ export function reconcile(kase, data, opts = {}) {
   const flags = [];
   if (!selected) flags.push({ level: 'error', code: 'NO_CONSTRUCT_MATCH',
     msg: 'No capitated construct matches this component combination' });
-  if (candidates.length > 1) {
+  if (selected && candidates.length > 1) {
     const prices = [...new Set(candidates.map((c) => c.price))];
-    if (prices.length > 1) flags.push({ level: 'warn', code: 'AMBIGUOUS_CONSTRUCT',
-      msg: `Build matches ${candidates.length} constructs spanning $${Math.min(...prices)}–$${Math.max(...prices)}; policy="${policy}" selected $${selected.price}` });
+    const higher = candidates.filter((c) => c.price > selected.price);
+    if (prices.length > 1) {
+      // A specialized construct (e.g. "COP Delta TS Heads") often overlaps a
+      // cheaper base construct at some size tiers. When the selected (lowest)
+      // construct EXPLICITLY admits every component — every match pinned by a
+      // definite family+size rule, no unknowns — the pricier overlapping
+      // constructs add no required coverage here: they are redundant, not a
+      // genuine ambiguity. Only when a size is unreadable (uncertain) can a
+      // higher construct actually be the intended one, so we flag that.
+      const explicit = selected.slotMatches && selected.slotMatches.every((m) => m.definite);
+      if (policy === 'lowest' && higher.length && explicit) {
+        const because = selected.slotMatches
+          .filter((m) => m.via && /[<>=]/.test(m.via))
+          .map((m) => `${m.slot} "${m.family}"${m.sizeMm != null ? ` ${m.sizeMm}mm` : ''} via "${m.via}"`)
+          .join('; ');
+        const alts = higher.map((c) => `${c.construct_id} "${c.name}" ($${c.price})`).join(', ');
+        flags.push({ level: 'info', code: 'CONSTRUCT_RESOLVED',
+          msg: `Selected ${selected.construct_id} "${selected.name}" ($${selected.price}) explicitly covers every component${because ? ` (${because})` : ''}. Higher-priced overlap ${alts} adds no required coverage at these sizes — not applicable; billing it would overcharge $${Math.max(...higher.map((c) => c.price)) - selected.price}.` });
+      } else {
+        flags.push({ level: 'warn', code: 'AMBIGUOUS_CONSTRUCT',
+          msg: `Build matches ${candidates.length} constructs spanning $${Math.min(...prices)}–$${Math.max(...prices)}; policy="${policy}" selected $${selected.price}${explicit ? '' : ' — a component size could not be read, so a higher construct may apply'}` });
+      }
+    }
   }
   for (const c of components) {
     if (!c.family) flags.push({ level: 'warn', code: 'UNCLASSIFIED_COMPONENT',
@@ -183,7 +209,8 @@ export function reconcile(kase, data, opts = {}) {
     case_type: type,
     components,
     candidates: candidates.map((c) => ({ construct_id: c.construct_id, name: c.name, price: c.price, uncertain: !!c.uncertain })),
-    selected: selected ? { construct_id: selected.construct_id, name: selected.name, price: selected.price } : null,
+    selected: selected ? { construct_id: selected.construct_id, name: selected.name, price: selected.price,
+      why: (selected.slotMatches || []).map((m) => ({ slot: m.slot, family: m.family, sizeMm: m.sizeMm, via: m.via })) } : null,
     line_lookups: lineLookups,
     extras: extras.map((e) => ({ ref: e.ref, slot: e.slot, description: e.description })),
     expected_total: expected,
