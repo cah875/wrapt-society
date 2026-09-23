@@ -1,0 +1,1581 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="robots" content="noindex, nofollow">
+<title>Physician Relations CRM</title>
+<style>
+  :root {
+    --bg: #f4f6f9;
+    --surface: #ffffff;
+    --surface-2: #f8fafc;
+    --border: #dde3ea;
+    --text: #17212b;
+    --muted: #5d6b7a;
+    --brand: #0f4c81;
+    --brand-2: #1466ad;
+    --brand-soft: #e6f0fa;
+    --accent: #0e8f7e;
+    --accent-soft: #e0f4f1;
+    --warn: #b7791f;
+    --warn-soft: #fdf3e1;
+    --danger: #c0392b;
+    --danger-soft: #fbe9e7;
+    --ok: #1e8449;
+    --ok-soft: #e5f5ec;
+    --radius: 10px;
+    --shadow: 0 1px 2px rgba(16, 24, 40, .06), 0 1px 3px rgba(16, 24, 40, .08);
+    --font: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+  }
+  * { box-sizing: border-box; }
+  html, body { margin: 0; }
+  body { background: var(--bg); color: var(--text); font: 14px/1.5 var(--font); }
+  a { color: var(--brand-2); text-decoration: none; }
+  a:hover { text-decoration: underline; }
+  h1 { font-size: 22px; margin: 0; }
+  h2 { font-size: 15px; margin: 0 0 12px; }
+  h3 { font-size: 14px; margin: 0 0 8px; }
+  [hidden] { display: none !important; }
+  .muted { color: var(--muted); }
+  .small { font-size: 12px; }
+  .nowrap { white-space: nowrap; }
+
+  /* ---------- Login ---------- */
+  #login { min-height: 100vh; display: grid; place-items: center; padding: 16px;
+    background: linear-gradient(135deg, #0f4c81 0%, #0e8f7e 100%); }
+  .login-card { background: var(--surface); width: 100%; max-width: 380px; border-radius: 14px; padding: 32px 28px;
+    box-shadow: 0 20px 50px rgba(0,0,0,.25); }
+  .login-card .logo { width: 48px; height: 48px; border-radius: 12px; background: var(--brand); color: #fff;
+    display: grid; place-items: center; font-size: 24px; margin-bottom: 14px; }
+  .login-card h1 { margin-bottom: 4px; }
+  .login-card p { margin: 0 0 20px; }
+  .login-error { color: var(--danger); background: var(--danger-soft); padding: 8px 10px; border-radius: 8px; margin-bottom: 12px; font-size: 13px; }
+
+  /* ---------- Top bar ---------- */
+  .topbar { background: var(--brand); color: #fff; position: sticky; top: 0; z-index: 20; }
+  .topbar-inner { max-width: 1400px; margin: 0 auto; display: flex; align-items: center; gap: 20px; padding: 0 16px; height: 56px; }
+  .brand { font-weight: 700; font-size: 15px; white-space: nowrap; display: flex; align-items: center; gap: 8px; }
+  .brand .dot { width: 28px; height: 28px; border-radius: 8px; background: rgba(255,255,255,.15); display: grid; place-items: center; }
+  .nav { display: flex; gap: 2px; overflow-x: auto; flex: 1; scrollbar-width: none; }
+  .nav a { color: rgba(255,255,255,.8); padding: 8px 12px; border-radius: 8px; white-space: nowrap; font-weight: 500; }
+  .nav a:hover { background: rgba(255,255,255,.1); color: #fff; text-decoration: none; }
+  .nav a.active { background: rgba(255,255,255,.18); color: #fff; }
+  .nav .count { background: #e74c3c; color: #fff; font-size: 11px; border-radius: 10px; padding: 1px 6px; margin-left: 4px; }
+  .userbox { display: flex; align-items: center; gap: 10px; white-space: nowrap; font-size: 13px; }
+  .userbox button { background: rgba(255,255,255,.12); color: #fff; border: 0; padding: 6px 10px; border-radius: 8px; cursor: pointer; font: inherit; }
+  .userbox button:hover { background: rgba(255,255,255,.22); }
+  @media (max-width: 760px) {
+    .topbar-inner { flex-wrap: wrap; height: auto; padding: 8px 16px 6px; gap: 6px 12px; }
+    .brand { flex: 1; }
+    .nav { order: 3; flex-basis: 100%; }
+    #user-name { display: none; }
+  }
+
+  main { max-width: 1400px; margin: 0 auto; padding: 20px 16px 60px; }
+  .page-head { display: flex; align-items: center; justify-content: space-between; gap: 12px; flex-wrap: wrap; margin-bottom: 16px; }
+  .page-head .actions { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; }
+
+  /* ---------- Cards & grids ---------- */
+  .card { background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius); box-shadow: var(--shadow); padding: 16px; min-width: 0; }
+  .card + .card { margin-top: 16px; }
+  .card-head { display: flex; align-items: center; justify-content: space-between; gap: 8px; margin-bottom: 12px; }
+  .card-head h2 { margin: 0; }
+  .grid2 { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; margin-top: 16px; }
+  .detail-grid { display: grid; grid-template-columns: minmax(0, 5fr) minmax(0, 7fr); gap: 16px; margin-top: 16px; align-items: start; }
+  @media (max-width: 960px) { .grid2, .detail-grid { grid-template-columns: 1fr; } }
+
+  .kpis { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 12px; }
+  .kpi { background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius); padding: 14px 16px; box-shadow: var(--shadow); }
+  .kpi .label { color: var(--muted); font-size: 12px; font-weight: 600; text-transform: uppercase; letter-spacing: .03em; }
+  .kpi .value { font-size: 28px; font-weight: 700; line-height: 1.2; margin-top: 4px; }
+  .kpi.danger .value { color: var(--danger); }
+  .kpi.ok .value { color: var(--ok); }
+  a.kpi:hover { text-decoration: none; border-color: var(--brand-2); }
+  a.kpi { color: inherit; }
+
+  .tag { display: inline-block; font-size: 11px; font-weight: 600; padding: 2px 8px; border-radius: 999px; background: var(--surface-2); color: var(--muted); border: 1px solid var(--border); white-space: nowrap; }
+  .badge { display: inline-block; font-size: 12px; font-weight: 600; padding: 2px 9px; border-radius: 999px; white-space: nowrap; }
+  .b-a { background: #eef2f7; color: #3d4b5c; }
+  .b-ref { background: #efe7fb; color: #5b2c8f; }
+  .b-b { background: var(--warn-soft); color: var(--warn); }
+  .b-c { background: var(--brand-soft); color: var(--brand); }
+  .b-d { background: var(--ok-soft); color: var(--ok); }
+  .b-over { background: var(--danger-soft); color: var(--danger); }
+  .b-soon { background: var(--warn-soft); color: var(--warn); }
+  .b-later { background: var(--brand-soft); color: var(--brand); }
+  .b-done { background: var(--ok-soft); color: var(--ok); }
+
+  /* ---------- Buttons & forms ---------- */
+  .btn { display: inline-flex; align-items: center; gap: 6px; border: 1px solid var(--border); background: var(--surface); color: var(--text);
+    padding: 8px 14px; border-radius: 8px; font: inherit; font-weight: 600; cursor: pointer; white-space: nowrap; }
+  .btn:hover { background: var(--surface-2); text-decoration: none; }
+  .btn.primary { background: var(--brand); border-color: var(--brand); color: #fff; }
+  .btn.primary:hover { background: var(--brand-2); }
+  .btn.accent { background: var(--accent); border-color: var(--accent); color: #fff; }
+  .btn.danger { color: var(--danger); border-color: #efc4be; }
+  .btn.danger:hover { background: var(--danger-soft); }
+  .btn.sm { padding: 4px 10px; font-size: 12px; }
+  .btn.link { border: 0; background: none; padding: 0; color: var(--brand-2); font-weight: 500; }
+  .btn.link:hover { text-decoration: underline; background: none; }
+  .btn.block { width: 100%; justify-content: center; }
+
+  .form { display: grid; gap: 12px; }
+  .form label { display: grid; gap: 4px; font-size: 12px; font-weight: 600; color: var(--muted); }
+  input, select, textarea { font: inherit; color: var(--text); background: var(--surface); border: 1px solid var(--border); border-radius: 8px; padding: 8px 10px; width: 100%; min-width: 0; }
+  input:focus, select:focus, textarea:focus { outline: 2px solid var(--brand-soft); border-color: var(--brand-2); }
+  textarea { resize: vertical; }
+  input[type=file] { padding: 6px; background: var(--surface-2); }
+  .row2 { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+  .row3 { display: grid; grid-template-columns: repeat(3, 1fr); gap: 12px; }
+  .row4 { display: grid; grid-template-columns: repeat(4, 1fr); gap: 12px; }
+  @media (max-width: 640px) { .row2, .row3, .row4 { grid-template-columns: 1fr; } }
+  fieldset { border: 1px solid var(--border); border-radius: 8px; padding: 10px 12px 12px; margin: 0; min-width: 0; }
+  legend { font-size: 12px; font-weight: 700; color: var(--brand); padding: 0 6px; text-transform: uppercase; letter-spacing: .03em; }
+  .req::after { content: " *"; color: var(--danger); }
+
+  .seg { display: flex; flex-wrap: wrap; gap: 6px; border: 0; padding: 0; }
+  .seg legend { padding: 0; margin-bottom: 4px; color: var(--muted); text-transform: none; letter-spacing: 0; }
+  .seg label { display: block; }
+  .seg input { position: absolute; opacity: 0; width: 1px; height: 1px; }
+  .seg span { display: inline-block; padding: 6px 12px; border: 1px solid var(--border); border-radius: 999px; cursor: pointer; font-weight: 600; color: var(--text); font-size: 13px; background: var(--surface); }
+  .seg input:checked + span { background: var(--brand); border-color: var(--brand); color: #fff; }
+  .seg input:focus-visible + span { outline: 2px solid var(--brand-2); outline-offset: 2px; }
+  .quick { display: flex; gap: 4px; flex-wrap: wrap; margin-top: 2px; }
+
+  /* ---------- Tables ---------- */
+  .table-wrap { overflow-x: auto; margin: 0 -16px; padding: 0 16px; }
+  table { width: 100%; border-collapse: collapse; }
+  th, td { text-align: left; padding: 9px 10px; border-bottom: 1px solid var(--border); vertical-align: top; }
+  th { font-size: 12px; color: var(--muted); font-weight: 600; background: var(--surface-2); white-space: nowrap; }
+  th.sortable { cursor: pointer; user-select: none; }
+  th.sortable:hover { color: var(--text); }
+  tbody tr.clickable { cursor: pointer; }
+  tbody tr.clickable:hover { background: var(--surface-2); }
+  td.num, th.num { text-align: right; font-variant-numeric: tabular-nums; }
+  .goal-table input { width: 64px; text-align: right; padding: 5px 8px; }
+  .goal-table input.year { width: 70px; text-align: left; }
+
+  .filters { display: flex; gap: 8px; flex-wrap: wrap; margin-bottom: 12px; }
+  .filters input[type=search] { flex: 1 1 240px; }
+  .filters select { width: auto; flex: 0 1 200px; }
+
+  /* ---------- Progress ---------- */
+  .bar { height: 8px; background: #e9eef4; border-radius: 999px; overflow: hidden; }
+  .bar > i { display: block; height: 100%; background: var(--brand-2); border-radius: 999px; }
+  .bar.accent > i { background: var(--accent); }
+  .metric { margin-bottom: 14px; }
+  .metric .top { display: flex; justify-content: space-between; align-items: baseline; margin-bottom: 4px; gap: 8px; }
+  .metric .top b { font-size: 18px; }
+  .pipe-row { display: grid; grid-template-columns: 190px 1fr 40px; gap: 10px; align-items: center; padding: 6px 0; color: inherit; }
+  .pipe-row:hover { text-decoration: none; background: var(--surface-2); }
+  @media (max-width: 640px) { .pipe-row { grid-template-columns: 1fr 60px 34px; } }
+
+  /* ---------- Status tracker ---------- */
+  .stepper { display: grid; grid-template-columns: repeat(4, 1fr); gap: 8px; }
+  @media (max-width: 760px) { .stepper { grid-template-columns: 1fr 1fr; } }
+  .step { border: 2px solid var(--border); border-radius: 10px; padding: 10px 12px; background: var(--surface); cursor: pointer; text-align: left; font: inherit; color: var(--text); position: relative; }
+  .step:hover { border-color: var(--brand-2); }
+  .step .n { font-size: 11px; font-weight: 700; color: var(--muted); text-transform: uppercase; letter-spacing: .04em; }
+  .step .t { font-weight: 700; }
+  .step .d { font-size: 12px; color: var(--muted); }
+  .step.done { border-color: var(--accent); background: var(--accent-soft); }
+  .step.done .n { color: var(--accent); }
+  .step.current { border-color: var(--brand); background: var(--brand-soft); box-shadow: 0 0 0 3px rgba(20,102,173,.12); }
+  .step.current .n { color: var(--brand); }
+  .typetoggle { display: inline-flex; border: 1px solid var(--border); border-radius: 8px; overflow: hidden; margin-top: 6px; }
+  .typetoggle button { border: 0; background: var(--surface); padding: 3px 10px; font: inherit; font-size: 12px; font-weight: 600; cursor: pointer; color: var(--muted); }
+  .typetoggle button.on { background: var(--brand); color: #fff; }
+
+  /* ---------- Profile ---------- */
+  .phys-head { display: flex; gap: 14px; align-items: center; flex-wrap: wrap; }
+  .avatar { width: 52px; height: 52px; border-radius: 50%; background: var(--brand); color: #fff; display: grid; place-items: center; font-weight: 700; font-size: 18px; flex: none; }
+  .phys-head .info { flex: 1; min-width: 200px; }
+  .phys-head .info .sub { color: var(--muted); }
+  .dl { display: grid; grid-template-columns: 140px 1fr; gap: 6px 12px; margin: 0; }
+  .dl dt { color: var(--muted); font-size: 12px; font-weight: 600; padding-top: 1px; }
+  .dl dd { margin: 0; overflow-wrap: anywhere; }
+  .section-label { font-size: 11px; font-weight: 700; color: var(--brand); text-transform: uppercase; letter-spacing: .05em; margin: 16px 0 8px; padding-top: 12px; border-top: 1px solid var(--border); }
+  .section-label:first-of-type { border-top: 0; padding-top: 0; margin-top: 0; }
+
+  /* ---------- Timeline ---------- */
+  .timeline { list-style: none; margin: 0; padding: 0; }
+  .timeline > li { border: 1px solid var(--border); border-radius: 10px; padding: 12px 14px; margin-bottom: 10px; background: var(--surface); }
+  .timeline .meta { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; font-size: 13px; }
+  .timeline .meta .method { font-weight: 700; }
+  .timeline .body { margin: 8px 0 0; white-space: pre-wrap; overflow-wrap: anywhere; }
+  .timeline .ask { margin-top: 8px; padding: 8px 10px; background: var(--surface-2); border-radius: 8px; display: flex; gap: 10px; align-items: center; flex-wrap: wrap; justify-content: space-between; }
+  .timeline .files { margin-top: 8px; display: flex; gap: 6px; flex-wrap: wrap; }
+  .file-chip { display: inline-flex; gap: 6px; align-items: center; border: 1px solid var(--border); border-radius: 8px; padding: 3px 8px; font-size: 12px; background: var(--surface-2); cursor: pointer; color: var(--text); font-family: inherit; }
+  .file-chip:hover { border-color: var(--brand-2); }
+  .timeline .foot { display: flex; justify-content: space-between; gap: 8px; margin-top: 8px; font-size: 12px; color: var(--muted); flex-wrap: wrap; }
+
+  .list { list-style: none; margin: 0; padding: 0; }
+  .list li { display: flex; justify-content: space-between; gap: 10px; align-items: flex-start; padding: 9px 0; border-bottom: 1px solid var(--border); }
+  .list li:last-child { border-bottom: 0; }
+  .empty { text-align: center; color: var(--muted); padding: 24px 12px; }
+  .tabs { display: flex; gap: 4px; flex-wrap: wrap; margin-bottom: 12px; border-bottom: 1px solid var(--border); }
+  .tabs button { border: 0; background: none; padding: 8px 12px; font: inherit; font-weight: 600; color: var(--muted); cursor: pointer; border-bottom: 2px solid transparent; margin-bottom: -1px; }
+  .tabs button.on { color: var(--brand); border-bottom-color: var(--brand); }
+
+  .notice { background: var(--warn-soft); border: 1px solid #f1d9a8; color: #7a5310; border-radius: 8px; padding: 10px 12px; font-size: 13px; }
+  .notice.info { background: var(--brand-soft); border-color: #c5dbf0; color: #184a78; }
+  code, .mono { font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; font-size: 12px; }
+  .hash-out { word-break: break-all; background: var(--surface-2); border: 1px solid var(--border); border-radius: 8px; padding: 8px 10px; }
+
+  /* ---------- Modal & toast ---------- */
+  .modal-backdrop { position: fixed; inset: 0; background: rgba(15, 23, 42, .5); z-index: 50; display: grid; place-items: start center; overflow-y: auto; padding: 40px 16px; }
+  .modal { background: var(--surface); border-radius: 12px; width: 100%; max-width: 760px; box-shadow: 0 20px 60px rgba(0,0,0,.3); }
+  .modal header { display: flex; justify-content: space-between; align-items: center; padding: 14px 18px; border-bottom: 1px solid var(--border); }
+  .modal header h2 { margin: 0; font-size: 17px; }
+  .modal .x { border: 0; background: none; font-size: 22px; cursor: pointer; color: var(--muted); line-height: 1; }
+  .modal .content { padding: 18px; }
+  .modal footer { display: flex; justify-content: flex-end; gap: 8px; padding: 12px 18px; border-top: 1px solid var(--border); background: var(--surface-2); border-radius: 0 0 12px 12px; }
+  #toast { position: fixed; bottom: 20px; left: 50%; transform: translateX(-50%); z-index: 60; display: grid; gap: 8px; }
+  .toast { background: #17212b; color: #fff; padding: 10px 16px; border-radius: 8px; box-shadow: 0 8px 24px rgba(0,0,0,.25); font-weight: 500; }
+  .toast.err { background: var(--danger); }
+
+  /* ---------- Print ---------- */
+  @media print {
+    .topbar, .no-print, form, .btn, .typetoggle { display: none !important; }
+    body { background: #fff; }
+    main { padding: 0; max-width: none; }
+    .card { box-shadow: none; break-inside: avoid; }
+    .detail-grid { grid-template-columns: 1fr 1fr; }
+  }
+</style>
+</head>
+<body>
+
+<!-- ===================== LOGIN ===================== -->
+<div id="login" hidden>
+  <form class="login-card form" id="login-form" autocomplete="on">
+    <div class="logo" aria-hidden="true">⚕</div>
+    <div>
+      <h1 id="login-title">Physician Relations CRM</h1>
+      <p class="muted" id="login-org"></p>
+    </div>
+    <div id="login-error" class="login-error" hidden></div>
+    <label>Username<input name="username" autocomplete="username" required autofocus></label>
+    <label>Password<input name="password" type="password" autocomplete="current-password" required></label>
+    <button class="btn primary block" type="submit">Sign in</button>
+  </form>
+</div>
+
+<!-- ===================== APP ===================== -->
+<div id="app" hidden>
+  <header class="topbar">
+    <div class="topbar-inner">
+      <div class="brand"><span class="dot" aria-hidden="true">⚕</span><span id="brand-name">Physician CRM</span></div>
+      <nav class="nav" id="nav">
+        <a href="#/dashboard" data-nav="dashboard">Dashboard</a>
+        <a href="#/physicians" data-nav="physicians">Physicians</a>
+        <a href="#/followups" data-nav="followups">Follow-Ups<span class="count" id="nav-fu-count" hidden></span></a>
+        <a href="#/activity" data-nav="activity">Contact Log</a>
+        <a href="#/settings" data-nav="settings">Settings</a>
+      </nav>
+      <div class="userbox"><span id="user-name"></span><button type="button" data-act="logout">Sign out</button></div>
+    </div>
+  </header>
+  <main id="view"></main>
+</div>
+
+<div id="modal-root"></div>
+<div id="toast" role="status" aria-live="polite"></div>
+<input type="file" id="import-input" accept="application/json,.json" hidden>
+
+<script>
+'use strict';
+
+/* =====================================================================
+   CONFIGURATION — this is the only block you normally need to edit.
+   ---------------------------------------------------------------------
+   users: the four logins. Passwords are never stored in this file —
+   only a SHA-256 hash of "username:password". To set a new password,
+   sign in, open Settings → "Password hash generator", then paste the
+   generated hash into the matching user's `hash` below and re-upload.
+   role 'admin' can delete physicians, import backups and clear data.
+   ===================================================================== */
+const CONFIG = {
+  appName: 'Physician Relations CRM',
+  orgName: 'Hospital & Clinics — Physician Relations',
+  idleMinutes: 30,           // auto sign-out after this many idle minutes
+  maxFileMB: 15,             // per attachment
+  users: [
+    { username: 'admin', name: 'Administrator', role: 'admin', hash: '929458ed4b5fdf4dbe380aa58654e391d17c293ad42986a5dfbf8cf93cc88da1' },
+    { username: 'user2', name: 'Team Member 2', role: 'user',  hash: '253ecdc3069fe2475ab31b63bb4fcf9d158275e7078d77977c9eccf44d48fc60' },
+    { username: 'user3', name: 'Team Member 3', role: 'user',  hash: '4b4b23ca3c91df30c2a35ee7b001fd354e7aced5264aec7333102a4502f51a20' },
+    { username: 'user4', name: 'Team Member 4', role: 'user',  hash: '891207974d05da5aea0cc4f5b67a8ab390cb28ab9fac5acbb398cb17150c4af8' },
+  ],
+};
+
+/* ===================== Constants (from the whiteboard) ===================== */
+// Status Tracker: a) Prospect / Referrer → b) Credentialing Packet Sent → c) Credentialing Done → d) On-Boarded
+const STAGES = [
+  { key: 'a', label: 'Prospect / Referrer', short: 'Prospect / Referrer' },
+  { key: 'b', label: 'Credentialing Packet Sent', short: 'Packet Sent' },
+  { key: 'c', label: 'Credentialing Done', short: 'Credentialed' },
+  { key: 'd', label: 'On-Boarded', short: 'On-Boarded' },
+];
+// Contact Management → 2) How
+const METHODS = ['Email', 'Phone Call', 'In Person', 'Text'];
+const METHOD_ICON = { 'Email': '✉️', 'Phone Call': '📞', 'In Person': '🤝', 'Text': '💬' };
+const CREDENTIALS = ['MD', 'DO', 'DPM', 'DDS', 'PA-C', 'NP', 'CRNA', 'Other'];
+const DEFAULT_SPECIALTIES = [
+  'Anesthesiology', 'Cardiology', 'Cardiothoracic Surgery', 'Colorectal Surgery', 'Dermatology', 'Emergency Medicine',
+  'ENT / Otolaryngology', 'Family Medicine', 'Gastroenterology', 'General Surgery', 'Hospitalist', 'Internal Medicine',
+  'Nephrology', 'Neurology', 'Neurosurgery', 'OB/GYN', 'Oncology', 'Ophthalmology', 'Orthopedic Surgery',
+  'Pain Management', 'Pediatrics', 'Plastic Surgery', 'Podiatry', 'Pulmonology', 'Radiology', 'Spine Surgery',
+  'Urology', 'Vascular Surgery',
+];
+const STORE_KEY = 'pcrm.db.v1';
+const SESSION_KEY = 'pcrm.session';
+
+/* ===================== Utilities ===================== */
+const $ = (s, r = document) => r.querySelector(s);
+const $$ = (s, r = document) => [...r.querySelectorAll(s)];
+const esc = (s) => String(s ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+const uid = () => Date.now().toString(36) + Math.random().toString(36).slice(2, 9);
+const num = (v) => { const n = parseFloat(v); return Number.isFinite(n) ? n : 0; };
+const nowISO = () => new Date().toISOString();
+function todayISO() { const d = new Date(); return new Date(d.getTime() - d.getTimezoneOffset() * 60000).toISOString().slice(0, 10); }
+function addDays(iso, n) { const d = new Date(iso + 'T00:00:00'); d.setDate(d.getDate() + n); return new Date(d.getTime() - d.getTimezoneOffset() * 60000).toISOString().slice(0, 10); }
+function daysBetween(a, b) { return Math.round((new Date(b + 'T00:00:00') - new Date(a + 'T00:00:00')) / 86400000); }
+function fmtDate(iso) { if (!iso) return '—'; const d = new Date(iso.length === 10 ? iso + 'T00:00:00' : iso); return isNaN(d) ? esc(iso) : d.toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric' }); }
+function fmtTS(ts) { if (!ts) return '—'; return new Date(ts).toLocaleString(undefined, { month: 'short', day: 'numeric', year: 'numeric', hour: 'numeric', minute: '2-digit' }); }
+function fmtSize(b) { return b < 1024 ? b + ' B' : b < 1048576 ? (b / 1024).toFixed(0) + ' KB' : (b / 1048576).toFixed(1) + ' MB'; }
+function pct(a, g) { return g > 0 ? Math.round((a / g) * 100) : null; }
+function fmtNum(n) { return (Math.round(n * 10) / 10).toLocaleString(); }
+function initials(p) { return ((p.firstName || '')[0] || '') + ((p.lastName || '')[0] || ''); }
+function physName(p) { return `Dr. ${p.firstName || ''} ${p.lastName || ''}`.replace(/\s+/g, ' ').trim() + (p.credentials ? `, ${p.credentials}` : ''); }
+function physSortName(p) { return `${p.lastName || ''}, ${p.firstName || ''}`; }
+function telLink(v) { return v ? `<a href="tel:${esc(v.replace(/[^\d+]/g, ''))}">${esc(v)}</a>` : '—'; }
+function mailLink(v) { return v ? `<a href="mailto:${esc(v)}">${esc(v)}</a>` : '—'; }
+function orDash(v) { return v ? esc(v) : '<span class="muted">—</span>'; }
+
+// SHA-256 (pure JS, so login also works when opened from a local file)
+function sha256(str) {
+  const bytes = Array.from(new TextEncoder().encode(str));
+  const K = [], H = [];
+  let n = 2, c = 0;
+  const isPrime = (p) => { for (let f = 2; f * f <= p; f++) if (p % f === 0) return false; return true; };
+  const frac = (x) => ((x - Math.floor(x)) * 4294967296) | 0;
+  while (c < 64) { if (isPrime(n)) { if (c < 8) H[c] = frac(Math.pow(n, 1 / 2)); K[c] = frac(Math.pow(n, 1 / 3)); c++; } n++; }
+  const bitLen = bytes.length * 8;
+  bytes.push(0x80);
+  while (bytes.length % 64 !== 56) bytes.push(0);
+  const hi = Math.floor(bitLen / 4294967296);
+  for (let i = 3; i >= 0; i--) bytes.push((hi >>> (i * 8)) & 255);
+  for (let i = 3; i >= 0; i--) bytes.push((bitLen >>> (i * 8)) & 255);
+  const rotr = (x, r) => (x >>> r) | (x << (32 - r));
+  const w = new Array(64);
+  for (let o = 0; o < bytes.length; o += 64) {
+    for (let i = 0; i < 16; i++) w[i] = (bytes[o + i * 4] << 24) | (bytes[o + i * 4 + 1] << 16) | (bytes[o + i * 4 + 2] << 8) | bytes[o + i * 4 + 3];
+    for (let i = 16; i < 64; i++) {
+      const s0 = rotr(w[i - 15], 7) ^ rotr(w[i - 15], 18) ^ (w[i - 15] >>> 3);
+      const s1 = rotr(w[i - 2], 17) ^ rotr(w[i - 2], 19) ^ (w[i - 2] >>> 10);
+      w[i] = (w[i - 16] + s0 + w[i - 7] + s1) | 0;
+    }
+    let [a, b, cc, d, e, f, g, h] = H;
+    for (let i = 0; i < 64; i++) {
+      const t1 = (h + (rotr(e, 6) ^ rotr(e, 11) ^ rotr(e, 25)) + ((e & f) ^ (~e & g)) + K[i] + w[i]) | 0;
+      const t2 = ((rotr(a, 2) ^ rotr(a, 13) ^ rotr(a, 22)) + ((a & b) ^ (a & cc) ^ (b & cc))) | 0;
+      h = g; g = f; f = e; e = (d + t1) | 0; d = cc; cc = b; b = a; a = (t1 + t2) | 0;
+    }
+    H[0] = (H[0] + a) | 0; H[1] = (H[1] + b) | 0; H[2] = (H[2] + cc) | 0; H[3] = (H[3] + d) | 0;
+    H[4] = (H[4] + e) | 0; H[5] = (H[5] + f) | 0; H[6] = (H[6] + g) | 0; H[7] = (H[7] + h) | 0;
+  }
+  return H.map((x) => (x >>> 0).toString(16).padStart(8, '0')).join('');
+}
+
+function toast(msg, isErr) {
+  const el = document.createElement('div');
+  el.className = 'toast' + (isErr ? ' err' : '');
+  el.textContent = msg;
+  $('#toast').appendChild(el);
+  setTimeout(() => el.remove(), isErr ? 5000 : 2600);
+}
+
+function download(filename, content, type) {
+  const blob = content instanceof Blob ? content : new Blob([content], { type: type || 'text/plain' });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url; a.download = filename;
+  document.body.appendChild(a); a.click(); a.remove();
+  setTimeout(() => URL.revokeObjectURL(url), 1500);
+}
+
+function toCSV(rows) {
+  return rows.map((r) => r.map((v) => {
+    const s = String(v ?? '');
+    return /[",\n\r]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s;
+  }).join(',')).join('\r\n');
+}
+
+/* ===================== Data storage =====================
+   Records live in localStorage; attachments live in IndexedDB
+   (much larger capacity). Both stay in this browser only —
+   use Settings → Export backup to move or share data.        */
+let db;
+
+function emptyDB() {
+  return {
+    version: 1,
+    settings: {
+      team: CONFIG.users.map((u) => u.name),
+      specialties: DEFAULT_SPECIALTIES.slice(),
+    },
+    physicians: [],
+    contacts: [],
+    meta: { createdAt: nowISO(), updatedAt: nowISO() },
+  };
+}
+
+function loadDB() {
+  try {
+    const raw = localStorage.getItem(STORE_KEY);
+    if (raw) {
+      const d = JSON.parse(raw);
+      const base = emptyDB();
+      d.settings = Object.assign(base.settings, d.settings || {});
+      d.physicians = d.physicians || [];
+      d.contacts = d.contacts || [];
+      d.meta = d.meta || base.meta;
+      return d;
+    }
+  } catch (e) { console.error(e); }
+  return emptyDB();
+}
+
+function saveDB() {
+  db.meta.updatedAt = nowISO();
+  try {
+    localStorage.setItem(STORE_KEY, JSON.stringify(db));
+    return true;
+  } catch (e) {
+    toast('Could not save — browser storage is full. Export a backup and remove old attachments.', true);
+    return false;
+  }
+}
+
+const Files = {
+  _db: null,
+  open() {
+    if (this._db) return Promise.resolve(this._db);
+    return new Promise((resolve, reject) => {
+      const req = indexedDB.open('pcrm-files', 1);
+      req.onupgradeneeded = () => req.result.createObjectStore('files');
+      req.onsuccess = () => { this._db = req.result; resolve(this._db); };
+      req.onerror = () => reject(req.error);
+    });
+  },
+  async tx(mode, fn) {
+    const d = await this.open();
+    return new Promise((resolve, reject) => {
+      const t = d.transaction('files', mode);
+      const store = t.objectStore('files');
+      const req = fn(store);
+      t.oncomplete = () => resolve(req && req.result);
+      t.onerror = () => reject(t.error);
+    });
+  },
+  put(id, blob) { return this.tx('readwrite', (s) => s.put(blob, id)); },
+  get(id) { return this.tx('readonly', (s) => s.get(id)); },
+  del(id) { return this.tx('readwrite', (s) => s.delete(id)); },
+  clear() { return this.tx('readwrite', (s) => s.clear()); },
+};
+
+/* ===================== Auth ===================== */
+let session = null;
+
+function getSession() {
+  try {
+    const s = JSON.parse(sessionStorage.getItem(SESSION_KEY) || 'null');
+    if (!s) return null;
+    const user = CONFIG.users.find((u) => u.username === s.username);
+    if (!user) return null;
+    if (Date.now() - s.lastActive > CONFIG.idleMinutes * 60000) { sessionStorage.removeItem(SESSION_KEY); return null; }
+    return { ...s, name: user.name, role: user.role };
+  } catch { return null; }
+}
+
+function touchSession() {
+  if (!session) return;
+  session.lastActive = Date.now();
+  try { sessionStorage.setItem(SESSION_KEY, JSON.stringify({ username: session.username, lastActive: session.lastActive })); } catch {}
+}
+
+function isAdmin() { return session && session.role === 'admin'; }
+
+function showLogin(msg) {
+  session = null;
+  $('#app').hidden = true;
+  $('#login').hidden = false;
+  closeModal();
+  const err = $('#login-error');
+  err.hidden = !msg; err.textContent = msg || '';
+  $('#login-form').reset();
+  setTimeout(() => $('#login-form [name=username]').focus(), 0);
+}
+
+function showApp() {
+  $('#login').hidden = true;
+  $('#app').hidden = false;
+  $('#user-name').textContent = session.name + (isAdmin() ? ' (admin)' : '');
+  if (!location.hash || location.hash === '#' || location.hash === '#/') location.hash = '#/dashboard';
+  else route();
+}
+
+function logout(msg) {
+  try { sessionStorage.removeItem(SESSION_KEY); } catch {}
+  showLogin(msg);
+}
+
+$('#login-form').addEventListener('submit', (e) => {
+  e.preventDefault();
+  const f = e.target;
+  const lockUntil = +(sessionStorage.getItem('pcrm.lock') || 0);
+  if (Date.now() < lockUntil) {
+    showLoginError(`Too many attempts. Try again in ${Math.ceil((lockUntil - Date.now()) / 1000)} seconds.`);
+    return;
+  }
+  const username = f.username.value.trim().toLowerCase();
+  const user = CONFIG.users.find((u) => u.username.toLowerCase() === username);
+  if (user && sha256(`${user.username}:${f.password.value}`) === user.hash) {
+    sessionStorage.removeItem('pcrm.fails');
+    session = { username: user.username, name: user.name, role: user.role, lastActive: Date.now() };
+    touchSession();
+    showApp();
+  } else {
+    const fails = +(sessionStorage.getItem('pcrm.fails') || 0) + 1;
+    sessionStorage.setItem('pcrm.fails', fails);
+    if (fails >= 5) { sessionStorage.setItem('pcrm.lock', Date.now() + 60000); sessionStorage.setItem('pcrm.fails', 0); }
+    showLoginError('Incorrect username or password.');
+    f.password.value = '';
+    f.password.focus();
+  }
+});
+function showLoginError(m) { const el = $('#login-error'); el.textContent = m; el.hidden = false; }
+
+['mousemove', 'keydown', 'click', 'touchstart', 'scroll'].forEach((ev) => document.addEventListener(ev, () => {
+  if (session && Date.now() - session.lastActive > 15000) touchSession();
+}, { passive: true }));
+setInterval(() => {
+  if (session && Date.now() - session.lastActive > CONFIG.idleMinutes * 60000) logout('Signed out after inactivity.');
+}, 30000);
+
+/* ===================== Derived data ===================== */
+const getPhys = (id) => db.physicians.find((p) => p.id === id);
+const contactsFor = (pid) => db.contacts.filter((c) => c.physicianId === pid).sort(byContactDesc);
+function byContactDesc(a, b) { return (b.date || '').localeCompare(a.date || '') || (b.createdAt || '').localeCompare(a.createdAt || ''); }
+function lastContact(pid) { return contactsFor(pid)[0] || null; }
+function openFollowups() { return db.contacts.filter((c) => c.fuDate && !c.fuDone); }
+function nextFU(pid) {
+  const open = db.contacts.filter((c) => c.physicianId === pid && c.fuDate && !c.fuDone).sort((a, b) => a.fuDate.localeCompare(b.fuDate));
+  return open[0] || null;
+}
+function fuState(c) {
+  if (c.fuDone) return 'done';
+  const d = daysBetween(todayISO(), c.fuDate);
+  if (d < 0) return 'over';
+  if (d <= 7) return 'soon';
+  return 'later';
+}
+function fuBadge(c) {
+  const st = fuState(c);
+  const d = daysBetween(todayISO(), c.fuDate);
+  const txt = st === 'done' ? 'Done' : d < 0 ? `${-d}d overdue` : d === 0 ? 'Due today' : d === 1 ? 'Tomorrow' : `in ${d}d`;
+  return `<span class="badge b-${st}">${txt}</span>`;
+}
+function stageIndex(p) { return Math.max(0, STAGES.findIndex((s) => s.key === p.stage)); }
+function stageBadge(p) {
+  if (p.stage === 'a' || !p.stage) {
+    return p.relType === 'referrer' ? '<span class="badge b-ref">Referrer</span>' : '<span class="badge b-a">Prospect</span>';
+  }
+  const s = STAGES.find((x) => x.key === p.stage);
+  return `<span class="badge b-${p.stage}">${esc(s.short)}</span>`;
+}
+function goalRow(p, year) { return (p.goals || []).find((g) => String(g.year) === String(year)); }
+function yearsInData() {
+  const ys = new Set([new Date().getFullYear()]);
+  db.physicians.forEach((p) => (p.goals || []).forEach((g) => g.year && ys.add(+g.year)));
+  return [...ys].sort((a, b) => b - a);
+}
+
+/* ===================== UI state ===================== */
+const ui = {
+  phys: { q: '', stage: '', type: '', spec: '', sort: 'name', dir: 1 },
+  fu: { tab: 'open', owner: '' },
+  act: { q: '', who: '', method: '', from: '', to: '' },
+  year: new Date().getFullYear(),
+};
+
+/* ===================== Router ===================== */
+function route() {
+  if (!session) return;
+  const parts = location.hash.replace(/^#\/?/, '').split('/');
+  const view = parts[0] || 'dashboard';
+  $$('#nav a').forEach((a) => a.classList.toggle('active', a.dataset.nav === (view === 'physician' ? 'physicians' : view)));
+  updateNavCount();
+  const main = $('#view');
+  switch (view) {
+    case 'physicians': main.innerHTML = viewPhysicians(); updatePhysTable(); break;
+    case 'physician': {
+      const p = getPhys(parts[1]);
+      main.innerHTML = p ? viewPhysician(p) : `<div class="card empty">Physician not found. <a href="#/physicians">Back to list</a></div>`;
+      break;
+    }
+    case 'followups': main.innerHTML = viewFollowups(); break;
+    case 'activity': main.innerHTML = viewActivity(); updateActivityTable(); break;
+    case 'settings': main.innerHTML = viewSettings(); break;
+    default: main.innerHTML = viewDashboard();
+  }
+  window.scrollTo(0, 0);
+}
+function rerender() { const y = window.scrollY; route(); window.scrollTo(0, y); }
+function updateNavCount() {
+  const n = openFollowups().filter((c) => fuState(c) === 'over').length;
+  const el = $('#nav-fu-count');
+  el.hidden = !n; el.textContent = n;
+}
+window.addEventListener('hashchange', route);
+
+/* ===================== View: Dashboard ===================== */
+function viewDashboard() {
+  const P = db.physicians;
+  if (!P.length) {
+    return `
+      <div class="page-head"><h1>Dashboard</h1></div>
+      <div class="card empty" style="padding:48px 16px">
+        <h2 style="font-size:18px">Welcome, ${esc(session.name)}</h2>
+        <p>No physicians yet. Add your first physician to start tracking contacts, credentialing status and goals.</p>
+        <div style="display:flex;gap:8px;justify-content:center;flex-wrap:wrap">
+          <button class="btn primary" data-act="add-physician">+ Add physician</button>
+          <button class="btn" data-act="load-sample">Load sample data to explore</button>
+        </div>
+      </div>`;
+  }
+  const fus = openFollowups();
+  const overdue = fus.filter((c) => fuState(c) === 'over');
+  const soon = fus.filter((c) => fuState(c) === 'soon');
+  const count = (fn) => P.filter(fn).length;
+  const prospects = count((p) => (p.stage || 'a') === 'a' && p.relType !== 'referrer');
+  const referrers = count((p) => (p.stage || 'a') === 'a' && p.relType === 'referrer');
+  const monthStart = todayISO().slice(0, 8) + '01';
+  const contactsMonth = db.contacts.filter((c) => c.date >= monthStart).length;
+
+  // goals
+  const y = ui.year;
+  let sg = 0, sa = 0, ag = 0, aa = 0;
+  const perPhys = [];
+  P.forEach((p) => {
+    const g = goalRow(p, y); if (!g) return;
+    sg += num(g.surgGoal); sa += num(g.surgActual); ag += num(g.ancGoal); aa += num(g.ancActual);
+    perPhys.push({ p, g });
+  });
+  const behind = perPhys
+    .map(({ p, g }) => ({ p, g, sp: pct(num(g.surgActual), num(g.surgGoal)) }))
+    .filter((x) => x.sp !== null && x.sp < 100)
+    .sort((a, b) => a.sp - b.sp).slice(0, 5);
+
+  const pipe = [
+    { label: 'a · Prospect', n: prospects, f: { stage: 'a', type: 'prospect' } },
+    { label: 'a · Referrer', n: referrers, f: { stage: 'a', type: 'referrer' } },
+    { label: 'b · Credentialing Packet Sent', n: count((p) => p.stage === 'b'), f: { stage: 'b' } },
+    { label: 'c · Credentialing Done', n: count((p) => p.stage === 'c'), f: { stage: 'c' } },
+    { label: 'd · On-Boarded', n: count((p) => p.stage === 'd'), f: { stage: 'd' } },
+  ];
+  const maxPipe = Math.max(1, ...pipe.map((x) => x.n));
+  const attention = [...overdue, ...soon].sort((a, b) => a.fuDate.localeCompare(b.fuDate)).slice(0, 8);
+  const recent = db.contacts.slice().sort(byContactDesc).slice(0, 8);
+
+  return `
+    <div class="page-head">
+      <h1>Dashboard</h1>
+      <div class="actions">
+        <button class="btn" data-act="add-physician">+ Add physician</button>
+      </div>
+    </div>
+    <div class="kpis">
+      <a class="kpi" href="#/physicians"><div class="label">Physicians</div><div class="value">${P.length}</div></a>
+      <a class="kpi" href="#/physicians" data-act="filter-phys" data-stage="a" data-type="referrer"><div class="label">Referrers</div><div class="value">${referrers}</div></a>
+      <a class="kpi" href="#/physicians" data-act="filter-phys" data-stage="b"><div class="label">In credentialing</div><div class="value">${count((p) => p.stage === 'b' || p.stage === 'c')}</div></a>
+      <a class="kpi ok" href="#/physicians" data-act="filter-phys" data-stage="d"><div class="label">On-boarded</div><div class="value">${count((p) => p.stage === 'd')}</div></a>
+      <a class="kpi ${overdue.length ? 'danger' : ''}" href="#/followups"><div class="label">Overdue follow-ups</div><div class="value">${overdue.length}</div></a>
+      <a class="kpi" href="#/activity"><div class="label">Contacts this month</div><div class="value">${contactsMonth}</div></a>
+    </div>
+
+    <div class="grid2">
+      <section class="card">
+        <div class="card-head"><h2>Status tracker pipeline</h2><span class="muted small">Click a row to filter</span></div>
+        ${pipe.map((r) => `
+          <a class="pipe-row" href="#/physicians" data-act="filter-phys" data-stage="${r.f.stage}" data-type="${r.f.type || ''}">
+            <span>${esc(r.label)}</span>
+            <span class="bar"><i style="width:${(r.n / maxPipe) * 100}%"></i></span>
+            <b class="num" style="text-align:right">${r.n}</b>
+          </a>`).join('')}
+      </section>
+
+      <section class="card">
+        <div class="card-head">
+          <h2>Goals vs. actuals</h2>
+          <select data-change="dash-year" style="width:auto">${yearsInData().map((yy) => `<option ${yy === +y ? 'selected' : ''}>${yy}</option>`).join('')}</select>
+        </div>
+        ${metricHTML('Surgeries', sa, sg, '')}
+        ${metricHTML('Ancillary', aa, ag, 'accent')}
+        <h3 style="margin-top:6px">Furthest behind surgical goal</h3>
+        ${behind.length ? `<ul class="list">${behind.map(({ p, g, sp }) => `
+          <li><a href="#/physician/${p.id}">${esc(physName(p))}</a><span class="muted nowrap">${fmtNum(num(g.surgActual))} / ${fmtNum(num(g.surgGoal))} · <b>${sp}%</b></span></li>`).join('')}</ul>`
+          : `<p class="muted small">${perPhys.length ? 'Everyone with a goal is at or above target.' : `No goals entered for ${y} yet — add them on each physician's page.`}</p>`}
+      </section>
+    </div>
+
+    <div class="grid2">
+      <section class="card">
+        <div class="card-head"><h2>Follow-ups needing attention</h2><a href="#/followups" class="small">View all →</a></div>
+        ${attention.length ? `<ul class="list">${attention.map((c) => {
+          const p = getPhys(c.physicianId);
+          return `<li><div><a href="#/physician/${c.physicianId}"><b>${esc(p ? physName(p) : 'Unknown')}</b></a>
+            <div class="small muted">${esc(c.ask || c.comm || '').slice(0, 110)}</div>
+            <div class="small muted">Owner: ${esc(c.who)}</div></div>
+            <div style="text-align:right">${fuBadge(c)}<div class="small muted">${fmtDate(c.fuDate)}</div></div></li>`;
+        }).join('')}</ul>` : '<p class="empty">Nothing overdue or due this week. 🎉</p>'}
+      </section>
+
+      <section class="card">
+        <div class="card-head"><h2>Recent contact activity</h2><a href="#/activity" class="small">Full log →</a></div>
+        ${recent.length ? `<ul class="list">${recent.map((c) => {
+          const p = getPhys(c.physicianId);
+          return `<li><div>${METHOD_ICON[c.method] || ''} <a href="#/physician/${c.physicianId}">${esc(p ? physName(p) : 'Unknown')}</a>
+            <div class="small muted">${esc(c.comm || '').slice(0, 110)}</div></div>
+            <div class="small muted nowrap" style="text-align:right">${fmtDate(c.date)}<br>${esc(c.who)}</div></li>`;
+        }).join('')}</ul>` : '<p class="empty">No contacts logged yet.</p>'}
+      </section>
+    </div>`;
+}
+function metricHTML(label, actual, goal, cls) {
+  const p = pct(actual, goal);
+  return `<div class="metric">
+    <div class="top"><span>${label}</span><span><b>${fmtNum(actual)}</b> <span class="muted">/ ${fmtNum(goal)} goal ${p !== null ? `· ${p}%` : ''}</span></span></div>
+    <div class="bar ${cls}"><i style="width:${Math.min(100, p || 0)}%"></i></div>
+  </div>`;
+}
+
+/* ===================== View: Physicians list ===================== */
+function viewPhysicians() {
+  const f = ui.phys;
+  const specs = [...new Set(db.physicians.map((p) => p.specialty).filter(Boolean))].sort();
+  return `
+    <div class="page-head">
+      <h1>Physicians</h1>
+      <div class="actions">
+        <button class="btn" data-act="export-phys-csv">Export CSV</button>
+        <button class="btn primary" data-act="add-physician">+ Add physician</button>
+      </div>
+    </div>
+    <section class="card">
+      <div class="filters">
+        <input type="search" placeholder="Search name, practice, specialty, manager, NPI…" value="${esc(f.q)}" data-input="phys-q" aria-label="Search physicians">
+        <select data-change="phys-stage" aria-label="Status">
+          <option value="">All statuses</option>
+          ${STAGES.map((s) => `<option value="${s.key}" ${f.stage === s.key ? 'selected' : ''}>${s.key} · ${esc(s.label)}</option>`).join('')}
+        </select>
+        <select data-change="phys-type" aria-label="Type">
+          <option value="">Prospect &amp; Referrer</option>
+          <option value="prospect" ${f.type === 'prospect' ? 'selected' : ''}>Prospects</option>
+          <option value="referrer" ${f.type === 'referrer' ? 'selected' : ''}>Referrers</option>
+        </select>
+        <select data-change="phys-spec" aria-label="Specialty">
+          <option value="">All specialties</option>
+          ${specs.map((s) => `<option ${f.spec === s ? 'selected' : ''}>${esc(s)}</option>`).join('')}
+        </select>
+      </div>
+      <div class="table-wrap" id="phys-table"></div>
+    </section>`;
+}
+function updatePhysTable() {
+  const el = $('#phys-table'); if (!el) return;
+  const f = ui.phys;
+  const q = f.q.trim().toLowerCase();
+  const y = new Date().getFullYear();
+  let rows = db.physicians.map((p) => {
+    const lc = lastContact(p.id), nf = nextFU(p.id), g = goalRow(p, y) || {};
+    return { p, lc, nf, g };
+  }).filter(({ p }) => {
+    if (f.stage && (p.stage || 'a') !== f.stage) return false;
+    if (f.type && (p.relType || 'prospect') !== f.type) return false;
+    if (f.spec && p.specialty !== f.spec) return false;
+    if (q) {
+      const hay = [p.firstName, p.lastName, p.credentials, p.specialty, p.practice, p.npi, p.email, p.pmName, p.city].join(' ').toLowerCase();
+      if (!hay.includes(q)) return false;
+    }
+    return true;
+  });
+  const key = {
+    name: (r) => physSortName(r.p).toLowerCase(),
+    specialty: (r) => (r.p.specialty || '').toLowerCase(),
+    practice: (r) => (r.p.practice || '').toLowerCase(),
+    status: (r) => stageIndex(r.p) * 2 + (r.p.relType === 'referrer' ? 1 : 0),
+    last: (r) => (r.lc ? r.lc.date : ''),
+    next: (r) => (r.nf ? r.nf.fuDate : '9999'),
+    surg: (r) => num(r.g.surgActual),
+    anc: (r) => num(r.g.ancActual),
+  }[f.sort];
+  rows.sort((a, b) => { const x = key(a), z = key(b); return (x > z ? 1 : x < z ? -1 : 0) * f.dir; });
+  const th = (k, label, cls = '') => `<th class="sortable ${cls}" data-act="sort-phys" data-key="${k}">${label}${f.sort === k ? (f.dir > 0 ? ' ▲' : ' ▼') : ''}</th>`;
+  el.innerHTML = rows.length ? `
+    <table>
+      <thead><tr>
+        ${th('name', 'Physician')}${th('specialty', 'Specialty')}${th('practice', 'Practice')}${th('status', 'Status')}
+        ${th('last', 'Last contact')}${th('next', 'Next F/U')}${th('surg', `Surg ${y} (act / goal)`, 'num')}${th('anc', `Ancillary ${y}`, 'num')}
+      </tr></thead>
+      <tbody>${rows.map(({ p, lc, nf, g }) => `
+        <tr class="clickable" data-act="open-phys" data-id="${p.id}">
+          <td><a href="#/physician/${p.id}"><b>${esc(physSortName(p))}</b></a>${p.credentials ? `<span class="muted">, ${esc(p.credentials)}</span>` : ''}</td>
+          <td>${orDash(p.specialty)}</td>
+          <td>${orDash(p.practice)}</td>
+          <td>${stageBadge(p)}</td>
+          <td class="nowrap">${lc ? `${fmtDate(lc.date)}<div class="small muted">${esc(lc.method)} · ${esc(lc.who)}</div>` : '<span class="muted">Never</span>'}</td>
+          <td class="nowrap">${nf ? `${fmtDate(nf.fuDate)}<div>${fuBadge(nf)}</div>` : '<span class="muted">—</span>'}</td>
+          <td class="num nowrap">${g.surgGoal || g.surgActual ? `${fmtNum(num(g.surgActual))} / ${fmtNum(num(g.surgGoal))}` : '<span class="muted">—</span>'}</td>
+          <td class="num nowrap">${g.ancGoal || g.ancActual ? `${fmtNum(num(g.ancActual))} / ${fmtNum(num(g.ancGoal))}` : '<span class="muted">—</span>'}</td>
+        </tr>`).join('')}
+      </tbody>
+    </table>
+    <p class="muted small">${rows.length} of ${db.physicians.length} physicians</p>`
+    : `<div class="empty">${db.physicians.length ? 'No physicians match these filters.' : 'No physicians yet. Click <b>+ Add physician</b> to get started.'}</div>`;
+}
+
+/* ===================== View: Physician detail ===================== */
+function viewPhysician(p) {
+  const cs = contactsFor(p.id);
+  const idx = stageIndex(p);
+  const hist = (p.stageHistory || []).slice().reverse();
+  const addr = [p.address, [p.city, p.state].filter(Boolean).join(', ') + (p.zip ? ' ' + p.zip : '')].filter((x) => x && x.trim()).map(esc).join('<br>');
+  return `
+    <div class="no-print" style="margin-bottom:10px"><a href="#/physicians">← All physicians</a></div>
+    <section class="card">
+      <div class="phys-head">
+        <div class="avatar" aria-hidden="true">${esc(initials(p).toUpperCase())}</div>
+        <div class="info">
+          <h1>${esc(physName(p))}</h1>
+          <div class="sub">${[p.specialty, p.practice].filter(Boolean).map(esc).join(' · ') || 'No specialty / practice yet'}</div>
+        </div>
+        <div>${stageBadge(p)}</div>
+        <div class="actions" style="display:flex;gap:8px;flex-wrap:wrap">
+          <button class="btn" data-act="edit-physician" data-id="${p.id}">Edit profile</button>
+          <button class="btn" data-act="print">Print</button>
+          ${isAdmin() ? `<button class="btn danger" data-act="delete-physician" data-id="${p.id}">Delete</button>` : ''}
+        </div>
+      </div>
+    </section>
+
+    <section class="card">
+      <div class="card-head"><h2>Status tracker</h2><span class="muted small">Click a step to update</span></div>
+      <div class="stepper">
+        ${STAGES.map((s, i) => {
+          const h = (p.stageHistory || []).filter((x) => x.stage === s.key).slice(-1)[0];
+          const cls = i < idx ? 'done' : i === idx ? 'current' : '';
+          return `<div class="step ${cls}" role="button" tabindex="0" data-act="set-stage" data-id="${p.id}" data-stage="${s.key}">
+            <div class="n">${s.key} ${i < idx ? '✓' : ''}</div>
+            <div class="t">${s.key === 'a' ? (p.relType === 'referrer' ? 'Referrer' : 'Prospect') : esc(s.label)}</div>
+            <div class="d">${h ? `${fmtDate(h.date)} · ${esc(h.by)}` : '&nbsp;'}</div>
+            ${s.key === 'a' ? `<div class="typetoggle" role="group" aria-label="Prospect or referrer">
+              <button type="button" class="${p.relType !== 'referrer' ? 'on' : ''}" data-act="set-type" data-id="${p.id}" data-type="prospect">Prospect</button>
+              <button type="button" class="${p.relType === 'referrer' ? 'on' : ''}" data-act="set-type" data-id="${p.id}" data-type="referrer">Referrer</button>
+            </div>` : ''}
+          </div>`;
+        }).join('')}
+      </div>
+      ${hist.length ? `<details style="margin-top:10px"><summary class="small muted" style="cursor:pointer">Status history (${hist.length})</summary>
+        <ul class="list small">${hist.map((h) => `<li><span>${esc(h.label || (STAGES.find((s) => s.key === h.stage) || {}).label || h.stage)}</span><span class="muted">${fmtDate(h.date)} · ${esc(h.by)}</span></li>`).join('')}</ul></details>` : ''}
+    </section>
+
+    <div class="detail-grid">
+      <div>
+        <section class="card">
+          <div class="card-head"><h2>Physician profile</h2><button class="btn sm" data-act="edit-physician" data-id="${p.id}">Edit</button></div>
+          <div class="section-label">1 · Contact info</div>
+          <dl class="dl">
+            <dt>Office phone</dt><dd>${telLink(p.phone)}</dd>
+            <dt>Cell / direct</dt><dd>${telLink(p.cell)}</dd>
+            <dt>Email</dt><dd>${mailLink(p.email)}</dd>
+            <dt>Fax</dt><dd>${orDash(p.fax)}</dd>
+            <dt>NPI</dt><dd>${orDash(p.npi)}</dd>
+          </dl>
+          <div class="section-label">2 · Specialty</div>
+          <dl class="dl"><dt>Specialty</dt><dd>${orDash(p.specialty)}</dd></dl>
+          <div class="section-label">3 · Practice</div>
+          <dl class="dl">
+            <dt>Practice</dt><dd>${orDash(p.practice)}</dd>
+            <dt>Address</dt><dd>${addr || '<span class="muted">—</span>'}</dd>
+          </dl>
+          <div class="section-label">4 · Practice manager / contact</div>
+          <dl class="dl">
+            <dt>Name</dt><dd>${orDash(p.pmName)}${p.pmTitle ? ` <span class="muted">(${esc(p.pmTitle)})</span>` : ''}</dd>
+            <dt>Phone</dt><dd>${telLink(p.pmPhone)}</dd>
+            <dt>Email</dt><dd>${mailLink(p.pmEmail)}</dd>
+          </dl>
+          ${p.notes ? `<div class="section-label">Notes</div><div style="white-space:pre-wrap">${esc(p.notes)}</div>` : ''}
+          <p class="small muted" style="margin:14px 0 0">Created ${fmtTS(p.createdAt)} by ${esc(p.createdBy)}${p.updatedAt ? ` · Updated ${fmtTS(p.updatedAt)} by ${esc(p.updatedBy)}` : ''}</p>
+        </section>
+
+        <section class="card">
+          <div class="card-head"><h2>5 · Goals / actuals</h2><button class="btn sm no-print" data-act="add-goal" data-id="${p.id}">+ Add year</button></div>
+          ${goalsTableHTML(p)}
+        </section>
+      </div>
+
+      <div>
+        <section class="card no-print">
+          <div class="card-head"><h2>Log a contact</h2><span class="tag">Contact management</span></div>
+          ${contactFormHTML(p.id, null)}
+        </section>
+
+        <section class="card">
+          <div class="card-head"><h2>Contact history <span class="muted">(${cs.length})</span></h2></div>
+          ${cs.length ? `<ul class="timeline">${cs.map(contactItemHTML).join('')}</ul>` : '<p class="empty">No contacts logged yet.</p>'}
+        </section>
+      </div>
+    </div>`;
+}
+
+function goalsTableHTML(p) {
+  const goals = (p.goals || []).slice().sort((a, b) => num(b.year) - num(a.year));
+  if (!goals.length) return `<p class="empty">No goals yet. Click <b>+ Add year</b> to set surgical &amp; ancillary goals.</p>`;
+  const cell = (g, field) => `<input type="number" min="0" step="1" inputmode="numeric" value="${esc(g[field] ?? '')}" data-change="goal" data-pid="${p.id}" data-gid="${g.id}" data-field="${field}" aria-label="${field}">`;
+  const pc = (a, gl) => { const v = pct(num(a), num(gl)); return v === null ? '<span class="muted">—</span>' : `<b style="color:${v >= 100 ? 'var(--ok)' : v >= 75 ? 'var(--warn)' : 'var(--danger)'}">${v}%</b>`; };
+  return `<div class="table-wrap"><table class="goal-table">
+    <thead>
+      <tr><th rowspan="2">Year</th><th colspan="3" style="text-align:center">Surgeries</th><th colspan="3" style="text-align:center">Ancillary</th><th rowspan="2" class="no-print"></th></tr>
+      <tr><th class="num">Goal</th><th class="num">Actual</th><th class="num">%</th><th class="num">Goal</th><th class="num">Actual</th><th class="num">%</th></tr>
+    </thead>
+    <tbody>${goals.map((g) => `<tr>
+      <td><input class="year" type="number" min="2000" max="2100" value="${esc(g.year)}" data-change="goal" data-pid="${p.id}" data-gid="${g.id}" data-field="year" aria-label="Year"></td>
+      <td class="num">${cell(g, 'surgGoal')}</td><td class="num">${cell(g, 'surgActual')}</td><td class="num">${pc(g.surgActual, g.surgGoal)}</td>
+      <td class="num">${cell(g, 'ancGoal')}</td><td class="num">${cell(g, 'ancActual')}</td><td class="num">${pc(g.ancActual, g.ancGoal)}</td>
+      <td class="no-print"><button class="btn link small" data-act="del-goal" data-pid="${p.id}" data-gid="${g.id}" title="Remove year">✕</button></td>
+    </tr>`).join('')}</tbody>
+  </table></div>
+  <p class="small muted" style="margin:8px 0 0">Changes save automatically. Ancillary = imaging, lab, therapy and other non-surgical referrals.</p>`;
+}
+
+function contactFormHTML(pid, c) {
+  const team = db.settings.team.slice();
+  const who = c ? c.who : (team.includes(session.name) ? session.name : team[0]);
+  if (who && !team.includes(who)) team.push(who);
+  const method = c ? c.method : 'Phone Call';
+  const fid = c ? 'edit' : 'new';
+  return `<form class="form" data-form="contact" data-pid="${pid}" data-cid="${c ? c.id : ''}">
+    <div class="row2">
+      <label><span class="req">Date</span><input type="date" name="date" required value="${esc(c ? c.date : todayISO())}"></label>
+      <label><span class="req">1 · Who contacted?</span><select name="who" required>${team.map((n) => `<option ${n === who ? 'selected' : ''}>${esc(n)}</option>`).join('')}</select></label>
+    </div>
+    <fieldset class="seg"><legend class="req">2 · How</legend>
+      ${METHODS.map((m) => `<label><input type="radio" name="method" value="${m}" ${m === method ? 'checked' : ''} required><span>${METHOD_ICON[m]} ${m}</span></label>`).join('')}
+    </fieldset>
+    <label><span class="req">3 · What was communicated</span><textarea name="comm" rows="3" required placeholder="Summary of the conversation / message">${esc(c ? c.comm : '')}</textarea></label>
+    <label><span>Attach file(s) <span class="muted" style="font-weight:400">— max ${CONFIG.maxFileMB} MB each</span></span><input type="file" name="files" multiple></label>
+    ${c && c.attachments && c.attachments.length ? `<div class="small muted">Existing attachments: ${c.attachments.map((a) => esc(a.name)).join(', ')}</div>` : ''}
+    <label><span>4 · Ask <span class="muted" style="font-weight:400">— what we asked for / what they need</span></span><input name="ask" value="${esc(c ? c.ask : '')}" placeholder="e.g. Send credentialing packet, schedule block time…"></label>
+    <div>
+      <label for="fu-${fid}-${pid}">5 · Follow-up date</label>
+      <input type="date" id="fu-${fid}-${pid}" name="fuDate" value="${esc(c ? c.fuDate : '')}">
+      <div class="quick">${[[2, '+2 days'], [7, '+1 week'], [14, '+2 weeks'], [30, '+30 days']].map(([d, l]) => `<button type="button" class="btn sm" data-act="fu-quick" data-days="${d}">${l}</button>`).join('')}<button type="button" class="btn sm" data-act="fu-quick" data-days="">Clear</button></div>
+    </div>
+    ${c ? '' : '<div><button class="btn primary" type="submit">Save contact</button></div>'}
+  </form>`;
+}
+
+function contactItemHTML(c) {
+  const canEdit = isAdmin() || c.createdBy === session.name || c.who === session.name;
+  return `<li>
+    <div class="meta">
+      <span class="method">${METHOD_ICON[c.method] || ''} ${esc(c.method)}</span>
+      <span class="muted">·</span><span>${fmtDate(c.date)}</span>
+      <span class="muted">·</span><span>by <b>${esc(c.who)}</b></span>
+    </div>
+    <div class="body">${esc(c.comm)}</div>
+    ${(c.attachments || []).length ? `<div class="files">${c.attachments.map((a) => `<button type="button" class="file-chip" data-act="dl-file" data-fid="${a.id}" data-name="${esc(a.name)}">📎 ${esc(a.name)} <span class="muted">${fmtSize(a.size || 0)}</span></button>`).join('')}</div>` : ''}
+    ${c.ask || c.fuDate ? `<div class="ask">
+      <div>${c.ask ? `<b>Ask:</b> ${esc(c.ask)}` : '<span class="muted">No ask recorded</span>'}</div>
+      ${c.fuDate ? `<div class="nowrap"><span class="small">F/U ${fmtDate(c.fuDate)}</span> ${fuBadge(c)}
+        ${c.fuDone ? `<button class="btn link small no-print" data-act="fu-reopen" data-id="${c.id}">Reopen</button>` : `<button class="btn sm no-print" data-act="fu-done" data-id="${c.id}">✓ Mark done</button>`}</div>` : ''}
+    </div>` : ''}
+    <div class="foot">
+      <span>Logged ${fmtTS(c.createdAt)} by ${esc(c.createdBy)}${c.fuDone ? ` · F/U completed ${fmtDate(c.fuDoneDate)} by ${esc(c.fuDoneBy || '')}` : ''}</span>
+      ${canEdit ? `<span class="no-print"><button class="btn link small" data-act="edit-contact" data-id="${c.id}">Edit</button> · <button class="btn link small" style="color:var(--danger)" data-act="del-contact" data-id="${c.id}">Delete</button></span>` : ''}
+    </div>
+  </li>`;
+}
+
+/* ===================== View: Follow-ups ===================== */
+function viewFollowups() {
+  const f = ui.fu;
+  const all = db.contacts.filter((c) => c.fuDate);
+  const tabs = [
+    ['open', 'All open', (c) => !c.fuDone],
+    ['over', 'Overdue', (c) => fuState(c) === 'over'],
+    ['soon', 'Due in 7 days', (c) => fuState(c) === 'soon'],
+    ['later', 'Later', (c) => fuState(c) === 'later'],
+    ['done', 'Completed', (c) => c.fuDone],
+  ];
+  const owners = [...new Set([...db.settings.team, ...all.map((c) => c.who)])];
+  const byOwner = (c) => !f.owner || c.who === f.owner;
+  const tabFn = (tabs.find((t) => t[0] === f.tab) || tabs[0])[2];
+  const rows = all.filter(byOwner).filter(tabFn).sort((a, b) => f.tab === 'done' ? (b.fuDoneDate || '').localeCompare(a.fuDoneDate || '') : a.fuDate.localeCompare(b.fuDate));
+  return `
+    <div class="page-head"><h1>Follow-ups</h1>
+      <div class="actions">
+        <select data-change="fu-owner" style="width:auto" aria-label="Owner">
+          <option value="">Everyone</option>
+          ${owners.map((o) => `<option ${o === f.owner ? 'selected' : ''}>${esc(o)}</option>`).join('')}
+        </select>
+        <button class="btn ${f.owner === session.name ? 'primary' : ''}" data-act="fu-mine">My follow-ups</button>
+      </div>
+    </div>
+    <section class="card">
+      <div class="tabs">${tabs.map(([k, l, fn]) => `<button class="${f.tab === k ? 'on' : ''}" data-act="fu-tab" data-tab="${k}">${l} (${all.filter(byOwner).filter(fn).length})</button>`).join('')}</div>
+      ${rows.length ? `<div class="table-wrap"><table>
+        <thead><tr><th>F/U date</th><th>Physician</th><th>Ask</th><th>Last communication</th><th>Owner</th><th></th></tr></thead>
+        <tbody>${rows.map((c) => {
+          const p = getPhys(c.physicianId);
+          return `<tr>
+            <td class="nowrap">${fmtDate(c.fuDate)}<div>${fuBadge(c)}</div></td>
+            <td><a href="#/physician/${c.physicianId}"><b>${esc(p ? physName(p) : 'Unknown')}</b></a><div class="small muted">${p ? esc(p.practice || '') : ''}</div></td>
+            <td>${orDash(c.ask)}</td>
+            <td class="small">${METHOD_ICON[c.method] || ''} ${fmtDate(c.date)}<div class="muted">${esc((c.comm || '').slice(0, 120))}</div></td>
+            <td class="nowrap">${esc(c.who)}</td>
+            <td class="nowrap">${c.fuDone
+              ? `<button class="btn link small" data-act="fu-reopen" data-id="${c.id}">Reopen</button>`
+              : `<button class="btn sm" data-act="fu-done" data-id="${c.id}">✓ Done</button> <button class="btn sm" data-act="fu-log" data-id="${c.id}">Log contact</button>`}</td>
+          </tr>`;
+        }).join('')}</tbody></table></div>` : '<p class="empty">Nothing here.</p>'}
+    </section>`;
+}
+
+/* ===================== View: Contact log ===================== */
+function viewActivity() {
+  const f = ui.act;
+  const people = [...new Set([...db.settings.team, ...db.contacts.map((c) => c.who)])];
+  return `
+    <div class="page-head"><h1>Contact log</h1>
+      <div class="actions"><button class="btn" data-act="export-contacts-csv">Export CSV</button></div>
+    </div>
+    <section class="card">
+      <div class="filters">
+        <input type="search" placeholder="Search communication, ask, physician…" value="${esc(f.q)}" data-input="act-q" aria-label="Search log">
+        <select data-change="act-who" aria-label="Who contacted"><option value="">Anyone</option>${people.map((n) => `<option ${n === f.who ? 'selected' : ''}>${esc(n)}</option>`).join('')}</select>
+        <select data-change="act-method" aria-label="Method"><option value="">Any method</option>${METHODS.map((m) => `<option ${m === f.method ? 'selected' : ''}>${m}</option>`).join('')}</select>
+        <label class="small muted" style="display:flex;gap:6px;align-items:center">From <input type="date" value="${esc(f.from)}" data-change="act-from" style="width:auto"></label>
+        <label class="small muted" style="display:flex;gap:6px;align-items:center">To <input type="date" value="${esc(f.to)}" data-change="act-to" style="width:auto"></label>
+      </div>
+      <div id="act-table"></div>
+    </section>`;
+}
+function filteredActivity() {
+  const f = ui.act, q = f.q.trim().toLowerCase();
+  return db.contacts.filter((c) => {
+    if (f.who && c.who !== f.who) return false;
+    if (f.method && c.method !== f.method) return false;
+    if (f.from && c.date < f.from) return false;
+    if (f.to && c.date > f.to) return false;
+    if (q) {
+      const p = getPhys(c.physicianId);
+      const hay = [c.comm, c.ask, c.who, p && physName(p), p && p.practice].join(' ').toLowerCase();
+      if (!hay.includes(q)) return false;
+    }
+    return true;
+  }).sort(byContactDesc);
+}
+function updateActivityTable() {
+  const el = $('#act-table'); if (!el) return;
+  const rows = filteredActivity();
+  const byMethod = METHODS.map((m) => `${METHOD_ICON[m]} ${m}: <b>${rows.filter((c) => c.method === m).length}</b>`).join(' &nbsp; ');
+  el.innerHTML = rows.length ? `
+    <p class="small muted" style="margin-top:0">${rows.length} contacts &nbsp;·&nbsp; ${byMethod}</p>
+    <div class="table-wrap"><table>
+      <thead><tr><th>Date</th><th>Physician</th><th>Who</th><th>How</th><th>What was communicated</th><th>Ask</th><th>F/U</th></tr></thead>
+      <tbody>${rows.map((c) => {
+        const p = getPhys(c.physicianId);
+        return `<tr class="clickable" data-act="open-phys" data-id="${c.physicianId}">
+          <td class="nowrap">${fmtDate(c.date)}</td>
+          <td><a href="#/physician/${c.physicianId}">${esc(p ? physName(p) : 'Unknown')}</a></td>
+          <td class="nowrap">${esc(c.who)}</td>
+          <td class="nowrap">${METHOD_ICON[c.method] || ''} ${esc(c.method)}</td>
+          <td>${esc((c.comm || '').slice(0, 200))}${(c.attachments || []).length ? ` <span class="tag">📎 ${c.attachments.length}</span>` : ''}</td>
+          <td>${orDash(c.ask)}</td>
+          <td class="nowrap">${c.fuDate ? `${fmtDate(c.fuDate)}<div>${fuBadge(c)}</div>` : '<span class="muted">—</span>'}</td>
+        </tr>`;
+      }).join('')}</tbody></table></div>` : '<p class="empty">No contacts match.</p>';
+}
+
+/* ===================== View: Settings ===================== */
+function viewSettings() {
+  const size = new Blob([localStorage.getItem(STORE_KEY) || '']).size;
+  return `
+    <div class="page-head"><h1>Settings</h1></div>
+    <div class="grid2" style="margin-top:0">
+      <section class="card">
+        <h2>Team members <span class="muted small">(“Who contacted?” drop-down)</span></h2>
+        <ul class="list">${db.settings.team.map((n, i) => `<li>
+          <input value="${esc(n)}" data-change="team-name" data-i="${i}" aria-label="Team member name">
+          <button class="btn sm danger" data-act="team-del" data-i="${i}">Remove</button></li>`).join('')}</ul>
+        <div style="display:flex;gap:8px;margin-top:10px"><input id="team-new" placeholder="Add a name"><button class="btn" data-act="team-add">Add</button></div>
+      </section>
+
+      <section class="card">
+        <h2>Specialty list</h2>
+        <form class="form" data-form="specialties">
+          <label>One per line — used for suggestions on the physician form<textarea name="list" rows="9">${esc(db.settings.specialties.join('\n'))}</textarea></label>
+          <div><button class="btn" type="submit">Save list</button></div>
+        </form>
+      </section>
+    </div>
+
+    <div class="grid2">
+      <section class="card">
+        <h2>Data &amp; backups</h2>
+        <div class="notice" style="margin-bottom:12px">
+          <b>Important:</b> In this version all data is saved <b>in this browser on this computer</b>. Other team members will not see these records unless you export a backup and they import it. Export a backup regularly.
+        </div>
+        <p class="small muted">${db.physicians.length} physicians · ${db.contacts.length} contacts · ${fmtSize(size)} of records (attachments stored separately). Last saved ${fmtTS(db.meta.updatedAt)}.</p>
+        <div style="display:flex;gap:8px;flex-wrap:wrap">
+          <button class="btn primary" data-act="export-json">Export full backup (.json)</button>
+          ${isAdmin() ? '<button class="btn" data-act="import-json">Import backup…</button>' : ''}
+          <button class="btn" data-act="export-phys-csv">Physicians → CSV</button>
+          <button class="btn" data-act="export-contacts-csv">Contact log → CSV</button>
+        </div>
+        ${isAdmin() ? `<div style="margin-top:16px;padding-top:12px;border-top:1px solid var(--border)">
+          <button class="btn danger" data-act="clear-all">Erase all data in this browser…</button></div>` : ''}
+      </section>
+
+      <section class="card">
+        <h2>Logins</h2>
+        <table><thead><tr><th>Username</th><th>Display name</th><th>Role</th></tr></thead>
+          <tbody>${CONFIG.users.map((u) => `<tr><td class="mono">${esc(u.username)}</td><td>${esc(u.name)}</td><td>${esc(u.role)}</td></tr>`).join('')}</tbody></table>
+        <h3 style="margin-top:16px">Password hash generator</h3>
+        <p class="small muted" style="margin-top:0">Logins are defined in the <code>CONFIG</code> block at the top of this HTML file. To change a password, generate a hash here, paste it into that user's <code>hash</code> field, and re-upload the file.</p>
+        <form class="form" data-form="hash" autocomplete="off">
+          <div class="row2">
+            <label>Username<select name="username">${CONFIG.users.map((u) => `<option>${esc(u.username)}</option>`).join('')}</select></label>
+            <label>New password<input name="password" type="text" minlength="8" required autocomplete="new-password"></label>
+          </div>
+          <div><button class="btn" type="submit">Generate hash</button></div>
+          <div id="hash-out" class="hash-out mono" hidden></div>
+        </form>
+      </section>
+    </div>`;
+}
+
+/* ===================== Physician form (modal) ===================== */
+function physicianFormHTML(p) {
+  p = p || {};
+  const v = (k) => esc(p[k] || '');
+  return `<form class="form" data-form="physician" data-id="${p.id || ''}" id="phys-form">
+    <fieldset><legend>1 · Contact info</legend><div class="form">
+      <div class="row3">
+        <label><span class="req">First name</span><input name="firstName" required value="${v('firstName')}"></label>
+        <label><span class="req">Last name</span><input name="lastName" required value="${v('lastName')}"></label>
+        <label>Credentials<select name="credentials"><option value=""></option>${CREDENTIALS.map((c) => `<option ${p.credentials === c ? 'selected' : ''}>${c}</option>`).join('')}</select></label>
+      </div>
+      <div class="row3">
+        <label>Office phone<input name="phone" type="tel" value="${v('phone')}"></label>
+        <label>Cell / direct<input name="cell" type="tel" value="${v('cell')}"></label>
+        <label>Fax<input name="fax" type="tel" value="${v('fax')}"></label>
+      </div>
+      <div class="row2">
+        <label>Email<input name="email" type="email" value="${v('email')}"></label>
+        <label>NPI<input name="npi" inputmode="numeric" pattern="\\d{10}" title="10-digit NPI" value="${v('npi')}"></label>
+      </div>
+    </div></fieldset>
+    <fieldset><legend>2 · Specialty</legend>
+      <label>Specialty<input name="specialty" list="spec-list" value="${v('specialty')}" placeholder="Start typing or choose…"></label>
+      <datalist id="spec-list">${db.settings.specialties.map((s) => `<option value="${esc(s)}">`).join('')}</datalist>
+    </fieldset>
+    <fieldset><legend>3 · Practice</legend><div class="form">
+      <label>Practice / group name<input name="practice" list="practice-list" value="${v('practice')}"></label>
+      <datalist id="practice-list">${[...new Set(db.physicians.map((x) => x.practice).filter(Boolean))].map((s) => `<option value="${esc(s)}">`).join('')}</datalist>
+      <label>Street address<input name="address" value="${v('address')}"></label>
+      <div class="row3">
+        <label>City<input name="city" value="${v('city')}"></label>
+        <label>State<input name="state" maxlength="2" value="${v('state')}"></label>
+        <label>ZIP<input name="zip" value="${v('zip')}"></label>
+      </div>
+    </div></fieldset>
+    <fieldset><legend>4 · Practice manager / contact</legend><div class="form">
+      <div class="row2">
+        <label>Name<input name="pmName" value="${v('pmName')}"></label>
+        <label>Title<input name="pmTitle" value="${v('pmTitle')}" placeholder="Practice Manager, Office Manager…"></label>
+      </div>
+      <div class="row2">
+        <label>Phone<input name="pmPhone" type="tel" value="${v('pmPhone')}"></label>
+        <label>Email<input name="pmEmail" type="email" value="${v('pmEmail')}"></label>
+      </div>
+    </div></fieldset>
+    ${p.id ? '' : `<fieldset><legend>Status</legend>
+      <div class="row2">
+        <label>Relationship<select name="relType"><option value="prospect">Prospect</option><option value="referrer">Referrer</option></select></label>
+        <label>Starting status<select name="stage">${STAGES.map((s) => `<option value="${s.key}">${s.key} · ${esc(s.label)}</option>`).join('')}</select></label>
+      </div></fieldset>`}
+    <label>Notes<textarea name="notes" rows="3">${v('notes')}</textarea></label>
+  </form>`;
+}
+
+/* ===================== Modal ===================== */
+function openModal({ title, body, submitLabel, onSubmit, wide }) {
+  const root = $('#modal-root');
+  root.innerHTML = `<div class="modal-backdrop" data-act="modal-bg">
+    <div class="modal" role="dialog" aria-modal="true" aria-label="${esc(title)}" style="${wide === false ? 'max-width:480px' : ''}">
+      <header><h2>${esc(title)}</h2><button class="x" data-act="close-modal" aria-label="Close">×</button></header>
+      <div class="content">${body}</div>
+      <footer><button class="btn" data-act="close-modal">Cancel</button>${onSubmit ? `<button class="btn primary" data-act="modal-submit">${esc(submitLabel || 'Save')}</button>` : ''}</footer>
+    </div></div>`;
+  root._onSubmit = onSubmit;
+  const first = root.querySelector('input, select, textarea');
+  if (first) setTimeout(() => first.focus(), 0);
+}
+function closeModal() { const r = $('#modal-root'); r.innerHTML = ''; r._onSubmit = null; }
+function confirmBox(message, onYes, yesLabel = 'Confirm') {
+  openModal({ title: 'Please confirm', body: `<p style="margin:0">${message}</p>`, submitLabel: yesLabel, wide: false, onSubmit: () => { onYes(); return true; } });
+}
+
+/* ===================== Mutations ===================== */
+function savePhysicianFromForm(form) {
+  if (!form.reportValidity()) return false;
+  const data = Object.fromEntries(new FormData(form).entries());
+  Object.keys(data).forEach((k) => (data[k] = String(data[k]).trim()));
+  if (data.state) data.state = data.state.toUpperCase();
+  const id = form.dataset.id;
+  if (id) {
+    const p = getPhys(id);
+    Object.assign(p, data, { updatedAt: nowISO(), updatedBy: session.name });
+    saveDB(); toast('Profile updated');
+    rerender();
+  } else {
+    const dupe = db.physicians.find((x) => (x.npi && data.npi && x.npi === data.npi) ||
+      (x.firstName.toLowerCase() === data.firstName.toLowerCase() && x.lastName.toLowerCase() === data.lastName.toLowerCase()));
+    if (dupe && !confirm(`${physName(dupe)} already exists. Add anyway?`)) return false;
+    const p = {
+      id: uid(), ...data, stage: data.stage || 'a', relType: data.relType || 'prospect', goals: [],
+      stageHistory: [{ stage: data.stage || 'a', label: stageLabelFor(data.stage || 'a', data.relType), date: todayISO(), by: session.name }],
+      createdAt: nowISO(), createdBy: session.name,
+    };
+    db.physicians.push(p);
+    saveDB(); toast('Physician added');
+    location.hash = '#/physician/' + p.id;
+  }
+  return true;
+}
+function stageLabelFor(stage, relType) {
+  if (stage === 'a') return relType === 'referrer' ? 'a · Referrer' : 'a · Prospect';
+  const s = STAGES.find((x) => x.key === stage);
+  return s ? `${s.key} · ${s.label}` : stage;
+}
+
+async function saveContactFromForm(form) {
+  if (!form.reportValidity()) return false;
+  const fd = new FormData(form);
+  const files = fd.getAll('files').filter((f) => f && f.size);
+  const tooBig = files.find((f) => f.size > CONFIG.maxFileMB * 1048576);
+  if (tooBig) { toast(`"${tooBig.name}" is larger than ${CONFIG.maxFileMB} MB.`, true); return false; }
+  const attachments = [];
+  try {
+    for (const f of files) {
+      const id = uid();
+      await Files.put(id, f);
+      attachments.push({ id, name: f.name, size: f.size, type: f.type });
+    }
+  } catch (e) {
+    toast('Could not store attachment: ' + (e && e.message ? e.message : e), true);
+    return false;
+  }
+  const fields = {
+    date: fd.get('date'), who: fd.get('who'), method: fd.get('method'),
+    comm: String(fd.get('comm') || '').trim(), ask: String(fd.get('ask') || '').trim(), fuDate: fd.get('fuDate') || '',
+  };
+  const cid = form.dataset.cid;
+  if (cid) {
+    const c = db.contacts.find((x) => x.id === cid);
+    if (c.fuDate !== fields.fuDate && fields.fuDate) { c.fuDone = false; c.fuDoneDate = ''; }
+    Object.assign(c, fields, { attachments: [...(c.attachments || []), ...attachments], updatedAt: nowISO(), updatedBy: session.name });
+    toast('Contact updated');
+  } else {
+    db.contacts.push({ id: uid(), physicianId: form.dataset.pid, ...fields, attachments, fuDone: false, createdAt: nowISO(), createdBy: session.name });
+    toast('Contact logged' + (fields.fuDate ? ` · follow-up ${fmtDate(fields.fuDate)}` : ''));
+  }
+  saveDB();
+  rerender();
+  return true;
+}
+
+function setStage(p, stage) {
+  if (p.stage === stage) return;
+  const s = STAGES.find((x) => x.key === stage);
+  confirmBox(`Move <b>${esc(physName(p))}</b> to <b>${esc(stageLabelFor(stage, p.relType))}</b>?`, () => {
+    p.stage = stage;
+    (p.stageHistory = p.stageHistory || []).push({ stage, label: stageLabelFor(stage, p.relType), date: todayISO(), by: session.name });
+    p.updatedAt = nowISO(); p.updatedBy = session.name;
+    saveDB(); toast('Status updated: ' + s.label); rerender();
+  }, 'Update status');
+}
+
+async function exportBackup() {
+  const files = {};
+  const ids = db.contacts.flatMap((c) => (c.attachments || []).map((a) => a.id));
+  for (const id of ids) {
+    try {
+      const blob = await Files.get(id);
+      if (blob) files[id] = await new Promise((res) => { const r = new FileReader(); r.onload = () => res(r.result); r.readAsDataURL(blob); });
+    } catch {}
+  }
+  const payload = { app: 'physician-crm', exportedAt: nowISO(), exportedBy: session.name, db, files };
+  download(`physician-crm-backup-${todayISO()}.json`, JSON.stringify(payload), 'application/json');
+  toast('Backup exported');
+}
+
+async function importBackup(file) {
+  let data;
+  try { data = JSON.parse(await file.text()); } catch { toast('That file is not a valid backup.', true); return; }
+  if (!data || data.app !== 'physician-crm' || !data.db) { toast('That file is not a Physician CRM backup.', true); return; }
+  confirmBox(`Replace all data in this browser with the backup from <b>${fmtTS(data.exportedAt)}</b> (${data.db.physicians.length} physicians, ${data.db.contacts.length} contacts)?`, async () => {
+    try {
+      await Files.clear();
+      for (const [id, url] of Object.entries(data.files || {})) await Files.put(id, await (await fetch(url)).blob());
+    } catch (e) { toast('Some attachments could not be restored.', true); }
+    localStorage.setItem(STORE_KEY, JSON.stringify(data.db));
+    db = loadDB();
+    toast('Backup imported'); rerender();
+  }, 'Replace data');
+}
+
+function exportPhysCSV() {
+  const y = new Date().getFullYear();
+  const rows = [['Last Name', 'First Name', 'Credentials', 'NPI', 'Specialty', 'Practice', 'Address', 'City', 'State', 'ZIP', 'Office Phone', 'Cell', 'Fax', 'Email',
+    'Practice Manager', 'PM Title', 'PM Phone', 'PM Email', 'Type', 'Status', 'Last Contact', 'Next F/U',
+    `${y} Surg Goal`, `${y} Surg Actual`, `${y} Ancillary Goal`, `${y} Ancillary Actual`, 'Notes']];
+  db.physicians.slice().sort((a, b) => physSortName(a).localeCompare(physSortName(b))).forEach((p) => {
+    const g = goalRow(p, y) || {}, lc = lastContact(p.id), nf = nextFU(p.id);
+    rows.push([p.lastName, p.firstName, p.credentials, p.npi, p.specialty, p.practice, p.address, p.city, p.state, p.zip, p.phone, p.cell, p.fax, p.email,
+      p.pmName, p.pmTitle, p.pmPhone, p.pmEmail, p.relType === 'referrer' ? 'Referrer' : 'Prospect', stageLabelFor(p.stage || 'a', p.relType),
+      lc ? lc.date : '', nf ? nf.fuDate : '', g.surgGoal, g.surgActual, g.ancGoal, g.ancActual, p.notes]);
+  });
+  download(`physicians-${todayISO()}.csv`, '﻿' + toCSV(rows), 'text/csv');
+}
+function exportContactsCSV() {
+  const list = location.hash.startsWith('#/activity') ? filteredActivity() : db.contacts.slice().sort(byContactDesc);
+  const rows = [['Date', 'Physician', 'Practice', 'Who Contacted', 'How', 'What Was Communicated', 'Ask', 'F/U Date', 'F/U Done', 'Attachments', 'Logged By', 'Logged At']];
+  list.forEach((c) => {
+    const p = getPhys(c.physicianId);
+    rows.push([c.date, p ? physName(p) : '', p ? p.practice : '', c.who, c.method, c.comm, c.ask, c.fuDate, c.fuDone ? 'Yes' : c.fuDate ? 'No' : '',
+      (c.attachments || []).map((a) => a.name).join('; '), c.createdBy, c.createdAt]);
+  });
+  download(`contact-log-${todayISO()}.csv`, '﻿' + toCSV(rows), 'text/csv');
+}
+
+function loadSample() {
+  const t = todayISO(), y = new Date().getFullYear(), team = db.settings.team;
+  const me = session.name, other = team.find((n) => n !== me) || me;
+  const mk = (o) => ({ id: uid(), goals: [], createdAt: nowISO(), createdBy: me, ...o });
+  const P = [
+    mk({ firstName: 'Sample', lastName: 'Alvarez', credentials: 'MD', specialty: 'Orthopedic Surgery', practice: 'Summit Orthopedic Group', phone: '(555) 201-4400', email: 'alvarez@example.com', city: 'Springfield', state: 'IL', pmName: 'Dana Reed', pmTitle: 'Practice Manager', pmPhone: '(555) 201-4410', pmEmail: 'dreed@example.com', relType: 'referrer', stage: 'd',
+      goals: [{ id: uid(), year: y, surgGoal: 240, surgActual: 171, ancGoal: 400, ancActual: 322 }] }),
+    mk({ firstName: 'Sample', lastName: 'Chen', credentials: 'DO', specialty: 'General Surgery', practice: 'Riverside Surgical Associates', phone: '(555) 330-1200', email: 'chen@example.com', city: 'Springfield', state: 'IL', pmName: 'Marcus Lee', pmTitle: 'Office Manager', pmPhone: '(555) 330-1201', relType: 'prospect', stage: 'b',
+      goals: [{ id: uid(), year: y, surgGoal: 120, surgActual: 0, ancGoal: 80, ancActual: 0 }] }),
+    mk({ firstName: 'Sample', lastName: 'Okafor', credentials: 'MD', specialty: 'Urology', practice: 'Lakeside Urology', phone: '(555) 718-9000', city: 'Shelbyville', state: 'IL', pmName: 'Priya Shah', pmTitle: 'Practice Administrator', pmEmail: 'pshah@example.com', relType: 'prospect', stage: 'a' }),
+    mk({ firstName: 'Sample', lastName: 'Novak', credentials: 'DPM', specialty: 'Podiatry', practice: 'Foot & Ankle Center', phone: '(555) 442-7788', city: 'Springfield', state: 'IL', relType: 'referrer', stage: 'c',
+      goals: [{ id: uid(), year: y, surgGoal: 60, surgActual: 48, ancGoal: 150, ancActual: 161 }] }),
+  ];
+  P.forEach((p) => { p.stageHistory = [{ stage: p.stage, label: stageLabelFor(p.stage, p.relType), date: addDays(t, -20), by: me }]; });
+  const C = (p, d, who, method, comm, ask, fu, done) => ({ id: uid(), physicianId: p.id, date: addDays(t, d), who, method, comm, ask, fuDate: fu === null ? '' : addDays(t, fu), fuDone: !!done, fuDoneDate: done ? addDays(t, fu) : '', fuDoneBy: done ? who : '', attachments: [], createdAt: nowISO(), createdBy: who });
+  db.physicians.push(...P);
+  db.contacts.push(
+    C(P[0], -30, me, 'In Person', 'Quarterly volume review over lunch. Interested in additional OR block time on Thursdays.', 'Check Thursday block availability with surgical services', -16, true),
+    C(P[0], -6, other, 'Email', 'Sent updated block schedule proposal and Q3 volume summary.', 'Confirm acceptance of new Thursday block', 3, false),
+    C(P[1], -12, me, 'Phone Call', 'Spoke with practice manager — Dr. Chen open to privileges for lap chole and hernia cases.', 'Return completed credentialing packet', -2, false),
+    C(P[2], -3, other, 'Text', 'Intro text via mutual colleague; agreed to a meet-and-greet.', 'Schedule site tour', 5, false),
+    C(P[3], -40, me, 'Email', 'Credentialing approved by MEC. Sent welcome letter.', 'Schedule orientation / EHR training', 14, false),
+  );
+  saveDB(); toast('Sample data loaded'); rerender();
+}
+
+/* ===================== Event delegation ===================== */
+const actions = {
+  logout: () => logout(),
+  'add-physician': () => openModal({ title: 'Add physician', body: physicianFormHTML(null), submitLabel: 'Add physician', onSubmit: () => savePhysicianFromForm($('#phys-form')) }),
+  'edit-physician': (el) => { const p = getPhys(el.dataset.id); openModal({ title: 'Edit ' + physName(p), body: physicianFormHTML(p), onSubmit: () => savePhysicianFromForm($('#phys-form')) }); },
+  'delete-physician': (el) => {
+    const p = getPhys(el.dataset.id);
+    const cs = db.contacts.filter((c) => c.physicianId === p.id);
+    confirmBox(`Permanently delete <b>${esc(physName(p))}</b> and ${cs.length} logged contact(s)? This cannot be undone.`, async () => {
+      for (const c of cs) for (const a of c.attachments || []) { try { await Files.del(a.id); } catch {} }
+      db.contacts = db.contacts.filter((c) => c.physicianId !== p.id);
+      db.physicians = db.physicians.filter((x) => x.id !== p.id);
+      saveDB(); toast('Physician deleted'); location.hash = '#/physicians';
+    }, 'Delete');
+  },
+  'open-phys': (el, e) => { if (!e.target.closest('a, button, input')) location.hash = '#/physician/' + el.dataset.id; },
+  'filter-phys': (el) => { Object.assign(ui.phys, { q: '', spec: '', stage: el.dataset.stage || '', type: el.dataset.type || '' }); },
+  'sort-phys': (el) => { const k = el.dataset.key; ui.phys.dir = ui.phys.sort === k ? -ui.phys.dir : 1; ui.phys.sort = k; updatePhysTable(); },
+  print: () => window.print(),
+  'set-stage': (el, e) => { if (e.target.closest('.typetoggle')) return; setStage(getPhys(el.dataset.id), el.dataset.stage); },
+  'set-type': (el) => {
+    const p = getPhys(el.dataset.id); if (p.relType === el.dataset.type) return;
+    p.relType = el.dataset.type; p.updatedAt = nowISO(); p.updatedBy = session.name;
+    (p.stageHistory = p.stageHistory || []).push({ stage: 'a', label: 'Type set to ' + (p.relType === 'referrer' ? 'Referrer' : 'Prospect'), date: todayISO(), by: session.name });
+    saveDB(); rerender();
+  },
+  'add-goal': (el) => {
+    const p = getPhys(el.dataset.id); p.goals = p.goals || [];
+    const used = p.goals.map((g) => +g.year);
+    let yr = new Date().getFullYear(); while (used.includes(yr)) yr++;
+    p.goals.push({ id: uid(), year: yr, surgGoal: '', surgActual: '', ancGoal: '', ancActual: '' });
+    saveDB(); rerender();
+  },
+  'del-goal': (el) => {
+    const p = getPhys(el.dataset.pid);
+    confirmBox('Remove this year of goals/actuals?', () => { p.goals = p.goals.filter((g) => g.id !== el.dataset.gid); saveDB(); rerender(); }, 'Remove');
+  },
+  'fu-quick': (el) => {
+    const form = el.closest('form'); const inp = form.querySelector('[name=fuDate]');
+    const base = form.querySelector('[name=date]').value || todayISO();
+    inp.value = el.dataset.days ? addDays(base, +el.dataset.days) : '';
+  },
+  'fu-done': (el) => { const c = db.contacts.find((x) => x.id === el.dataset.id); c.fuDone = true; c.fuDoneDate = todayISO(); c.fuDoneBy = session.name; saveDB(); toast('Follow-up marked done'); rerender(); },
+  'fu-reopen': (el) => { const c = db.contacts.find((x) => x.id === el.dataset.id); c.fuDone = false; c.fuDoneDate = ''; c.fuDoneBy = ''; saveDB(); rerender(); },
+  'fu-log': (el) => {
+    const c = db.contacts.find((x) => x.id === el.dataset.id); const p = getPhys(c.physicianId);
+    openModal({
+      title: 'Log contact — ' + physName(p),
+      body: `<p class="small muted" style="margin-top:0">Saving this will also mark the follow-up “${esc(c.ask || 'from ' + fmtDate(c.date))}” as done.</p>` + contactFormHTML(p.id, null).replace('<div><button class="btn primary" type="submit">Save contact</button></div>', ''),
+      submitLabel: 'Save contact',
+      onSubmit: async () => {
+        const ok = await saveContactFromForm($('#modal-root form'));
+        if (ok) { c.fuDone = true; c.fuDoneDate = todayISO(); c.fuDoneBy = session.name; saveDB(); rerender(); }
+        return ok;
+      },
+    });
+  },
+  'fu-tab': (el) => { ui.fu.tab = el.dataset.tab; rerender(); },
+  'fu-mine': () => { ui.fu.owner = ui.fu.owner === session.name ? '' : session.name; rerender(); },
+  'edit-contact': (el) => {
+    const c = db.contacts.find((x) => x.id === el.dataset.id);
+    openModal({ title: 'Edit contact', body: contactFormHTML(c.physicianId, c), onSubmit: () => saveContactFromForm($('#modal-root form')) });
+  },
+  'del-contact': (el) => {
+    const c = db.contacts.find((x) => x.id === el.dataset.id);
+    confirmBox('Delete this contact entry and its attachments?', async () => {
+      for (const a of c.attachments || []) { try { await Files.del(a.id); } catch {} }
+      db.contacts = db.contacts.filter((x) => x.id !== c.id); saveDB(); toast('Contact deleted'); rerender();
+    }, 'Delete');
+  },
+  'dl-file': async (el) => {
+    try {
+      const blob = await Files.get(el.dataset.fid);
+      if (!blob) return toast('This attachment is not stored in this browser (it may have been added on another computer).', true);
+      download(el.dataset.name, blob);
+    } catch (e) { toast('Could not open attachment.', true); }
+  },
+  'load-sample': () => loadSample(),
+  'export-json': () => exportBackup(),
+  'import-json': () => $('#import-input').click(),
+  'export-phys-csv': () => exportPhysCSV(),
+  'export-contacts-csv': () => exportContactsCSV(),
+  'clear-all': () => confirmBox('Erase <b>all</b> physicians, contacts and attachments stored in this browser? Export a backup first if you might need it.', async () => {
+    try { await Files.clear(); } catch {}
+    db = emptyDB(); saveDB(); toast('All data erased'); location.hash = '#/dashboard'; rerender();
+  }, 'Erase everything'),
+  'team-add': () => {
+    const inp = $('#team-new'); const n = inp.value.trim(); if (!n) return;
+    if (!db.settings.team.includes(n)) db.settings.team.push(n);
+    saveDB(); rerender();
+  },
+  'team-del': (el) => { db.settings.team.splice(+el.dataset.i, 1); saveDB(); rerender(); },
+  'close-modal': () => closeModal(),
+  'modal-bg': (el, e) => { if (e.target === el) closeModal(); },
+  'modal-submit': async () => { const fn = $('#modal-root')._onSubmit; if (fn && (await fn()) !== false) closeModal(); },
+};
+
+document.addEventListener('click', (e) => {
+  const el = e.target.closest('[data-act]');
+  if (!el) return;
+  const fn = actions[el.dataset.act];
+  if (!fn) return;
+  if (el.tagName === 'BUTTON' || el.getAttribute('role') === 'button') e.preventDefault();
+  fn(el, e);
+});
+document.addEventListener('keydown', (e) => {
+  if (e.key === 'Escape' && $('#modal-root').innerHTML) closeModal();
+  if ((e.key === 'Enter' || e.key === ' ') && e.target.matches('[role=button][data-act]')) { e.preventDefault(); e.target.click(); }
+});
+
+document.addEventListener('submit', async (e) => {
+  const form = e.target;
+  const kind = form.dataset.form;
+  if (!kind) return;
+  e.preventDefault();
+  if (kind === 'contact') {
+    const btn = form.querySelector('[type=submit]'); if (btn) btn.disabled = true;
+    await saveContactFromForm(form);
+    if (btn) btn.disabled = false;
+  } else if (kind === 'physician') {
+    if (savePhysicianFromForm(form)) closeModal();
+  } else if (kind === 'specialties') {
+    db.settings.specialties = [...new Set(form.list.value.split('\n').map((s) => s.trim()).filter(Boolean))];
+    saveDB(); toast('Specialty list saved');
+  } else if (kind === 'hash') {
+    const u = form.username.value, h = sha256(`${u}:${form.password.value}`);
+    const out = $('#hash-out'); out.hidden = false;
+    out.innerHTML = `<div class="small muted" style="font-family:var(--font)">Hash for <b>${esc(u)}</b> — paste into CONFIG.users:</div>${h}`;
+  }
+});
+
+document.addEventListener('input', (e) => {
+  const k = e.target.dataset.input;
+  if (k === 'phys-q') { ui.phys.q = e.target.value; updatePhysTable(); }
+  if (k === 'act-q') { ui.act.q = e.target.value; updateActivityTable(); }
+});
+
+document.addEventListener('change', (e) => {
+  const t = e.target, k = t.dataset.change;
+  if (!k) return;
+  switch (k) {
+    case 'phys-stage': ui.phys.stage = t.value; updatePhysTable(); break;
+    case 'phys-type': ui.phys.type = t.value; updatePhysTable(); break;
+    case 'phys-spec': ui.phys.spec = t.value; updatePhysTable(); break;
+    case 'act-who': ui.act.who = t.value; updateActivityTable(); break;
+    case 'act-method': ui.act.method = t.value; updateActivityTable(); break;
+    case 'act-from': ui.act.from = t.value; updateActivityTable(); break;
+    case 'act-to': ui.act.to = t.value; updateActivityTable(); break;
+    case 'fu-owner': ui.fu.owner = t.value; rerender(); break;
+    case 'dash-year': ui.year = +t.value; rerender(); break;
+    case 'team-name': {
+      const v = t.value.trim(); if (v) { db.settings.team[+t.dataset.i] = v; saveDB(); toast('Saved'); }
+      break;
+    }
+    case 'goal': {
+      const p = getPhys(t.dataset.pid); const g = p.goals.find((x) => x.id === t.dataset.gid);
+      g[t.dataset.field] = t.value === '' ? '' : Math.max(0, num(t.value));
+      p.updatedAt = nowISO(); p.updatedBy = session.name;
+      saveDB(); rerender();
+      break;
+    }
+  }
+});
+
+$('#import-input').addEventListener('change', (e) => { const f = e.target.files[0]; if (f) importBackup(f); e.target.value = ''; });
+
+// Keep multiple open tabs in sync
+window.addEventListener('storage', (e) => { if (e.key === STORE_KEY && session) { db = loadDB(); rerender(); } });
+
+/* ===================== Boot ===================== */
+document.title = CONFIG.appName;
+$('#login-title').textContent = CONFIG.appName;
+$('#login-org').textContent = CONFIG.orgName;
+$('#brand-name').textContent = CONFIG.appName;
+db = loadDB();
+session = getSession();
+if (session) { touchSession(); showApp(); } else showLogin();
+</script>
+</body>
+</html>
