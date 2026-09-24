@@ -1,0 +1,10 @@
+# Northwest Specialty Hospital — Physician Relations
+# Keeps the database and attachments private and turns off directory listings.
+Options -Indexes
+<IfModule mod_rewrite.c>
+  RewriteEngine On
+  RewriteRule ^data(/|$) - [F,L]
+</IfModule>
+<FilesMatch "^(config\.php)$">
+  Require all denied
+</FilesMatch>

@@ -51,28 +51,32 @@
   .login-error { color: var(--red); background: var(--red-soft); padding: 10px 12px; border-radius: 8px; margin-bottom: 4px; font-weight: 600; }
   .login-foot { text-align: center; color: var(--muted); font-size: 13px; margin-top: 22px; }
   .stripe { height: 5px; background: linear-gradient(90deg, var(--green) 0 33.3%, var(--brown) 33.3% 66.6%, var(--teal) 66.6%); }
+  .preview-banner { background: var(--amber-soft); color: #6b4708; border-bottom: 1px solid #ecd6a6; padding: 8px 20px; font-size: 14px; display: flex; gap: 8px; align-items: flex-start; justify-content: center; }
+  .save-state { position: fixed; left: 16px; bottom: 16px; z-index: 40; font-size: 13px; font-weight: 600; padding: 6px 12px; border-radius: 999px; background: var(--surface); border: 1px solid var(--border); box-shadow: var(--shadow); color: var(--muted); white-space: nowrap; }
+  .save-state.saving { color: var(--amber); } .save-state.error { color: var(--red); border-color: #e7c2bd; } .save-state.saved { color: var(--green-dark); }
+  @media print { .save-state { display: none; } }
 
   /* ---------- Header ---------- */
   .topbar { background: var(--surface); position: sticky; top: 0; z-index: 20; box-shadow: 0 1px 0 var(--border), 0 2px 8px rgba(0,0,0,.04); }
   .topbar-inner { max-width: 1320px; margin: 0 auto; display: flex; align-items: center; gap: 24px; padding: 0 20px; height: 72px; }
   .brand img { height: 46px; width: auto; display: block; }
   .nav { display: flex; gap: 4px; flex: 1; overflow-x: auto; scrollbar-width: none; height: 100%; }
-  .nav a { color: var(--text-2); padding: 0 14px; display: inline-flex; align-items: center; gap: 8px; white-space: nowrap; font-weight: 600; font-size: 16px; border-bottom: 4px solid transparent; border-top: 4px solid transparent; }
+  .nav a { color: var(--text-2); padding: 0 10px; display: inline-flex; align-items: center; gap: 8px; white-space: nowrap; font-weight: 600; font-size: 16px; border-bottom: 4px solid transparent; border-top: 4px solid transparent; }
   .nav a:hover { color: var(--green-dark); text-decoration: none; }
   .nav a.active { color: var(--green-dark); border-bottom-color: var(--green); }
   .nav .count { background: var(--red); color: #fff; font-size: 12px; font-weight: 700; border-radius: 10px; padding: 1px 7px; }
   .userbox { display: flex; align-items: center; gap: 6px; white-space: nowrap; }
   .userbox .who { color: var(--muted); font-size: 14px; margin-right: 6px; }
-  @media (max-width: 860px) {
+  @media (max-width: 1180px) {
     .topbar-inner { flex-wrap: wrap; height: auto; padding: 10px 16px 0; gap: 8px 12px; }
-    .brand { flex: 1; } .brand img { height: 38px; }
+    .brand { flex: 1; } .brand img { height: 40px; }
     .nav { order: 3; flex-basis: 100%; height: 48px; }
     .nav a { padding: 0 10px; font-size: 15px; }
-    .userbox .who { display: none; }
   }
+  @media (max-width: 860px) { .brand img { height: 38px; } .userbox .who { display: none; } }
   @media (max-width: 480px) {
-    .nav { justify-content: space-between; gap: 0; }
-    .nav a { padding: 0 6px; font-size: 14px; gap: 5px; }
+    .nav { flex-wrap: wrap; height: auto; gap: 0 4px; padding-bottom: 4px; }
+    .nav a { padding: 8px 8px; font-size: 14px; gap: 5px; border-width: 3px; }
     .nav a svg { display: none; }
     .userbox .btn span { display: none; }
   }
@@ -215,6 +219,9 @@
   .step.current .circle { border-color: var(--green); color: var(--green-dark); box-shadow: 0 0 0 4px var(--green-soft); }
   .step.current .t { color: var(--green-dark); }
   .status-actions { display: flex; gap: 10px; flex-wrap: wrap; align-items: center; }
+  .leg.lost { border-left: 5px solid var(--red); }
+  .leg .steps { margin-bottom: 12px; }
+  .leg .step .d .tag { font-size: 11px; padding: 0 6px; }
 
   /* ---------- Profile ---------- */
   .phys-head { display: flex; gap: 16px; align-items: center; flex-wrap: wrap; }
@@ -315,6 +322,7 @@
   <symbol id="i-list" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 6h12M9 12h12M9 18h12M4 6h0M4 12h0M4 18h0"/></symbol>
   <symbol id="i-x" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><path d="M6 6l12 12M18 6 6 18"/></symbol>
   <symbol id="i-chevron" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="m9 6 6 6-6 6"/></symbol>
+  <symbol id="i-route" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="5" cy="6" r="2.5"/><circle cx="19" cy="18" r="2.5"/><path d="M7.5 6H15a3 3 0 0 1 0 6H9a3 3 0 0 0 0 6h7.5"/></symbol>
 </svg>
 
 <!-- ===================== LOGIN ===================== -->
@@ -342,6 +350,7 @@
       <nav class="nav" id="nav" aria-label="Main">
         <a href="#/home" data-nav="home"><svg class="i"><use href="#i-home"/></svg>Home</a>
         <a href="#/physicians" data-nav="physicians"><svg class="i"><use href="#i-people"/></svg>Physicians</a>
+        <a href="#/referrals" data-nav="referrals"><svg class="i"><use href="#i-route"/></svg>Referrals<span class="count" id="nav-ref-count" hidden></span></a>
         <a href="#/followups" data-nav="followups"><svg class="i"><use href="#i-flag"/></svg>Follow-Ups<span class="count" id="nav-fu-count" hidden></span></a>
         <a href="#/activity" data-nav="activity"><svg class="i"><use href="#i-list"/></svg>Activity</a>
       </nav>
@@ -353,6 +362,8 @@
     </div>
   </header>
   <div class="stripe" aria-hidden="true"></div>
+  <span class="save-state" id="save-state" hidden></span>
+  <div id="preview-banner" class="preview-banner" hidden><svg class="i"><use href="#i-info"/></svg><span><b>Preview mode.</b> This copy is running from a file, so records are saved only in this browser. Once the folder is on the web server, everyone shares one database.</span></div>
   <main id="view"></main>
 </div>
 
@@ -404,6 +415,17 @@ const DEFAULT_SPECIALTIES = [
   'Nephrology', 'Neurology', 'Neurosurgery', 'OB/GYN', 'Oncology', 'Ophthalmology', 'Orthopedic Surgery',
   'Pain Management', 'Pediatrics', 'Plastic Surgery', 'Podiatry', 'Pulmonology', 'Radiology', 'Spine Surgery',
   'Urology', 'Vascular Surgery',
+];
+const DEFAULT_DEPARTMENTS = [
+  'Urgent Care', 'Emergency Department', 'Imaging – CT', 'Imaging – MRI', 'Imaging – X-ray', 'Imaging – Ultrasound',
+  'Laboratory', 'Physical Therapy', 'Pain Clinic', 'Surgery Scheduling', 'Primary Care Clinic', 'Outside provider',
+];
+// Referral / order checkpoints (in order)
+const CHECKPOINTS = [
+  { key: 'sentDate', label: 'Sent', verb: 'Referral / order sent' },
+  { key: 'scheduledDate', label: 'Scheduled', verb: 'Appointment scheduled' },
+  { key: 'completedDate', label: 'Seen / done', verb: 'Patient seen or test done' },
+  { key: 'resultedDate', label: 'Results back', verb: 'Results / notes received' },
 ];
 const STORE_KEY = 'nwsh.physician-relations.v1';
 const SESSION_KEY = 'nwsh.pr.session';
@@ -493,10 +515,45 @@ function toCSV(rows) {
 }
 
 /* ===================== Data storage =====================
-   Records live in localStorage; attachments live in IndexedDB.
-   Both stay in this browser only — use Settings → Backup to
-   move or share data.                                        */
+   Two modes, chosen automatically at start-up:
+   - server  : index.html is hosted next to api.php (PHP). Everything is
+               saved in the shared database on the web server and every
+               user sees the same records.
+   - local   : the file was opened directly (double-clicked) or the host
+               cannot run PHP. Records stay in this browser only — a
+               preview mode.                                            */
 let db;
+let MODE = 'local';
+let serverVersion = 0;
+let snapshot = {};          // server mode: last known state, used to work out what changed
+let pendingOps = [];        // server mode: changes not yet confirmed by the server
+let pushing = null;
+const API = 'api.php';
+
+async function api(action, body) {
+  const init = { credentials: 'same-origin', cache: 'no-store', headers: { 'X-Requested-With': 'fetch' } };
+  if (body !== undefined) {
+    init.method = 'POST';
+    if (body instanceof FormData) init.body = body;
+    else { init.headers['Content-Type'] = 'application/json'; init.body = JSON.stringify(body); }
+  }
+  const r = await fetch(`${API}?action=${encodeURIComponent(action)}`, init);
+  const j = await r.json().catch(() => null);
+  if (!j) throw new Error('The server did not answer correctly.');
+  if (r.status === 401 && session) { logout('Your session ended. Please sign in again.'); }
+  if (!r.ok || j.ok === false) { const e = new Error(j.error || 'Request failed'); e.status = r.status; throw e; }
+  return j;
+}
+async function detectMode() {
+  if (location.protocol === 'file:') return null;
+  try {
+    const c = new AbortController(); const t = setTimeout(() => c.abort(), 5000);
+    const r = await fetch(`${API}?action=ping`, { credentials: 'same-origin', cache: 'no-store', signal: c.signal });
+    clearTimeout(t);
+    const j = await r.json();
+    return j && j.app === 'nwsh-physician-relations' ? j : null;
+  } catch { return null; }
+}
 
 function emptyDB() {
   return {
@@ -504,36 +561,117 @@ function emptyDB() {
     settings: {
       team: CONFIG.users.filter((u) => u.team !== false).map((u) => u.name),
       specialties: DEFAULT_SPECIALTIES.slice(),
+      departments: DEFAULT_DEPARTMENTS.slice(),
+      riskDays: 14,
     },
     physicians: [],
     contacts: [],
+    referrals: [],
     meta: { createdAt: nowISO(), updatedAt: nowISO() },
   };
+}
+function normalizeDB(d) {
+  const base = emptyDB();
+  d.settings = Object.assign(base.settings, d.settings || {});
+  d.settings.riskDays = Math.max(1, num(d.settings.riskDays) || 14);
+  d.physicians = d.physicians || [];
+  d.contacts = d.contacts || [];
+  d.referrals = d.referrals || [];
+  d.meta = d.meta || base.meta;
+  return d;
 }
 
 function loadDB() {
   try {
     const raw = localStorage.getItem(STORE_KEY);
-    if (raw) {
-      const d = JSON.parse(raw);
-      const base = emptyDB();
-      d.settings = Object.assign(base.settings, d.settings || {});
-      d.physicians = d.physicians || [];
-      d.contacts = d.contacts || [];
-      d.meta = d.meta || base.meta;
-      return d;
-    }
+    if (raw) return normalizeDB(JSON.parse(raw));
   } catch (e) { console.error(e); }
   return emptyDB();
 }
 
+// Server mode: turn the raw record lists from api.php into the db object.
+function dbFromServer(res) {
+  const d = res.data || {};
+  const settingsRow = (d.settings || []).find((s) => s.id === 'main') || {};
+  const out = normalizeDB({
+    settings: Object.assign({ team: (res.defaults && res.defaults.team) || [] }, settingsRow),
+    physicians: d.physicians || [], contacts: d.contacts || [], referrals: d.referrals || [],
+    meta: { updatedAt: settingsRow.updatedAt || nowISO() },
+  });
+  delete out.settings.id;
+  serverVersion = res.version || 0;
+  snapshot = takeSnapshot(out);
+  return out;
+}
+function takeSnapshot(d) {
+  const s = {};
+  ['physicians', 'contacts', 'referrals'].forEach((c) => d[c].forEach((r) => { s[c + '/' + r.id] = JSON.stringify(r); }));
+  s['settings/main'] = JSON.stringify({ id: 'main', ...d.settings });
+  return s;
+}
+function diffOps(d) {
+  const next = takeSnapshot(d), ops = [];
+  for (const k of Object.keys(next)) if (snapshot[k] !== next[k]) { const [collection, id] = k.split('/'); ops.push({ op: 'put', collection, id, record: JSON.parse(next[k]) }); }
+  for (const k of Object.keys(snapshot)) if (!(k in next)) { const [collection, id] = k.split('/'); ops.push({ op: 'del', collection, id }); }
+  snapshot = next;
+  return ops;
+}
+async function pushOps() {
+  if (pushing) return pushing;
+  pushing = (async () => {
+    while (pendingOps.length) {
+      const batch = pendingOps.splice(0, pendingOps.length);
+      try {
+        const r = await api('batch', { ops: batch });
+        serverVersion = r.version;
+        setSaveState('saved');
+      } catch (e) {
+        pendingOps.unshift(...batch);
+        setSaveState('error');
+        toast('Could not save to the server: ' + e.message + ' — your change is kept and will be retried.', 'err');
+        break;
+      }
+    }
+  })().finally(() => { pushing = null; });
+  return pushing;
+}
+function setSaveState(state) {
+  const el = $('#save-state'); if (!el) return;
+  clearTimeout(el._t);
+  el.hidden = MODE !== 'server';
+  if (state === 'saved') el._t = setTimeout(() => { el.hidden = true; }, 1500);
+  el.className = 'save-state ' + state;
+  el.textContent = state === 'saving' ? 'Saving…' : state === 'error' ? 'Not saved' : 'Saved';
+  el.title = state === 'error' ? 'The last change could not be saved to the server. It will be retried automatically.' : 'All changes are saved in the shared database';
+}
+
 function saveDB() {
   db.meta.updatedAt = nowISO();
+  if (MODE === 'server') {
+    const ops = diffOps(db);
+    if (ops.length) { pendingOps.push(...ops); setSaveState('saving'); pushOps(); }
+    return true;
+  }
   try { localStorage.setItem(STORE_KEY, JSON.stringify(db)); return true; }
   catch (e) { toast('Could not save — browser storage is full. Export a backup and remove old attachments.', 'err'); return false; }
 }
 
-const Files = {
+// Server mode: pick up other people's changes every 30 seconds and when the tab is shown again.
+async function refreshFromServer() {
+  if (MODE !== 'server' || !session || pendingOps.length || pushing) return;
+  try {
+    const v = await api('version');
+    if (v.version === serverVersion) return;
+    const busy = $('#modal-root').innerHTML || (document.activeElement && /^(INPUT|TEXTAREA|SELECT)$/.test(document.activeElement.tagName) && document.activeElement.value);
+    if (busy) return;
+    db = dbFromServer(await api('load'));
+    rerender();
+  } catch (e) { /* offline or signed out — try again next time */ }
+}
+setInterval(refreshFromServer, 30000);
+document.addEventListener('visibilitychange', () => { if (!document.hidden) refreshFromServer(); });
+
+const IDB = {
   _db: null,
   open() {
     if (this._db) return Promise.resolve(this._db);
@@ -553,10 +691,24 @@ const Files = {
       t.onerror = () => reject(t.error);
     });
   },
-  put(id, blob) { return this.tx('readwrite', (s) => s.put(blob, id)); },
-  get(id) { return this.tx('readonly', (s) => s.get(id)); },
-  del(id) { return this.tx('readwrite', (s) => s.delete(id)); },
-  clear() { return this.tx('readwrite', (s) => s.clear()); },
+};
+const Files = {
+  async put(id, blob, name) {
+    if (MODE === 'server') { const fd = new FormData(); fd.append('id', id); fd.append('file', blob, name || blob.name || 'file'); await api('upload', fd); return; }
+    return IDB.tx('readwrite', (s) => s.put(blob, id));
+  },
+  async get(id) {
+    if (MODE === 'server') { const r = await fetch(`${API}?action=file&id=${encodeURIComponent(id)}`, { credentials: 'same-origin' }); return r.ok ? r.blob() : null; }
+    return IDB.tx('readonly', (s) => s.get(id));
+  },
+  async del(id) {
+    if (MODE === 'server') { await api('delfile', { id }); return; }
+    return IDB.tx('readwrite', (s) => s.delete(id));
+  },
+  async clear() {
+    if (MODE === 'server') return;
+    return IDB.tx('readwrite', (s) => s.clear());
+  },
 };
 
 /* ===================== Auth ===================== */
@@ -575,7 +727,17 @@ function getSession() {
 function touchSession() {
   if (!session) return;
   session.lastActive = Date.now();
+  if (MODE === 'server') return;
   try { sessionStorage.setItem(SESSION_KEY, JSON.stringify({ username: session.username, lastActive: session.lastActive })); } catch {}
+}
+async function startSession(user) {
+  session = { username: user.username, name: user.name, role: user.role, lastActive: Date.now(), users: user.users };
+  if (MODE === 'server') {
+    try { db = dbFromServer(await api('load')); }
+    catch (e) { session = null; showLoginError('Signed in, but the records could not be loaded: ' + e.message); return; }
+  }
+  touchSession();
+  showApp();
 }
 function isAdmin() { return session && session.role === 'admin'; }
 
@@ -598,24 +760,34 @@ function showApp() {
   else route();
 }
 function logout(msg) {
+  if (MODE === 'server' && session) { api('logout').catch(() => {}); }
   try { sessionStorage.removeItem(SESSION_KEY); } catch {}
   location.hash = '#/home';
   showLogin(msg);
 }
 
 $('#show-pw').addEventListener('change', (e) => { $('#login-form [name=password]').type = e.target.checked ? 'text' : 'password'; });
-$('#login-form').addEventListener('submit', (e) => {
+$('#login-form').addEventListener('submit', async (e) => {
   e.preventDefault();
   const f = e.target;
+  const btn = f.querySelector('button[type=submit]');
+  if (MODE === 'server') {
+    btn.disabled = true; btn.textContent = 'Signing in…';
+    try {
+      const r = await api('login', { username: f.username.value.trim(), password: f.password.value });
+      if (r.user.role === 'admin') { try { r.user.users = (await api('me')).users; } catch {} }
+      await startSession(r.user);
+    } catch (err) { showLoginError(err.message); f.password.value = ''; f.password.focus(); }
+    finally { btn.disabled = false; btn.textContent = 'Sign in'; }
+    return;
+  }
   const lockUntil = +(sessionStorage.getItem('nwsh.pr.lock') || 0);
   if (Date.now() < lockUntil) { showLoginError(`Too many attempts. Please wait ${Math.ceil((lockUntil - Date.now()) / 1000)} seconds and try again.`); return; }
   const username = f.username.value.trim().toLowerCase();
   const user = CONFIG.users.find((u) => u.username.toLowerCase() === username);
   if (user && sha256(`${user.username}:${f.password.value}`) === user.hash) {
     sessionStorage.removeItem('nwsh.pr.fails');
-    session = { username: user.username, name: user.name, role: user.role, lastActive: Date.now() };
-    touchSession();
-    showApp();
+    startSession(user);
   } else {
     const fails = +(sessionStorage.getItem('nwsh.pr.fails') || 0) + 1;
     sessionStorage.setItem('nwsh.pr.fails', fails);
@@ -670,10 +842,67 @@ function yearsInData() {
 }
 function methodLabel(m) { return `${ico(METHOD_ICON[m] || 'i-info', 'sm')} ${esc(m)}`; }
 
+/* ---------- Referrals & orders ---------- */
+const getRef = (id) => db.referrals.find((r) => r.id === id);
+function legStage(l) { return l.lost ? 'lost' : l.resultedDate ? 'resulted' : l.completedDate ? 'completed' : l.scheduledDate ? 'scheduled' : 'sent'; }
+function legLastDate(l) { return [l.sentDate, l.scheduledDate, l.completedDate, l.resultedDate, l.lostDate].filter(Boolean).sort().pop() || todayISO(); }
+function currentLeg(r) { return r.legs[r.legs.length - 1]; }
+function refWaiting(r) { const l = currentLeg(r); return l ? Math.max(0, daysBetween(legLastDate(l), todayISO())) : 0; }
+function refRiskReason(r) {
+  if (r.status !== 'active') return '';
+  const l = currentLeg(r); if (!l) return '';
+  if (l.scheduledDate && !l.completedDate && daysBetween(l.scheduledDate, todayISO()) > 2) return `Appointment on ${fmtDate(l.scheduledDate)} was not marked as seen`;
+  const w = refWaiting(r);
+  if (legStage(l) !== 'resulted' && w >= db.settings.riskDays) return `No movement for ${w} days`;
+  return '';
+}
+function refStatus(r) { return r.status === 'lost' ? 'lost' : r.status === 'complete' ? 'complete' : refRiskReason(r) ? 'risk' : 'active'; }
+function refBadge(r) {
+  const s = refStatus(r);
+  return s === 'lost' ? '<span class="badge b-over">Dropped out</span>' : s === 'complete' ? '<span class="badge b-done">Complete</span>'
+    : s === 'risk' ? `<span class="badge b-soon">At risk · ${refWaiting(r)} days</span>` : '<span class="badge b-c">In progress</span>';
+}
+function legStatusText(l) {
+  switch (legStage(l)) {
+    case 'lost': return 'Dropped out' + (l.lostReason ? ` — ${l.lostReason}` : '');
+    case 'resulted': return `Results received ${fmtDate(l.resultedDate)}`;
+    case 'completed': return `Seen / done ${fmtDate(l.completedDate)} — waiting for results`;
+    case 'scheduled': return `Scheduled for ${fmtDate(l.scheduledDate)}`;
+    default: return `Sent ${fmtDate(l.sentDate)} — waiting to be scheduled`;
+  }
+}
+function legNextCheckpoint(l) { return l.lost ? null : CHECKPOINTS.slice(1).find((c) => !l[c.key]) || null; }
+function refFirstDate(r) { return r.legs.length ? r.legs[0].sentDate : r.createdAt.slice(0, 10); }
+function refLastDate(r) { const l = currentLeg(r); return r.closedAt ? r.closedAt.slice(0, 10) : l ? legLastDate(l) : todayISO(); }
+function refDays(r) { return Math.max(0, daysBetween(refFirstDate(r), refStatus(r) === 'active' || refStatus(r) === 'risk' ? todayISO() : refLastDate(r))); }
+function avg(list) { return list.length ? Math.round((list.reduce((a, b) => a + b, 0) / list.length) * 10) / 10 : null; }
+function legInvolves(l, physicianId) { return (l.from && l.from.physicianId === physicianId) || (l.to && l.to.physicianId === physicianId); }
+function refsForPhysician(pid) { return db.referrals.filter((r) => r.legs.some((l) => legInvolves(l, pid))); }
+function partyPickerHTML(name, current) {
+  const deps = db.settings.departments, phys = db.physicians.slice().sort((a, b) => physSortName(a).localeCompare(physSortName(b)));
+  let val = '';
+  if (current) val = current.physicianId && getPhys(current.physicianId) ? 'p:' + current.physicianId : deps.includes(current.label) ? 'd:' + current.label : 'other';
+  return `<select name="${name}" data-party="${name}" required>
+      <option value="">Choose…</option>
+      <optgroup label="Departments &amp; clinics">${deps.map((d) => `<option value="d:${esc(d)}" ${val === 'd:' + d ? 'selected' : ''}>${esc(d)}</option>`).join('')}</optgroup>
+      <optgroup label="Physicians">${phys.map((p) => `<option value="p:${p.id}" ${val === 'p:' + p.id ? 'selected' : ''}>${esc(physName(p))}</option>`).join('')}</optgroup>
+      <option value="other" ${val === 'other' ? 'selected' : ''}>Someone else (type the name below)</option>
+    </select>
+    <input name="${name}Other" placeholder="Name of the doctor, clinic or department" value="${val === 'other' ? esc(current.label) : ''}" ${val === 'other' ? '' : 'hidden'}>`;
+}
+function readParty(fd, name) {
+  const v = String(fd.get(name) || '');
+  if (v === 'other') { const label = String(fd.get(name + 'Other') || '').trim(); return label ? { label } : null; }
+  if (v.startsWith('p:')) { const p = getPhys(v.slice(2)); return p ? { label: physName(p), physicianId: p.id } : null; }
+  if (v.startsWith('d:')) return { label: v.slice(2) };
+  return null;
+}
+
 /* ===================== UI state ===================== */
 const ui = {
   phys: { q: '', stage: '', type: '', spec: '', sort: 'name' },
   fu: { tab: 'over', mine: false },
+  ref: { tab: 'active', q: '' },
   act: { q: '', who: '', method: '', from: '', to: '' },
   year: new Date().getFullYear(),
 };
@@ -683,7 +912,8 @@ function route() {
   if (!session) return;
   const parts = location.hash.replace(/^#\/?/, '').split('/');
   const view = parts[0] || 'home';
-  $$('[data-nav]').forEach((a) => a.classList.toggle('active', a.dataset.nav === (view === 'physician' ? 'physicians' : view)));
+  const navKey = view === 'physician' ? 'physicians' : view === 'referral' ? 'referrals' : view;
+  $$('[data-nav]').forEach((a) => a.classList.toggle('active', a.dataset.nav === navKey));
   updateNavCount();
   const main = $('#view');
   switch (view) {
@@ -694,6 +924,12 @@ function route() {
       break;
     }
     case 'followups': main.innerHTML = viewFollowups(); break;
+    case 'referrals': main.innerHTML = viewReferrals(); break;
+    case 'referral': {
+      const r = getRef(parts[1]);
+      main.innerHTML = r ? viewReferral(r) : `<div class="card empty">That referral could not be found. <a href="#/referrals">Back to all referrals</a></div>`;
+      break;
+    }
     case 'activity': main.innerHTML = viewActivity(); updateActivityTable(); break;
     case 'settings': main.innerHTML = viewSettings(); break;
     default: main.innerHTML = viewHome();
@@ -705,6 +941,9 @@ function updateNavCount() {
   const n = openFollowups().filter((c) => fuState(c) === 'over').length;
   const el = $('#nav-fu-count');
   el.hidden = !n; el.textContent = n;
+  const m = db.referrals.filter((r) => refStatus(r) === 'risk').length;
+  const el2 = $('#nav-ref-count');
+  el2.hidden = !m; el2.textContent = m;
 }
 window.addEventListener('hashchange', route);
 
@@ -753,21 +992,27 @@ function viewHome() {
   ];
   const maxPipe = Math.max(1, ...pipe.map((x) => x.n));
   const attention = [...overdue, ...soon].sort((a, b) => a.fuDate.localeCompare(b.fuDate)).slice(0, 8);
+  const riskRefs = db.referrals.filter((r) => refStatus(r) === 'risk').sort((a, b) => refWaiting(b) - refWaiting(a)).slice(0, 5);
+  const activeRefs = db.referrals.filter((r) => ['active', 'risk'].includes(refStatus(r))).length;
   const recent = db.contacts.slice().sort(byContactDesc).slice(0, 8);
 
   return head + `
     <section class="card">
       <div class="card-head">
         <h2>Needs attention</h2>
-        <span class="hint">${overdue.length ? `<b style="color:var(--red)">${overdue.length} overdue</b> · ` : ''}${soon.length} due this week · <a href="#/followups">See all follow-ups</a></span>
+        <span class="hint">${riskRefs.length ? `<b style="color:var(--red)">${riskRefs.length} referral${riskRefs.length === 1 ? '' : 's'} at risk</b> · ` : ''}${overdue.length ? `<b style="color:var(--red)">${overdue.length} overdue</b> · ` : ''}${soon.length} due this week · <a href="#/followups">Follow-ups</a> · <a href="#/referrals">Referrals</a></span>
       </div>
+      ${riskRefs.length ? `<ul class="list">${riskRefs.map((r) => { const l = currentLeg(r); return `<li><div class="grow"><a href="#/referral/${r.id}"><b>Referral · patient ${esc(r.mrn)}</b></a>
+            <div class="small muted">${l ? `${esc(l.from.label)} to ${esc(l.to.label)} · ${esc(l.service || '')}` : ''}</div>
+            <div class="small" style="color:var(--red)">${esc(refRiskReason(r))}</div></div>
+            <div style="text-align:right;display:grid;gap:6px;justify-items:end">${refBadge(r)}<a class="btn sm" href="#/referral/${r.id}">Open</a></div></li>`; }).join('')}</ul>` : ''}
       ${attention.length ? `<ul class="list">${attention.map((c) => {
         const p = getPhys(c.physicianId);
         return `<li><div class="grow"><a href="#/physician/${c.physicianId}"><b>${esc(p ? physName(p) : 'Unknown')}</b></a>
             <div class="small muted">${esc(c.ask || c.comm || '').slice(0, 120)}</div>
             <div class="small muted">Assigned to ${esc(c.who)} · Follow up by ${fmtDate(c.fuDate)}</div></div>
             <div style="text-align:right;display:grid;gap:6px;justify-items:end">${fuBadge(c)}<a class="btn sm" href="#/physician/${c.physicianId}">Open</a></div></li>`;
-      }).join('')}</ul>` : `<p class="empty">Nothing is overdue or due this week. Nice work.</p>`}
+      }).join('')}</ul>` : (riskRefs.length ? '' : `<p class="empty">Nothing is overdue or due this week, and no referrals are at risk. Nice work.</p>`)}
     </section>
 
     <div class="kpis" style="margin-top:18px">
@@ -776,6 +1021,7 @@ function viewHome() {
       <a class="kpi" href="#/physicians" data-act="filter-phys" data-stage="b"><div class="label">In credentialing</div><div class="value">${count((p) => p.stage === 'b' || p.stage === 'c')}</div></a>
       <a class="kpi green" href="#/physicians" data-act="filter-phys" data-stage="d"><div class="label">On-boarded</div><div class="value">${count((p) => p.stage === 'd')}</div></a>
       <a class="kpi ${overdue.length ? 'red' : ''}" href="#/followups"><div class="label">Overdue follow-ups</div><div class="value">${overdue.length}</div></a>
+      <a class="kpi ${riskRefs.length ? 'red' : ''}" href="#/referrals" data-act="ref-tab-link" data-tab="active"><div class="label">Referrals in progress</div><div class="value">${activeRefs}${riskRefs.length ? ` <span class="small" style="color:var(--red)">· ${riskRefs.length} at risk</span>` : ''}</div></a>
       <a class="kpi" href="#/activity"><div class="label">Contacts this month</div><div class="value">${contactsMonth}</div></a>
     </div>
 
@@ -983,6 +1229,23 @@ function viewPhysician(p) {
           <div class="card-head"><h2>Goals &amp; actuals</h2><button class="btn sm no-print" data-act="add-goal" data-id="${p.id}">${ico('i-plus', 'sm')}Add a year</button></div>
           ${goalsTableHTML(p)}
         </section>
+
+        <section class="card">
+          <div class="card-head"><h2>Referrals &amp; orders</h2>${(() => { const rs = refsForPhysician(p.id); return rs.length ? `<a href="#/referrals" data-act="ref-search" data-q="${esc(physName(p))}">See all ${rs.length}</a>` : ''; })()}</div>
+          ${(() => {
+            const rs = refsForPhysician(p.id);
+            if (!rs.length) return '<p class="empty">No tracked referrals involve this physician yet.</p>';
+            const act = rs.filter((r) => ['active', 'risk'].includes(refStatus(r))), risk = rs.filter((r) => refStatus(r) === 'risk');
+            const sent = rs.flatMap((r) => r.legs).filter((l) => l.from && l.from.physicianId === p.id).length;
+            const recv = rs.flatMap((r) => r.legs).filter((l) => l.to && l.to.physicianId === p.id).length;
+            return `<div class="kpis" style="grid-template-columns:repeat(auto-fit,minmax(110px,1fr))">
+              <div class="kpi"><div class="label">Sent by</div><div class="value">${sent}</div></div>
+              <div class="kpi"><div class="label">Received</div><div class="value">${recv}</div></div>
+              <div class="kpi"><div class="label">In progress</div><div class="value">${act.length}</div></div>
+              <div class="kpi ${risk.length ? 'red' : ''}"><div class="label">At risk</div><div class="value">${risk.length}</div></div>
+            </div>`;
+          })()}
+        </section>
       </div>
 
       <div>
@@ -1186,6 +1449,177 @@ function updateActivityTable() {
       }).join('')}</tbody></table></div>` : '<p class="empty">No contacts match these filters.</p>';
 }
 
+/* ===================== View: Referrals & orders ===================== */
+function viewReferrals() {
+  const f = ui.ref, R = db.referrals;
+  const q = f.q.trim().toLowerCase();
+  const withStatus = R.map((r) => ({ r, s: refStatus(r) }));
+  const cut30 = addDays(todayISO(), -30);
+  const legs = R.flatMap((r) => r.legs);
+  const toSeen = avg(legs.filter((l) => l.completedDate && l.sentDate).map((l) => daysBetween(l.sentDate, l.completedDate)));
+  const toResults = avg(legs.filter((l) => l.resultedDate && l.completedDate).map((l) => daysBetween(l.completedDate, l.resultedDate)));
+  const tabs = [
+    ['active', 'In progress', (x) => x.s === 'active' || x.s === 'risk'],
+    ['risk', 'At risk', (x) => x.s === 'risk'],
+    ['complete', 'Completed', (x) => x.s === 'complete'],
+    ['lost', 'Dropped out', (x) => x.s === 'lost'],
+    ['all', 'All', () => true],
+  ];
+  const tab = tabs.find((t) => t[0] === f.tab) || tabs[0];
+  const rows = withStatus.filter(tab[2]).filter(({ r }) => {
+    if (!q) return true;
+    const hay = [r.mrn, r.initials, r.notes, ...r.legs.flatMap((l) => [l.from && l.from.label, l.to && l.to.label, l.service])].join(' ').toLowerCase();
+    return hay.includes(q);
+  }).sort((a, b) => (a.s === 'risk' ? -1 : 0) - (b.s === 'risk' ? -1 : 0) || refWaiting(b.r) - refWaiting(a.r));
+  // by destination
+  const byDest = {};
+  legs.forEach((l) => {
+    const k = l.to ? l.to.label : '—'; const d = byDest[k] = byDest[k] || { n: 0, seen: [], res: [], lost: 0 };
+    d.n++; if (l.lost) d.lost++;
+    if (l.completedDate && l.sentDate) d.seen.push(daysBetween(l.sentDate, l.completedDate));
+    if (l.resultedDate && l.completedDate) d.res.push(daysBetween(l.completedDate, l.resultedDate));
+  });
+  const destRows = Object.entries(byDest).sort((a, b) => b[1].n - a[1].n);
+  return `
+    <div class="page-head">
+      <div><h1>Referrals &amp; Orders</h1><p class="lead">Follow each patient hand-off from start to finish so nobody falls through the cracks.</p></div>
+      <div class="actions">
+        <button class="btn" data-act="export-ref-csv">${ico('i-download')}Download spreadsheet</button>
+        <button class="btn primary" data-act="add-referral">${ico('i-plus')}Start tracking a referral</button>
+      </div>
+    </div>
+    <div class="kpis" style="margin-bottom:18px">
+      <a class="kpi" href="#/referrals" data-act="ref-tab-link" data-tab="active"><div class="label">In progress</div><div class="value">${withStatus.filter((x) => x.s === 'active' || x.s === 'risk').length}</div></a>
+      <a class="kpi ${withStatus.some((x) => x.s === 'risk') ? 'red' : ''}" href="#/referrals" data-act="ref-tab-link" data-tab="risk"><div class="label">At risk</div><div class="value">${withStatus.filter((x) => x.s === 'risk').length}</div></a>
+      <a class="kpi green" href="#/referrals" data-act="ref-tab-link" data-tab="complete"><div class="label">Completed, last 30 days</div><div class="value">${withStatus.filter((x) => x.s === 'complete' && (x.r.closedAt || '') >= cut30).length}</div></a>
+      <a class="kpi" href="#/referrals" data-act="ref-tab-link" data-tab="lost"><div class="label">Dropped out, last 30 days</div><div class="value">${withStatus.filter((x) => x.s === 'lost' && (x.r.closedAt || '') >= cut30).length}</div></a>
+      <div class="kpi"><div class="label">Avg. days until seen</div><div class="value">${toSeen === null ? '—' : toSeen}</div></div>
+      <div class="kpi"><div class="label">Avg. days until results</div><div class="value">${toResults === null ? '—' : toResults}</div></div>
+    </div>
+    <section class="card">
+      <div class="filters"><div class="search"><svg class="i"><use href="#i-search"/></svg><input type="search" placeholder="Search by MRN, initials, doctor, department or service" value="${esc(f.q)}" data-input="ref-q" aria-label="Search referrals"></div></div>
+      <div class="tabs">${tabs.map(([k, l, fn]) => `<button class="${f.tab === k ? 'on' : ''}" data-act="ref-tab" data-tab="${k}">${l} (${withStatus.filter(fn).length})</button>`).join('')}</div>
+      ${rows.length ? `<div class="table-wrap"><table>
+        <thead><tr><th>Patient</th><th>Current step</th><th>Where it stands</th><th>Started</th><th></th></tr></thead>
+        <tbody>${rows.map(({ r, s }) => { const l = currentLeg(r); const risk = refRiskReason(r); return `
+          <tr class="clickable" data-act="open-ref" data-id="${r.id}">
+            <td><div class="primary-text"><a href="#/referral/${r.id}">${esc(r.mrn)}</a></div><div class="sub">${esc(r.initials || '')}</div></td>
+            <td>${l ? `<div><b>${esc(l.from.label)}</b> ${ico('i-arrow-right', 'sm')} <b>${esc(l.to.label)}</b></div><div class="sub">${esc(l.service || '')}${r.legs.length > 1 ? ` · step ${r.legs.length} of ${r.legs.length}` : ''}</div>` : '<span class="muted">No steps yet</span>'}</td>
+            <td>${refBadge(r)}<div class="sub">${l ? esc(legStatusText(l)) : ''}${risk ? `<br><span style="color:var(--red)">${esc(risk)}</span>` : ''}</div></td>
+            <td class="nowrap">${fmtDate(refFirstDate(r))}<div class="sub">${refDays(r)} days ${s === 'complete' || s === 'lost' ? 'total' : 'so far'}</div></td>
+            <td class="nowrap" style="text-align:right"><a class="btn sm" href="#/referral/${r.id}">Open ${ico('i-chevron', 'sm')}</a></td>
+          </tr>`; }).join('')}</tbody></table></div>`
+        : `<p class="empty">${R.length ? 'Nothing here.' : 'No referrals are being tracked yet. Click <b>Start tracking a referral</b> when a patient is referred or an order is placed.'}</p>`}
+    </section>
+    ${destRows.length ? `<section class="card">
+      <div class="card-head"><h2>By destination</h2><span class="hint">Who receives our referrals and orders, and how quickly things move</span></div>
+      <div class="table-wrap"><table>
+        <thead><tr><th>Sent to</th><th class="num">Referrals / orders</th><th class="num">Avg. days until seen</th><th class="num">Avg. days until results</th><th class="num">Dropped out</th></tr></thead>
+        <tbody>${destRows.map(([k, d]) => `<tr><td><b>${esc(k)}</b></td><td class="num">${d.n}</td><td class="num">${avg(d.seen) ?? '—'}</td><td class="num">${avg(d.res) ?? '—'}</td><td class="num">${d.lost ? `<b style="color:var(--red)">${d.lost}</b>` : '0'}</td></tr>`).join('')}</tbody>
+      </table></div>
+    </section>` : ''}`;
+}
+
+function viewReferral(r) {
+  const s = refStatus(r), risk = refRiskReason(r), active = s === 'active' || s === 'risk';
+  return `
+    <a class="back no-print" href="#/referrals">${ico('i-arrow-left')}All referrals</a>
+    <section class="card">
+      <div class="phys-head">
+        <div class="avatar" aria-hidden="true">${esc((r.initials || r.mrn || '?').slice(0, 2).toUpperCase())}</div>
+        <div class="info">
+          <h1>Patient ${esc(r.mrn)}${r.initials ? ` <span class="muted" style="font-weight:400">(${esc(r.initials)})</span>` : ''}</h1>
+          <div class="sub">Started ${fmtDate(refFirstDate(r))} · ${refDays(r)} days ${active ? 'so far' : 'total'} · ${r.legs.length} step${r.legs.length === 1 ? '' : 's'}</div>
+        </div>
+        <div>${refBadge(r)}</div>
+        <div class="actions no-print" style="display:flex;gap:10px;flex-wrap:wrap">
+          <button class="btn" data-act="edit-referral" data-id="${r.id}">${ico('i-edit')}Edit patient</button>
+          ${active ? `<button class="btn" data-act="close-referral" data-id="${r.id}">${ico('i-check')}Close — care complete</button>` : `<button class="btn" data-act="reopen-referral" data-id="${r.id}">Reopen</button>`}
+          ${isAdmin() ? `<button class="btn danger" data-act="delete-referral" data-id="${r.id}">${ico('i-trash')}Delete</button>` : ''}
+        </div>
+      </div>
+      ${risk ? `<div class="notice" style="margin-top:14px">${ico('i-alert')}<div><b>Needs attention:</b> ${esc(risk)}. Call the patient or the receiving office, then record what happened below.</div></div>` : ''}
+      ${r.status === 'lost' ? `<div class="notice" style="margin-top:14px">${ico('i-alert')}<div><b>Dropped out</b> ${fmtDate(r.closedAt)}${r.lostReason ? ` — ${esc(r.lostReason)}` : ''}. Reopen if the patient comes back.</div></div>` : ''}
+      ${r.notes ? `<p style="margin:14px 0 0;white-space:pre-wrap">${esc(r.notes)}</p>` : ''}
+    </section>
+
+    ${r.legs.map((l, i) => legCardHTML(r, l, i, active)).join('')}
+
+    ${active ? `<div class="no-print" style="margin-top:18px;display:flex;gap:10px;flex-wrap:wrap">
+      <button class="btn primary" data-act="add-leg" data-id="${r.id}">${ico('i-plus')}Add the next step${r.legs.length ? ` (from ${esc(currentLeg(r).to.label)})` : ''}</button>
+      <span class="help" style="align-self:center">Example: after the surgeon sees the patient and orders a CT, add a step from the surgeon to Imaging.</span>
+    </div>` : ''}`;
+}
+
+function legCardHTML(r, l, i, active) {
+  const stage = legStage(l), next = legNextCheckpoint(l);
+  const idx = l.lost ? -1 : CHECKPOINTS.findIndex((c) => c.key === (stage === 'resulted' ? 'resultedDate' : stage === 'completed' ? 'completedDate' : stage === 'scheduled' ? 'scheduledDate' : 'sentDate'));
+  const gap = (a, b) => (l[a] && l[b] ? `${daysBetween(l[a], l[b])}d` : '');
+  const canEdit = active && i === r.legs.length - 1;
+  return `<section class="card leg ${l.lost ? 'lost' : ''}">
+    <div class="card-head">
+      <h2>Step ${i + 1} · ${esc(l.from.label)} ${ico('i-arrow-right', 'sm')} ${esc(l.to.label)}</h2>
+      <span class="hint">${esc(l.service || '')}</span>
+    </div>
+    <div class="steps four">
+      ${CHECKPOINTS.map((c, k) => `<div class="step ${l.lost && k > idx ? '' : k < idx ? 'done' : k === idx ? (stage === 'resulted' ? 'done' : 'current') : ''}">
+        <div class="circle">${k <= idx && (k < idx || stage === 'resulted') ? ico('i-check') : k + 1}</div>
+        <div class="t">${c.label}</div>
+        <div class="d">${l[c.key] ? fmtDate(l[c.key]) : (k > 0 && !l.lost ? '&nbsp;' : '&nbsp;')}${k > 0 && l[c.key] && l[CHECKPOINTS[k - 1].key] ? ` <span class="tag">${gap(CHECKPOINTS[k - 1].key, c.key)}</span>` : ''}</div>
+      </div>`).join('')}
+    </div>
+    <p style="margin:0 0 10px"><b>${l.lost ? '<span style="color:var(--red)">Dropped out</span>' : esc(legStatusText(l))}</b>${l.lost && l.lostReason ? ` — ${esc(l.lostReason)}` : ''}</p>
+    <div class="status-actions no-print">
+      ${canEdit && next ? `<button class="btn primary" data-act="leg-check" data-id="${r.id}" data-leg="${l.id}" data-key="${next.key}">${ico('i-check')}${esc(next.verb)}…</button>` : ''}
+      ${canEdit && !l.lost ? `<button class="btn" data-act="leg-lost" data-id="${r.id}" data-leg="${l.id}">Patient didn't follow through…</button>` : ''}
+      ${active ? `<button class="btn link" data-act="edit-leg" data-id="${r.id}" data-leg="${l.id}">Edit dates or details</button>` : ''}
+    </div>
+    ${(l.log || []).length ? `<ul class="list small" style="margin-top:12px">${l.log.slice().reverse().map((e) => `<li><span>${esc(e.text)}</span><span class="muted nowrap">${fmtDate(e.date)} · ${esc(e.by)}</span></li>`).join('')}</ul>` : ''}
+  </section>`;
+}
+
+function referralFormHTML(r) {
+  r = r || {};
+  return `<form class="form" id="ref-form" data-form="referral" data-id="${r.id || ''}">
+    <div class="notice info">${ico('i-info')}<div>Identify the patient by <b>MRN or initials only</b> — please do not type the patient's full name or date of birth.</div></div>
+    <div class="row2">
+      <label><span class="req">Patient MRN / ID</span><input name="mrn" required value="${esc(r.mrn || '')}" placeholder="e.g. 104233"></label>
+      <label><span>Patient initials <span class="help">(optional)</span></span><input name="initials" maxlength="5" value="${esc(r.initials || '')}" placeholder="e.g. J.D."></label>
+    </div>
+    ${r.id ? '' : `<fieldset><legend>First step</legend><div class="form">
+      <div class="row2">
+        <label><span class="req">Referred / ordered by</span>${partyPickerHTML('from', null)}</label>
+        <label><span class="req">Sent to</span>${partyPickerHTML('to', null)}</label>
+      </div>
+      <div class="row2">
+        <label><span class="req">What for</span><input name="service" required placeholder="e.g. Spine consult, CT lumbar spine, PT evaluation"></label>
+        <label><span class="req">Date sent</span><input type="date" name="sentDate" required value="${todayISO()}"></label>
+      </div>
+    </div></fieldset>`}
+    <label><span>Notes <span class="help">(optional)</span></span><textarea name="notes" rows="2">${esc(r.notes || '')}</textarea></label>
+  </form>`;
+}
+function legFormHTML(r, l) {
+  const prev = currentLeg(r);
+  const from = l ? l.from : (prev ? prev.to : null);
+  return `<form class="form" id="leg-form">
+    <div class="row2">
+      <label><span class="req">Referred / ordered by</span>${partyPickerHTML('from', from)}</label>
+      <label><span class="req">Sent to</span>${partyPickerHTML('to', l ? l.to : null)}</label>
+    </div>
+    <div class="row2">
+      <label><span class="req">What for</span><input name="service" required value="${esc(l ? l.service : '')}" placeholder="e.g. CT lumbar spine"></label>
+      <label><span class="req">Date sent</span><input type="date" name="sentDate" required value="${esc(l ? l.sentDate : todayISO())}"></label>
+    </div>
+    ${l ? `<fieldset><legend>Dates</legend><div class="row3">
+      <label><span>Scheduled</span><input type="date" name="scheduledDate" value="${esc(l.scheduledDate || '')}"></label>
+      <label><span>Seen / done</span><input type="date" name="completedDate" value="${esc(l.completedDate || '')}"></label>
+      <label><span>Results back</span><input type="date" name="resultedDate" value="${esc(l.resultedDate || '')}"></label>
+    </div><p class="help" style="margin:10px 0 0">Clear a date to undo that checkpoint.</p></fieldset>` : ''}
+    <label><span>Notes <span class="help">(optional)</span></span><textarea name="notes" rows="2">${esc(l ? l.notes || '' : '')}</textarea></label>
+  </form>`;
+}
+
 /* ===================== View: Settings ===================== */
 function viewSettings() {
   const size = new Blob([localStorage.getItem(STORE_KEY) || '']).size;
@@ -1211,9 +1645,26 @@ function viewSettings() {
 
     <div class="grid2">
       <section class="card">
+        <div class="card-head"><h2>Departments &amp; clinics</h2><span class="hint">Choices for "Sent to" on referrals and orders</span></div>
+        <form class="form" data-form="departments">
+          <label><span>One per line</span><textarea name="list" rows="9">${esc(db.settings.departments.join('\n'))}</textarea></label>
+          <div><button class="btn" type="submit">Save list</button></div>
+        </form>
+      </section>
+      <section class="card">
+        <h2>Referral alerts</h2>
+        <label class="field" style="max-width:320px"><span class="field-label">Flag a referral as "at risk" after this many days with no movement</span><input type="number" min="1" max="365" value="${esc(db.settings.riskDays)}" data-change="risk-days"></label>
+        <p class="help" style="margin-top:10px">A referral is also flagged when an appointment date passes without being marked as seen.</p>
+      </section>
+    </div>
+
+    <div class="grid2">
+      <section class="card">
         <h2>Backups &amp; downloads</h2>
-        <div class="notice" style="margin-bottom:14px">${ico('i-alert')}<div><b>Please read:</b> In this version, everything is saved <b>in this web browser on this computer</b>. Other team members will not see these records unless you export a backup and they import it. Export a backup at the end of each week.</div></div>
-        <p class="small muted">${db.physicians.length} physicians · ${db.contacts.length} contacts · ${fmtSize(size)} of records (attachments are stored separately). Last saved ${fmtTS(db.meta.updatedAt)}.</p>
+        ${MODE === 'server'
+          ? `<div class="notice info" style="margin-bottom:14px">${ico('i-info')}<div><b>Shared database.</b> Everything is saved in <code>data/physician-relations.sqlite</code> on the web server, and every team member sees the same records. Export a backup now and then and keep it somewhere safe.</div></div>`
+          : `<div class="notice" style="margin-bottom:14px">${ico('i-alert')}<div><b>Preview mode.</b> This copy is running from a file, so everything is saved <b>in this web browser on this computer</b> only. Once the folder is on the web server, everyone shares one database and this notice goes away.</div></div>`}
+        <p class="small muted">${db.physicians.length} physicians · ${db.contacts.length} contacts · ${db.referrals.length} referrals · ${fmtSize(size)} of records. Last saved ${fmtTS(db.meta.updatedAt)}.</p>
         <div style="display:flex;gap:10px;flex-wrap:wrap">
           <button class="btn primary" data-act="export-json">${ico('i-download')}Export a backup</button>
           ${isAdmin() ? `<button class="btn" data-act="import-json">${ico('i-upload')}Restore from a backup…</button>` : ''}
@@ -1227,12 +1678,12 @@ function viewSettings() {
       ${isAdmin() ? `<section class="card">
         <h2>Logins</h2>
         <table><thead><tr><th>Username</th><th>Name</th><th>Role</th></tr></thead>
-          <tbody>${CONFIG.users.map((u) => `<tr><td class="mono">${esc(u.username)}</td><td>${esc(u.name)}</td><td>${esc(u.role)}</td></tr>`).join('')}</tbody></table>
+          <tbody>${(session.users || CONFIG.users).map((u) => `<tr><td class="mono">${esc(u.username)}</td><td>${esc(u.name)}</td><td>${esc(u.role)}</td></tr>`).join('')}</tbody></table>
         <h3 style="margin-top:18px">Password hash generator</h3>
-        <p class="small muted" style="margin-top:0">Logins are defined in the <code>CONFIG</code> block at the top of this HTML file. To change a password, generate a hash here, paste it into that user's <code>hash</code> field, and re-upload the file.</p>
+        <p class="small muted" style="margin-top:0">${MODE === 'server' ? 'Logins are defined in <code>config.php</code> on the web server.' : 'In preview mode, logins are defined in the <code>CONFIG</code> block at the top of index.html.'} To change a password, generate a hash here, paste it into that user's <code>hash</code> line, and re-upload the file.</p>
         <form class="form" data-form="hash" autocomplete="off">
           <div class="row2">
-            <label><span>Username</span><select name="username">${CONFIG.users.map((u) => `<option>${esc(u.username)}</option>`).join('')}</select></label>
+            <label><span>Username</span><select name="username">${(session.users || CONFIG.users).map((u) => `<option>${esc(u.username)}</option>`).join('')}</select></label>
             <label><span>New password</span><input name="password" type="text" minlength="8" required autocomplete="new-password"></label>
           </div>
           <div><button class="btn" type="submit">Generate hash</button></div>
@@ -1365,7 +1816,7 @@ async function saveContactFromForm(form) {
   if (tooBig) { toast(`"${tooBig.name}" is larger than ${CONFIG.maxFileMB} MB and cannot be attached.`, 'err'); return false; }
   const attachments = [];
   try {
-    for (const f of files) { const id = uid(); await Files.put(id, f); attachments.push({ id, name: f.name, size: f.size, type: f.type }); }
+    for (const f of files) { const id = uid(); await Files.put(id, f, f.name); attachments.push({ id, name: f.name, size: f.size, type: f.type }); }
   } catch (e) { toast('The attachment could not be saved: ' + (e && e.message ? e.message : e), 'err'); return false; }
   const fields = {
     date: fd.get('date'), who: fd.get('who'), method: fd.get('method'),
@@ -1423,12 +1874,20 @@ async function importBackup(file) {
   let data;
   try { data = JSON.parse(await file.text()); } catch { toast('That file is not a valid backup.', 'err'); return; }
   if (!data || !['nwsh-physician-relations', 'physician-crm'].includes(data.app) || !data.db) { toast('That file is not a Physician Relations backup.', 'err'); return; }
-  confirmBox(`Replace everything in this browser with the backup from <b>${fmtTS(data.exportedAt)}</b> (${data.db.physicians.length} physicians, ${data.db.contacts.length} contacts)?`, async () => {
-    try { await Files.clear(); for (const [id, url] of Object.entries(data.files || {})) await Files.put(id, await (await fetch(url)).blob()); }
+  confirmBox(`Replace everything ${MODE === 'server' ? 'in the shared database' : 'in this browser'} with the backup from <b>${fmtTS(data.exportedAt)}</b> (${data.db.physicians.length} physicians, ${data.db.contacts.length} contacts)?`, async () => {
+    const d = normalizeDB(data.db);
+    if (MODE === 'server') {
+      try {
+        const r = await api('replace', { data: { physicians: d.physicians, contacts: d.contacts, referrals: d.referrals, settings: [{ id: 'main', ...d.settings }] } });
+        serverVersion = r.version; db = d; snapshot = takeSnapshot(db);
+      } catch (e) { toast('The backup could not be restored: ' + e.message, 'err'); return; }
+    } else {
+      localStorage.setItem(STORE_KEY, JSON.stringify(d)); db = loadDB();
+    }
+    try { await Files.clear(); for (const [id, url] of Object.entries(data.files || {})) { const blob = await (await fetch(url)).blob(); const a = db.contacts.flatMap((c) => c.attachments || []).find((x) => x.id === id); await Files.put(id, blob, a ? a.name : 'file'); } }
     catch (e) { toast('Some attachments could not be restored.', 'err'); }
-    localStorage.setItem(STORE_KEY, JSON.stringify(data.db));
-    db = loadDB(); toast('Backup restored'); rerender();
-  }, 'Replace my data', true);
+    toast('Backup restored'); rerender();
+  }, 'Replace the data', true);
 }
 function exportPhysCSV() {
   const y = new Date().getFullYear();
@@ -1453,6 +1912,14 @@ function exportContactsCSV() {
   download(`activity-${todayISO()}.csv`, '﻿' + toCSV(rows), 'text/csv');
 }
 
+function exportReferralsCSV() {
+  const rows = [['Patient MRN', 'Initials', 'Status', 'Started', 'Days in process', 'Step', 'Referred by', 'Sent to', 'What for', 'Sent', 'Scheduled', 'Seen / done', 'Results back', 'Days to seen', 'Days to results', 'Dropped out', 'Reason', 'Notes']];
+  db.referrals.forEach((r) => r.legs.forEach((l, i) => rows.push([r.mrn, r.initials, { active: 'In progress', risk: 'At risk', complete: 'Complete', lost: 'Dropped out' }[refStatus(r)], refFirstDate(r), refDays(r), i + 1,
+    l.from.label, l.to.label, l.service, l.sentDate, l.scheduledDate, l.completedDate, l.resultedDate,
+    l.completedDate && l.sentDate ? daysBetween(l.sentDate, l.completedDate) : '', l.resultedDate && l.completedDate ? daysBetween(l.completedDate, l.resultedDate) : '', l.lost ? 'Yes' : '', l.lostReason || '', l.notes || ''])));
+  download(`referrals-${todayISO()}.csv`, '﻿' + toCSV(rows), 'text/csv');
+}
+
 function loadSample() {
   const t = todayISO(), y = new Date().getFullYear(), team = db.settings.team;
   const me = team.includes(session.name) ? session.name : team[0], other = team.find((n) => n !== me) || me;
@@ -1475,6 +1942,21 @@ function loadSample() {
     C(P[1], -12, me, 'Phone Call', 'Spoke with practice manager. Dr. Chen is open to privileges for lap chole and hernia cases.', 'Return completed credentialing packet', -2, false),
     C(P[2], -3, other, 'Text', 'Intro text via mutual colleague; agreed to a meet-and-greet.', 'Schedule site tour', 5, false),
     C(P[3], -40, me, 'Email', 'Credentialing approved by MEC. Sent welcome letter.', 'Schedule orientation and EHR training', 14, false),
+  );
+  const uc = { label: 'Urgent Care' }, ct = { label: 'Imaging – CT' }, mri = { label: 'Imaging – MRI' }, pt = { label: 'Physical Therapy' };
+  const surg = { label: physName(P[0]), physicianId: P[0].id }, gen = { label: physName(P[1]), physicianId: P[1].id };
+  const L = (from, to, service, sent, sched, done, res, extra = {}) => ({ id: uid(), from, to, service, sentDate: addDays(t, sent), scheduledDate: sched === null ? '' : addDays(t, sched), completedDate: done === null ? '' : addDays(t, done), resultedDate: res === null ? '' : addDays(t, res), log: [{ date: addDays(t, sent), by: me, text: `Sent to ${to.label}` }], ...extra });
+  db.referrals.push(
+    { id: uid(), mrn: '104233', initials: 'J.D.', notes: 'Low back pain, seen at urgent care.', status: 'complete', createdAt: nowISO(), createdBy: me, closedAt: addDays(t, -3) + 'T17:00:00.000Z', closedBy: me,
+      legs: [L(uc, surg, 'Spine consult', -34, -29, -24, -22), L(surg, ct, 'CT lumbar spine', -24, -20, -18, -16), L(surg, pt, 'PT evaluation', -14, -10, -6, -3)] },
+    { id: uid(), mrn: '118904', initials: 'M.R.', notes: '', status: 'active', createdAt: nowISO(), createdBy: other,
+      legs: [L(uc, gen, 'General surgery consult (hernia)', -25, -19, -12, -9), L(gen, mri, 'MRI abdomen', -9, null, null, null)] },
+    { id: uid(), mrn: '120577', initials: 'A.K.', notes: '', status: 'active', createdAt: nowISO(), createdBy: me,
+      legs: [L(uc, surg, 'Spine consult', -4, 2, null, null)] },
+    { id: uid(), mrn: '099812', initials: 'T.S.', notes: '', status: 'lost', createdAt: nowISO(), createdBy: other, closedAt: addDays(t, -8) + 'T17:00:00.000Z', closedBy: other, lostReason: 'Could not reach the patient',
+      legs: [L(uc, surg, 'Spine consult', -40, null, null, null, { lost: true, lostDate: addDays(t, -8), lostReason: 'Could not reach the patient' })] },
+    { id: uid(), mrn: '131455', initials: 'R.L.', notes: '', status: 'active', createdAt: nowISO(), createdBy: me,
+      legs: [L(surg, ct, 'CT cervical spine', -21, -19, null, null)] },
   );
   saveDB(); toast('Sample records loaded'); rerender();
 }
@@ -1543,6 +2025,67 @@ const actions = {
     });
   },
   'fu-tab': (el) => { ui.fu.tab = el.dataset.tab; rerender(); },
+  /* --- referrals --- */
+  'open-ref': (el, e) => { if (!e.target.closest('a, button, input')) location.hash = '#/referral/' + el.dataset.id; },
+  'ref-tab': (el) => { ui.ref.tab = el.dataset.tab; rerender(); },
+  'ref-tab-link': (el) => { ui.ref.tab = el.dataset.tab; ui.ref.q = ''; },
+  'add-referral': () => openModal({ title: 'Start tracking a referral or order', body: referralFormHTML(null), submitLabel: 'Start tracking', onSubmit: () => {
+    const f = $('#ref-form'); if (!f.reportValidity()) return false;
+    const fd = new FormData(f); const from = readParty(fd, 'from'), to = readParty(fd, 'to');
+    if (!from || !to) { toast('Please choose who sent it and who receives it.', 'err'); return false; }
+    const r = { id: uid(), mrn: String(fd.get('mrn')).trim(), initials: String(fd.get('initials') || '').trim(), notes: String(fd.get('notes') || '').trim(), status: 'active', createdAt: nowISO(), createdBy: session.name,
+      legs: [{ id: uid(), from, to, service: String(fd.get('service')).trim(), sentDate: fd.get('sentDate'), log: [{ date: todayISO(), by: session.name, text: `Sent to ${to.label}` }] }] };
+    db.referrals.push(r); saveDB(); toast('Now tracking this referral'); location.hash = '#/referral/' + r.id; return true;
+  } }),
+  'edit-referral': (el) => { const r = getRef(el.dataset.id); openModal({ title: 'Edit patient details', body: referralFormHTML(r), submitLabel: 'Save changes', narrow: true, onSubmit: () => {
+    const f = $('#ref-form'); if (!f.reportValidity()) return false; const fd = new FormData(f);
+    Object.assign(r, { mrn: String(fd.get('mrn')).trim(), initials: String(fd.get('initials') || '').trim(), notes: String(fd.get('notes') || '').trim(), updatedAt: nowISO(), updatedBy: session.name });
+    saveDB(); toast('Saved'); rerender(); return true;
+  } }); },
+  'delete-referral': (el) => { const r = getRef(el.dataset.id); confirmBox(`Permanently delete the referral record for patient <b>${esc(r.mrn)}</b>?`, () => { db.referrals = db.referrals.filter((x) => x.id !== r.id); saveDB(); toast('Deleted'); location.hash = '#/referrals'; }, 'Delete permanently', true); },
+  'close-referral': (el) => { const r = getRef(el.dataset.id); confirmBox(`Close this referral for patient <b>${esc(r.mrn)}</b> as complete? Use this once the patient has finished all steps.`, () => { r.status = 'complete'; r.closedAt = nowISO(); r.closedBy = session.name; saveDB(); toast('Marked complete'); rerender(); }, 'Yes, care is complete'); },
+  'reopen-referral': (el) => { const r = getRef(el.dataset.id); r.status = 'active'; r.closedAt = ''; r.lostReason = ''; const l = currentLeg(r); if (l && l.lost) { l.lost = false; l.lostDate = ''; l.lostReason = ''; (l.log = l.log || []).push({ date: todayISO(), by: session.name, text: 'Reopened' }); } saveDB(); toast('Reopened'); rerender(); },
+  'add-leg': (el) => { const r = getRef(el.dataset.id); openModal({ title: 'Add the next step', body: legFormHTML(r, null), submitLabel: 'Add step', onSubmit: () => {
+    const f = $('#leg-form'); if (!f.reportValidity()) return false; const fd = new FormData(f); const from = readParty(fd, 'from'), to = readParty(fd, 'to');
+    if (!from || !to) { toast('Please choose who sent it and who receives it.', 'err'); return false; }
+    r.legs.push({ id: uid(), from, to, service: String(fd.get('service')).trim(), sentDate: fd.get('sentDate'), notes: String(fd.get('notes') || '').trim(), log: [{ date: todayISO(), by: session.name, text: `Sent to ${to.label}` }] });
+    saveDB(); toast('Step added'); rerender(); return true;
+  } }); },
+  'edit-leg': (el) => { const r = getRef(el.dataset.id), l = r.legs.find((x) => x.id === el.dataset.leg); openModal({ title: 'Edit this step', body: legFormHTML(r, l), submitLabel: 'Save changes', onSubmit: () => {
+    const f = $('#leg-form'); if (!f.reportValidity()) return false; const fd = new FormData(f); const from = readParty(fd, 'from'), to = readParty(fd, 'to');
+    if (!from || !to) { toast('Please choose who sent it and who receives it.', 'err'); return false; }
+    Object.assign(l, { from, to, service: String(fd.get('service')).trim(), sentDate: fd.get('sentDate'), scheduledDate: fd.get('scheduledDate') || '', completedDate: fd.get('completedDate') || '', resultedDate: fd.get('resultedDate') || '', notes: String(fd.get('notes') || '').trim() });
+    (l.log = l.log || []).push({ date: todayISO(), by: session.name, text: 'Details edited' });
+    saveDB(); toast('Saved'); rerender(); return true;
+  } }); },
+  'leg-check': (el) => {
+    const r = getRef(el.dataset.id), l = r.legs.find((x) => x.id === el.dataset.leg), c = CHECKPOINTS.find((x) => x.key === el.dataset.key);
+    openModal({ title: c.verb, narrow: true, submitLabel: 'Save', body: `<form class="form" id="check-form">
+        <label><span class="req">${c.key === 'scheduledDate' ? 'Appointment date' : 'Date it happened'}</span><input type="date" name="date" required value="${todayISO()}" style="max-width:260px"></label>
+        <label><span>Note <span class="help">(optional)</span></span><input name="note" placeholder="${c.key === 'resultedDate' ? 'e.g. Results faxed to Dr. Glassman' : 'Anything worth remembering'}"></label>
+      </form>`, onSubmit: () => {
+        const f = $('#check-form'); if (!f.reportValidity()) return false;
+        l[c.key] = f.date.value; (l.log = l.log || []).push({ date: todayISO(), by: session.name, text: `${c.verb} (${fmtDate(f.date.value)})${f.note.value.trim() ? ' — ' + f.note.value.trim() : ''}` });
+        saveDB(); toast(c.verb); rerender(); return true;
+      } });
+  },
+  'leg-lost': (el) => {
+    const r = getRef(el.dataset.id), l = r.legs.find((x) => x.id === el.dataset.leg);
+    const reasons = ['Could not reach the patient', 'Patient declined or cancelled', 'No-show, not rescheduled', 'Went to another provider', 'Insurance / authorization problem', 'Receiving office never scheduled', 'Other'];
+    openModal({ title: "Patient didn't follow through", narrow: true, submitLabel: 'Mark as dropped out', danger: true, body: `<form class="form" id="lost-form">
+        <div class="field"><span class="field-label req">What happened?</span><div class="radio-list">${reasons.map((x, i) => `<label><input type="radio" name="reason" value="${esc(x)}" ${i === 0 ? 'checked' : ''} required><span><b>${esc(x)}</b></span></label>`).join('')}</div></div>
+        <label><span>Details <span class="help">(optional)</span></span><input name="note"></label>
+        <label><span class="req">Date</span><input type="date" name="date" required value="${todayISO()}" style="max-width:260px"></label>
+      </form>`, onSubmit: () => {
+        const f = $('#lost-form'); if (!f.reportValidity()) return false;
+        const reason = f.reason.value + (f.note.value.trim() ? ' — ' + f.note.value.trim() : '');
+        Object.assign(l, { lost: true, lostDate: f.date.value, lostReason: reason }); (l.log = l.log || []).push({ date: todayISO(), by: session.name, text: 'Dropped out: ' + reason });
+        Object.assign(r, { status: 'lost', closedAt: nowISO(), closedBy: session.name, lostReason: reason });
+        saveDB(); toast('Marked as dropped out'); rerender(); return true;
+      } });
+  },
+  'export-ref-csv': () => exportReferralsCSV(),
+  'ref-search': (el) => { ui.ref.tab = 'all'; ui.ref.q = el.dataset.q; },
   'fu-mine': (el) => { ui.fu.mine = el.dataset.mine === '1'; rerender(); },
   'edit-contact': (el) => {
     const c = getContact(el.dataset.id);
@@ -1567,9 +2110,12 @@ const actions = {
   'import-json': () => $('#import-input').click(),
   'export-phys-csv': () => exportPhysCSV(),
   'export-contacts-csv': () => exportContactsCSV(),
-  'clear-all': () => confirmBox('Erase <b>all</b> physicians, contacts and attachments stored in this browser? Export a backup first if you might need them.', async () => {
-    try { await Files.clear(); } catch {}
-    db = emptyDB(); saveDB(); toast('All data erased'); location.hash = '#/home'; rerender();
+  'clear-all': () => confirmBox(`Erase <b>all</b> physicians, contacts, referrals and attachments ${MODE === 'server' ? 'in the shared database' : 'stored in this browser'}? Export a backup first if you might need them.`, async () => {
+    if (MODE === 'server') {
+      try { const r = await api('clear'); serverVersion = r.version; db = emptyDB(); snapshot = takeSnapshot(db); }
+      catch (e) { toast('Could not erase: ' + e.message, 'err'); return; }
+    } else { try { await Files.clear(); } catch {} db = emptyDB(); }
+    saveDB(); toast('All data erased'); location.hash = '#/home'; rerender();
   }, 'Erase everything', true),
   'team-add': () => {
     const inp = $('#team-new'); const n = inp.value.trim(); if (!n) return;
@@ -1600,31 +2146,40 @@ document.addEventListener('keydown', (e) => {
 document.addEventListener('submit', async (e) => {
   const form = e.target;
   const kind = form.dataset.form;
-  if (!kind) return;
+  if (!kind && !form.closest('#modal-root')) return;
   e.preventDefault();
+  if (!kind || kind === 'goal' || kind === 'referral') { const b = $('[data-act=modal-submit]'); if (b) b.click(); return; }
   if (kind === 'contact') {
     const btn = form.querySelector('[type=submit]'); if (btn) btn.disabled = true;
     try { await saveContactFromForm(form); } finally { if (btn) btn.disabled = false; }
   } else if (kind === 'physician') {
     if (savePhysicianFromForm(form)) closeModal();
-  } else if (kind === 'goal') {
-    const b = $('[data-act=modal-submit]'); if (b) b.click();
   } else if (kind === 'specialties') {
     db.settings.specialties = [...new Set(form.list.value.split('\n').map((s) => s.trim()).filter(Boolean))];
     saveDB(); toast('Specialty list saved');
+  } else if (kind === 'departments') {
+    db.settings.departments = [...new Set(form.list.value.split('\n').map((s) => s.trim()).filter(Boolean))];
+    saveDB(); toast('Department list saved');
   } else if (kind === 'hash') {
-    const u = form.username.value, h = sha256(`${u}:${form.password.value}`);
+    const u = form.username.value;
     const out = $('#hash-out'); out.hidden = false;
-    out.innerHTML = `<div class="small muted" style="font-family:var(--font)">Hash for <b>${esc(u)}</b> — paste this into CONFIG.users:</div>${h}`;
+    let h, where;
+    if (MODE === 'server') {
+      try { h = (await api('hash', { password: form.password.value })).hash; where = "config.php, on that user's 'hash' line"; }
+      catch (e) { out.innerHTML = `<span style="color:var(--red)">${esc(e.message)}</span>`; return; }
+    } else { h = sha256(`${u}:${form.password.value}`); where = 'the CONFIG block at the top of index.html'; }
+    out.innerHTML = `<div class="small muted" style="font-family:var(--font)">Hash for <b>${esc(u)}</b> — paste this into ${esc(where)}:</div>${esc(h)}`;
   }
 });
 document.addEventListener('input', (e) => {
   const k = e.target.dataset.input;
   if (k === 'phys-q') { ui.phys.q = e.target.value; updatePhysTable(); }
   if (k === 'act-q') { ui.act.q = e.target.value; updateActivityTable(); }
+  if (k === 'ref-q') { ui.ref.q = e.target.value; const y = window.scrollY; $('#view').innerHTML = viewReferrals(); window.scrollTo(0, y); const s = $('[data-input=ref-q]'); s.focus(); s.setSelectionRange(s.value.length, s.value.length); }
 });
 document.addEventListener('change', (e) => {
   const t = e.target, k = t.dataset.change;
+  if (t.dataset.party) { const o = t.form && t.form.querySelector(`[name="${t.dataset.party}Other"]`); if (o) { o.hidden = t.value !== 'other'; o.required = !o.hidden; if (!o.hidden) o.focus(); } }
   if (!k) return;
   switch (k) {
     case 'phys-show': {
@@ -1639,6 +2194,7 @@ document.addEventListener('change', (e) => {
     case 'act-from': ui.act.from = t.value; updateActivityTable(); break;
     case 'act-to': ui.act.to = t.value; updateActivityTable(); break;
     case 'dash-year': ui.year = +t.value; rerender(); break;
+    case 'risk-days': { const v = Math.max(1, Math.round(num(t.value)) || 14); db.settings.riskDays = v; t.value = v; saveDB(); toast('Saved'); updateNavCount(); break; }
     case 'team-name': { const v = t.value.trim(); if (v) { db.settings.team[+t.dataset.i] = v; saveDB(); toast('Saved'); } break; }
   }
 });
@@ -1648,9 +2204,25 @@ $('#import-input').addEventListener('change', (e) => { const f = e.target.files[
 window.addEventListener('storage', (e) => { if (e.key === STORE_KEY && session) { db = loadDB(); rerender(); } });
 
 /* ===================== Boot ===================== */
-db = loadDB();
-session = getSession();
-if (session) { touchSession(); showApp(); } else showLogin();
+(async () => {
+  const ping = await detectMode();
+  if (ping) {
+    MODE = 'server';
+    if (ping.idleMinutes) CONFIG.idleMinutes = ping.idleMinutes;
+    if (ping.maxFileMB) CONFIG.maxFileMB = ping.maxFileMB;
+    $('#preview-banner').hidden = true;
+    if (ping.loggedIn) {
+      try { const me = await api('me'); await startSession(me.user.role === 'admin' ? { ...me.user, users: me.users } : me.user); return; } catch {}
+    }
+    showLogin();
+  } else {
+    MODE = 'local';
+    $('#preview-banner').hidden = false;
+    db = loadDB();
+    session = getSession();
+    if (session) { touchSession(); showApp(); } else showLogin();
+  }
+})();
 </script>
 </body>
 </html>
