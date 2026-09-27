@@ -1,10 +1,25 @@
-# Northwest Specialty Hospital — Physician Relations
-# Keeps the database and attachments private and turns off directory listings.
+# DocDock CRM — Physician Relations (docdockcrm.com)
+# Keeps the database and attachments private, forces HTTPS, turns off directory listings.
 Options -Indexes
+DirectoryIndex index.html
+
 <IfModule mod_rewrite.c>
   RewriteEngine On
+  # Always use HTTPS (patient data must never travel unencrypted)
+  RewriteCond %{HTTPS} !=on
+  RewriteCond %{HTTP:X-Forwarded-Proto} !https
+  RewriteRule ^ https://%{HTTP_HOST}%{REQUEST_URI} [R=301,L]
+  # Block direct access to the data folder
   RewriteRule ^data(/|$) - [F,L]
 </IfModule>
-<FilesMatch "^(config\.php)$">
+
+<FilesMatch "^(config\.php|README\.md)$">
   Require all denied
 </FilesMatch>
+
+<IfModule mod_headers.c>
+  Header always set X-Content-Type-Options "nosniff"
+  Header always set X-Frame-Options "SAMEORIGIN"
+  Header always set Referrer-Policy "same-origin"
+  Header always set Strict-Transport-Security "max-age=31536000"
+</IfModule>

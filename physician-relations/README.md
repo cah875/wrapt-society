@@ -11,12 +11,18 @@ physician-relations/
   data/         created automatically on first use: the SQLite database + attachments
 ```
 
-## Putting it on the website
-1. Upload the whole `physician-relations` folder into the site's web root (on GoDaddy / cPanel that is
-   `public_html`). Nothing to install, no build step — the host just needs PHP, which it already has.
-2. Open `https://your-domain.com/physician-relations/`. The first visit creates `data/physician-relations.sqlite`.
-   If you see "data folder is not writable", give the `data` folder write permission in the file manager.
-3. Sign in. Everyone now shares one database and sees the same records, on any device.
+## Putting it on docdockcrm.com
+The domain needs ordinary PHP web hosting (GoDaddy Web Hosting / cPanel, or any Linux host). It cannot run on
+"static" or "website builder" hosting, because api.php has to write the database file.
+1. In the hosting control panel, point docdockcrm.com at a folder (GoDaddy: *Domains → Add domain* and note the
+   document root, usually `public_html/docdockcrm.com`).
+2. Upload the **contents** of this folder into that document root, so `index.html` and `api.php` sit directly
+   inside it. Nothing to install, no build step.
+3. Turn on the free SSL certificate for the domain (GoDaddy: *Security → SSL/TLS*). The .htaccess file redirects
+   every visit to https:// automatically.
+4. Open https://docdockcrm.com. The first visit creates `data/physician-relations.sqlite`. If you see
+   "data folder is not writable", give the `data` folder write permission in the file manager (755 or 775).
+5. Sign in. Everyone now shares one database and sees the same records, on any device.
 
 **Preview on your own computer:** double-click `index.html`. It runs in *preview mode* (yellow banner) and
 keeps records in that browser only — handy for training. If you have PHP installed, run
