@@ -220,6 +220,18 @@
   .step.current .t { color: var(--green-dark); }
   .status-actions { display: flex; gap: 10px; flex-wrap: wrap; align-items: center; }
   .leg.lost { border-left: 5px solid var(--red); }
+  /* ---------- Reports ---------- */
+  .delta { display: block; font-size: 12px; font-weight: 600; margin-top: 4px; }
+  .delta.up { color: var(--green-dark); } .delta.down { color: var(--red); } .delta.flat { color: var(--muted); }
+  .sub.good { color: var(--green-dark); font-weight: 600; } .sub.bad { color: var(--red); font-weight: 600; }
+  table.report th.sortable:hover { color: var(--text); }
+  table.report th.sortable { cursor: pointer; }
+  .chart { width: 100%; height: auto; display: block; font-family: var(--font); }
+  .chart .grid { stroke: #e6e9e4; stroke-width: 1; } .chart .axis { stroke: #c9cec7; stroke-width: 1; }
+  .chart .ax { font-size: 11px; fill: var(--muted); }
+  .chart .bar:hover rect:first-of-type { opacity: .8; }
+  .chart-legend { display: flex; gap: 18px; flex-wrap: wrap; font-size: 14px; margin-bottom: 8px; }
+  .chart-legend i { display: inline-block; width: 12px; height: 12px; border-radius: 3px; margin-right: 6px; vertical-align: -1px; }
   .leg .steps { margin-bottom: 12px; }
   .leg .step .d .tag { font-size: 11px; padding: 0 6px; }
 
@@ -1006,7 +1018,8 @@ function readParty(fd, name) {
 const ui = {
   phys: { q: '', stage: '', type: '', spec: '', sort: 'name' },
   fu: { tab: 'over', mine: false },
-  ref: { tab: 'active', q: '' },
+  ref: { tab: 'active', q: '', view: 'list', sort: 'attention', phys: '', dest: '', from: '', to: '' },
+  rep: { preset: '12m', from: '', to: '', compare: 'prev', sort: 'ordered', dir: -1 },
   act: { q: '', who: '', method: '', from: '', to: '' },
   year: new Date().getFullYear(),
 };
@@ -1349,15 +1362,21 @@ function viewPhysician(p) {
           ${(() => {
             const rs = refsForPhysician(p.id);
             if (!rs.length) return '<p class="empty">No tracked referrals involve this physician yet.</p>';
-            const act = rs.filter((r) => ['active', 'risk'].includes(refStatus(r))), risk = rs.filter((r) => refStatus(r) === 'risk');
-            const sent = rs.flatMap((r) => r.legs).filter((l) => l.from && l.from.physicianId === p.id).length;
-            const recv = rs.flatMap((r) => r.legs).filter((l) => l.to && l.to.physicianId === p.id).length;
+            const range = { from: addDays(todayISO(), -364), to: todayISO() }, m = refMetrics(rs, range);
+            const legs = rs.flatMap((r) => r.legs);
+            const sent = legs.filter((l) => l.from && l.from.physicianId === p.id).length;
+            const recvLegs = legs.filter((l) => l.to && l.to.physicianId === p.id);
+            const seen = avg(recvLegs.filter((l) => l.completedDate).map((l) => daysBetween(l.sentDate, l.completedDate)));
             return `<div class="kpis" style="grid-template-columns:repeat(auto-fit,minmax(110px,1fr))">
               <div class="kpi"><div class="label">Sent by</div><div class="value">${sent}</div></div>
-              <div class="kpi"><div class="label">Received</div><div class="value">${recv}</div></div>
-              <div class="kpi"><div class="label">In progress</div><div class="value">${act.length}</div></div>
-              <div class="kpi ${risk.length ? 'red' : ''}"><div class="label">At risk</div><div class="value">${risk.length}</div></div>
-            </div>`;
+              <div class="kpi"><div class="label">Received</div><div class="value">${recvLegs.length}</div></div>
+              <div class="kpi"><div class="label">In process</div><div class="value">${m.inProcess}</div></div>
+              <div class="kpi ${m.stale ? 'red' : ''}"><div class="label">Stale</div><div class="value">${m.stale}</div></div>
+              <div class="kpi green"><div class="label">Completed, 12 mo</div><div class="value">${m.completed}</div></div>
+              <div class="kpi"><div class="label">Dropped, 12 mo</div><div class="value">${m.dropped}</div></div>
+              <div class="kpi"><div class="label">Days to see pt.</div><div class="value">${seen ?? '—'}</div></div>
+            </div>
+            <p class="help" style="margin:10px 0 0"><a href="#/referrals" data-act="ref-phys-link" data-id="${p.id}">See this physician's referrals</a> · <a href="#/referrals" data-act="ref-view-link">Open the reports</a></p>`;
           })()}
         </section>
       </div>
@@ -1593,75 +1612,276 @@ function updateActivityTable() {
       }).join('')}</tbody></table></div>` : '<p class="empty">No contacts match these filters.</p>';
 }
 
+/* ===================== Referral reporting helpers ===================== */
+const REP_PRESETS = [
+  ['30d', 'Last 30 days'], ['90d', 'Last 90 days'], ['12m', 'Rolling 12 months'], ['qtd', 'This quarter'], ['lastq', 'Last quarter'],
+  ['ytd', 'This year'], ['lasty', 'Last year'], ['custom', 'Custom dates…'],
+];
+function quarterOf(iso) { const d = new Date(iso + 'T00:00:00'); return { y: d.getFullYear(), q: Math.floor(d.getMonth() / 3) + 1 }; }
+function quarterRange(y, q) { const m0 = (q - 1) * 3; const from = `${y}-${String(m0 + 1).padStart(2, '0')}-01`; const end = new Date(y, m0 + 3, 0); return { from, to: `${y}-${String(m0 + 3).padStart(2, '0')}-${String(end.getDate()).padStart(2, '0')}`, label: `Q${q} ${y}` }; }
+function repRange() {
+  const s = ui.rep, t = todayISO(), y = +t.slice(0, 4);
+  switch (s.preset) {
+    case '30d': return { from: addDays(t, -29), to: t, label: 'Last 30 days' };
+    case '90d': return { from: addDays(t, -89), to: t, label: 'Last 90 days' };
+    case 'qtd': { const { q } = quarterOf(t); const r = quarterRange(y, q); return { from: r.from, to: t, label: `${r.label} to date` }; }
+    case 'lastq': { let { q } = quarterOf(t); let yy = y; if (--q === 0) { q = 4; yy--; } return quarterRange(yy, q); }
+    case 'ytd': return { from: `${y}-01-01`, to: t, label: `${y} to date` };
+    case 'lasty': return { from: `${y - 1}-01-01`, to: `${y - 1}-12-31`, label: String(y - 1) };
+    case 'custom': { const from = s.from || addDays(t, -29), to = s.to || t; return { from, to, label: `${fmtDate(from)} – ${fmtDate(to)}` }; }
+    default: { const d = new Date(t + 'T00:00:00'); d.setMonth(d.getMonth() - 11); d.setDate(1); const from = d.toISOString().slice(0, 10); return { from, to: t, label: 'Rolling 12 months' }; }
+  }
+}
+function compareRange(range) {
+  const c = ui.rep.compare; if (c === 'none') return null;
+  if (c === 'year') { const sh = (iso) => `${+iso.slice(0, 4) - 1}${iso.slice(4)}`; return { from: sh(range.from), to: sh(range.to), label: 'same period last year' }; }
+  const len = daysBetween(range.from, range.to) + 1; return { from: addDays(range.from, -len), to: addDays(range.from, -1), label: 'the previous ' + len + ' days' };
+}
+const inRange = (iso, r) => !!iso && iso.slice(0, 10) >= r.from && iso.slice(0, 10) <= r.to;
+function refInvolves(r, pid, role) { return r.legs.some((l) => (role !== 'to' && l.from && l.from.physicianId === pid) || (role !== 'from' && l.to && l.to.physicianId === pid)); }
+/* Metrics for a set of referrals over a date range. Ordered/completed/dropped are counted by the date they
+   happened; "in process" and "stale" are what is true right now. */
+function refMetrics(refs, range) {
+  const ordered = refs.filter((r) => inRange(refFirstDate(r), range));
+  const completed = refs.filter((r) => r.status === 'complete' && inRange(r.closedAt, range));
+  const dropped = refs.filter((r) => r.status === 'lost' && inRange(r.closedAt, range));
+  const legs = refs.flatMap((r) => r.legs);
+  const seen = legs.filter((l) => l.completedDate && l.sentDate && inRange(l.completedDate, range)).map((l) => daysBetween(l.sentDate, l.completedDate));
+  const results = legs.filter((l) => l.resultedDate && l.completedDate && inRange(l.resultedDate, range)).map((l) => daysBetween(l.completedDate, l.resultedDate));
+  const total = completed.length + dropped.length;
+  const inProcess = refs.filter((r) => ['active', 'risk'].includes(refStatus(r)));
+  const stale = inProcess.filter((r) => refStatus(r) === 'risk');
+  const journey = completed.map((r) => refDays(r));
+  return {
+    ordered: ordered.length, completed: completed.length, dropped: dropped.length,
+    dropRate: total ? Math.round((dropped.length / total) * 100) : null,
+    avgSeen: avg(seen), avgResults: avg(results), avgJourney: avg(journey),
+    inProcess: inProcess.length, stale: stale.length, avgAging: avg(inProcess.map((r) => refDays(r))),
+  };
+}
+function deltaHTML(now, before, opts = {}) {
+  if (before === null || before === undefined || now === null || now === undefined) return '';
+  const d = Math.round((now - before) * 10) / 10; if (d === 0) return '<span class="delta flat">no change</span>';
+  const good = opts.lowerIsBetter ? d < 0 : d > 0;
+  return `<span class="delta ${good ? 'up' : 'down'}">${d > 0 ? '+' : ''}${d}${opts.pct ? ' pts' : ''} vs ${esc(opts.label || 'before')}</span>`;
+}
+function monthlySeries(refs, months) {
+  const t = todayISO(); const out = [];
+  const d = new Date(t + 'T00:00:00'); d.setDate(1); d.setMonth(d.getMonth() - (months - 1));
+  for (let i = 0; i < months; i++) {
+    const ym = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`;
+    out.push({ ym, label: d.toLocaleDateString(undefined, { month: 'short' }) + (d.getMonth() === 0 || i === 0 ? ` ${String(d.getFullYear()).slice(2)}` : ''),
+      ordered: refs.filter((r) => refFirstDate(r).slice(0, 7) === ym).length,
+      completed: refs.filter((r) => r.status === 'complete' && (r.closedAt || '').slice(0, 7) === ym).length,
+      dropped: refs.filter((r) => r.status === 'lost' && (r.closedAt || '').slice(0, 7) === ym).length });
+    d.setMonth(d.getMonth() + 1);
+  }
+  return out;
+}
+const CHART_SERIES = [['ordered', 'Ordered', '#1E7FB0'], ['completed', 'Completed', '#3E9D46'], ['dropped', 'Dropped out', '#B5502A']];
+function trendChartHTML(series) {
+  const W = 760, H = 240, padL = 34, padB = 28, padT = 12, padR = 8;
+  const max = Math.max(1, ...series.flatMap((m) => [m.ordered, m.completed, m.dropped]));
+  const steps = max <= 5 ? max : 5; const tick = Math.ceil(max / steps);
+  const top = tick * steps;
+  const gw = (W - padL - padR) / series.length, bw = Math.max(4, Math.min(16, (gw - 10) / 3));
+  const y = (v) => padT + (H - padT - padB) * (1 - v / top);
+  const grid = Array.from({ length: steps + 1 }, (_, i) => i * tick).map((v) => `<line x1="${padL}" x2="${W - padR}" y1="${y(v)}" y2="${y(v)}" class="grid"/><text x="${padL - 6}" y="${y(v) + 4}" class="ax" text-anchor="end">${v}</text>`).join('');
+  const bars = series.map((m, i) => {
+    const x0 = padL + i * gw + (gw - bw * 3 - 4) / 2;
+    return CHART_SERIES.map(([k, label, color], j) => { const v = m[k]; const x = x0 + j * (bw + 2); const h = Math.max(0, y(0) - y(v));
+      return `<g class="bar"><title>${esc(m.label)} — ${label}: ${v}</title><rect x="${x}" y="${y(v) - (v ? 0 : 0)}" width="${bw}" height="${h}" rx="3" fill="${color}"/><rect x="${x - 2}" y="${padT}" width="${bw + 4}" height="${H - padT - padB}" fill="transparent"/></g>`; }).join('')
+      + `<text x="${padL + i * gw + gw / 2}" y="${H - 8}" class="ax" text-anchor="middle">${esc(m.label)}</text>`;
+  }).join('');
+  return `<div class="chart-legend">${CHART_SERIES.map(([k, l, c]) => `<span><i style="background:${c}"></i>${l} <b>${series.reduce((a, m) => a + m[k], 0)}</b></span>`).join('')}</div>
+    <svg class="chart" viewBox="0 0 ${W} ${H}" role="img" aria-label="Referrals ordered, completed and dropped out by month">${grid}<line x1="${padL}" x2="${W - padR}" y1="${y(0)}" y2="${y(0)}" class="axis"/>${bars}</svg>`;
+}
+
 /* ===================== View: Referrals & orders ===================== */
+function refListRows() {
+  const f = ui.ref, q = f.q.trim().toLowerCase();
+  const tabs = {
+    active: (s) => s === 'active' || s === 'risk', risk: (s) => s === 'risk', complete: (s) => s === 'complete', lost: (s) => s === 'lost', all: () => true,
+  };
+  const tabFn = tabs[f.tab] || tabs.active;
+  let rows = db.referrals.map((r) => ({ r, s: refStatus(r) })).filter(({ r, s }) => {
+    if (!tabFn(s)) return false;
+    if (f.phys && !refInvolves(r, f.phys)) return false;
+    if (f.dest && !r.legs.some((l) => l.to && l.to.label === f.dest)) return false;
+    if (f.from && refFirstDate(r) < f.from) return false;
+    if (f.to && refFirstDate(r) > f.to) return false;
+    if (q) { const hay = [r.mrn, r.initials, r.notes, r.owner, ...r.legs.flatMap((l) => [l.from && l.from.label, l.to && l.to.label, l.service])].join(' ').toLowerCase(); if (!hay.includes(q)) return false; }
+    return true;
+  });
+  const order = { risk: 0, active: 1, complete: 2, lost: 3 };
+  const sorters = {
+    attention: (a, b) => order[a.s] - order[b.s] || refWaiting(b.r) - refWaiting(a.r),
+    newest: (a, b) => refFirstDate(b.r).localeCompare(refFirstDate(a.r)),
+    oldest: (a, b) => refFirstDate(a.r).localeCompare(refFirstDate(b.r)),
+    aging: (a, b) => refDays(b.r) - refDays(a.r),
+    waiting: (a, b) => refWaiting(b.r) - refWaiting(a.r),
+    completed: (a, b) => (b.r.closedAt || '').localeCompare(a.r.closedAt || ''),
+    status: (a, b) => order[a.s] - order[b.s] || refFirstDate(b.r).localeCompare(refFirstDate(a.r)),
+    patient: (a, b) => String(a.r.mrn).localeCompare(String(b.r.mrn)),
+  };
+  return rows.sort(sorters[f.sort] || sorters.attention);
+}
 function viewReferrals() {
   const f = ui.ref, R = db.referrals;
-  const q = f.q.trim().toLowerCase();
   const withStatus = R.map((r) => ({ r, s: refStatus(r) }));
-  const cut30 = addDays(todayISO(), -30);
-  const legs = R.flatMap((r) => r.legs);
-  const toSeen = avg(legs.filter((l) => l.completedDate && l.sentDate).map((l) => daysBetween(l.sentDate, l.completedDate)));
-  const toResults = avg(legs.filter((l) => l.resultedDate && l.completedDate).map((l) => daysBetween(l.completedDate, l.resultedDate)));
-  const tabs = [
-    ['active', 'In progress', (x) => x.s === 'active' || x.s === 'risk'],
-    ['risk', 'At risk', (x) => x.s === 'risk'],
-    ['complete', 'Completed', (x) => x.s === 'complete'],
-    ['lost', 'Dropped out', (x) => x.s === 'lost'],
-    ['all', 'All', () => true],
-  ];
-  const tab = tabs.find((t) => t[0] === f.tab) || tabs[0];
-  const rows = withStatus.filter(tab[2]).filter(({ r }) => {
-    if (!q) return true;
-    const hay = [r.mrn, r.initials, r.notes, ...r.legs.flatMap((l) => [l.from && l.from.label, l.to && l.to.label, l.service])].join(' ').toLowerCase();
-    return hay.includes(q);
-  }).sort((a, b) => (a.s === 'risk' ? -1 : 0) - (b.s === 'risk' ? -1 : 0) || refWaiting(b.r) - refWaiting(a.r));
-  // by destination
+  const head = `
+    <div class="page-head">
+      <div><h1>Referrals &amp; Orders</h1><p class="lead">Follow each patient hand-off from start to finish so nobody falls through the cracks.</p></div>
+      <div class="actions">
+        <div class="toggle" role="group" aria-label="View"><button class="${f.view !== 'reports' ? 'on' : ''}" data-act="ref-view" data-view="list">Tracking list</button><button class="${f.view === 'reports' ? 'on' : ''}" data-act="ref-view" data-view="reports">Reports</button></div>
+        <button class="btn" data-act="${f.view === 'reports' ? 'export-rep-csv' : 'export-ref-csv'}">${ico('i-download')}Download spreadsheet</button>
+        <button class="btn primary" data-act="add-referral">${ico('i-plus')}Start tracking a referral</button>
+      </div>
+    </div>`;
+  if (f.view === 'reports') return head + viewReferralReports();
+  const tabs = [['active', 'In progress'], ['risk', 'At risk'], ['complete', 'Completed'], ['lost', 'Dropped out'], ['all', 'All']];
+  const counts = { active: withStatus.filter((x) => x.s === 'active' || x.s === 'risk').length, risk: withStatus.filter((x) => x.s === 'risk').length, complete: withStatus.filter((x) => x.s === 'complete').length, lost: withStatus.filter((x) => x.s === 'lost').length, all: R.length };
+  const rows = refListRows();
+  const physOpts = db.physicians.filter((p) => R.some((r) => refInvolves(r, p.id))).sort((a, b) => physSortName(a).localeCompare(physSortName(b)));
+  const destOpts = [...new Set(R.flatMap((r) => r.legs.map((l) => l.to && l.to.label)).filter(Boolean))].sort();
+  const m = refMetrics(R, { from: addDays(todayISO(), -29), to: todayISO() });
+  return head + `
+    <div class="kpis" style="margin-bottom:18px">
+      <a class="kpi" href="#/referrals" data-act="ref-tab-link" data-tab="active"><div class="label">In progress now</div><div class="value">${m.inProcess}</div></a>
+      <a class="kpi ${m.stale ? 'red' : ''}" href="#/referrals" data-act="ref-tab-link" data-tab="risk"><div class="label">Stale / at risk</div><div class="value">${m.stale}</div></a>
+      <div class="kpi"><div class="label">Avg. age of open referrals</div><div class="value">${m.avgAging ?? '—'}<span class="small muted"> days</span></div></div>
+      <a class="kpi green" href="#/referrals" data-act="ref-tab-link" data-tab="complete"><div class="label">Completed, last 30 days</div><div class="value">${m.completed}</div></a>
+      <a class="kpi" href="#/referrals" data-act="ref-tab-link" data-tab="lost"><div class="label">Dropped out, last 30 days</div><div class="value">${m.dropped}</div></a>
+      <div class="kpi"><div class="label">Avg. days until seen, last 30</div><div class="value">${m.avgSeen ?? '—'}</div></div>
+    </div>
+    <section class="card">
+      <div class="filters">
+        <div class="search"><svg class="i"><use href="#i-search"/></svg><input type="search" placeholder="Search by MRN, initials, doctor, department or service" value="${esc(f.q)}" data-input="ref-q" aria-label="Search referrals"></div>
+        <div class="field"><span class="field-label">Physician / surgeon</span><select data-change="ref-phys"><option value="">All</option>${physOpts.map((p) => `<option value="${p.id}" ${f.phys === p.id ? 'selected' : ''}>${esc(physName(p))}</option>`).join('')}</select></div>
+        <div class="field"><span class="field-label">Sent to</span><select data-change="ref-dest"><option value="">All</option>${destOpts.map((d) => `<option ${f.dest === d ? 'selected' : ''}>${esc(d)}</option>`).join('')}</select></div>
+        <div class="field"><span class="field-label">Ordered from</span><input type="date" value="${esc(f.from)}" data-change="ref-from"></div>
+        <div class="field"><span class="field-label">to</span><input type="date" value="${esc(f.to)}" data-change="ref-to"></div>
+        <div class="field"><span class="field-label">Sort by</span><select data-change="ref-sort">
+          ${[['attention', 'Needs attention first'], ['aging', 'Longest in process (aging)'], ['waiting', 'Longest since last movement'], ['newest', 'Most recently ordered'], ['oldest', 'Oldest ordered'], ['completed', 'Most recently completed'], ['status', 'Status'], ['patient', 'Patient MRN']].map(([k, l]) => `<option value="${k}" ${f.sort === k ? 'selected' : ''}>${l}</option>`).join('')}
+        </select></div>
+        ${f.phys || f.dest || f.from || f.to || f.q ? `<button class="btn" data-act="ref-clear">Clear filters</button>` : ''}
+      </div>
+      <div class="tabs">${tabs.map(([k, l]) => `<button class="${f.tab === k ? 'on' : ''}" data-act="ref-tab" data-tab="${k}">${l} (${counts[k]})</button>`).join('')}</div>
+      ${rows.length ? `<div class="table-wrap"><table>
+        <thead><tr><th>Patient</th><th>Current step</th><th>Where it stands</th><th>Ordered</th><th class="num">Age</th><th>Watched by</th><th></th></tr></thead>
+        <tbody>${rows.map(({ r, s }) => { const l = currentLeg(r); const risk = refRiskReason(r); return `
+          <tr class="clickable" data-act="open-ref" data-id="${r.id}">
+            <td><div class="primary-text"><a href="#/referral/${r.id}">${esc(r.mrn)}</a></div><div class="sub">${esc(r.initials || '')}</div></td>
+            <td>${l ? `<div><b>${esc(l.from.label)}</b> ${ico('i-arrow-right', 'sm')} <b>${esc(l.to.label)}</b></div><div class="sub">${esc(l.service || '')}${r.legs.length > 1 ? ` · step ${r.legs.length}` : ''}</div>` : '<span class="muted">No steps yet</span>'}</td>
+            <td>${refBadge(r)}<div class="sub">${l ? esc(legStatusText(l)) : ''}${risk ? `<br><span style="color:var(--red)">${esc(risk)}</span>` : ''}</div></td>
+            <td class="nowrap">${fmtDate(refFirstDate(r))}${s === 'complete' || s === 'lost' ? `<div class="sub">${s === 'complete' ? 'Completed' : 'Dropped'} ${fmtDate(r.closedAt)}</div>` : ''}</td>
+            <td class="num nowrap"><b>${refDays(r)}</b><div class="sub">days${s === 'active' || s === 'risk' ? `<br>${refWaiting(r)} since last move` : ''}</div></td>
+            <td class="nowrap">${esc(r.owner || 'Everyone')}</td>
+            <td class="nowrap" style="text-align:right"><a class="btn sm" href="#/referral/${r.id}">Open ${ico('i-chevron', 'sm')}</a></td>
+          </tr>`; }).join('')}</tbody></table></div><p class="count-line">Showing ${rows.length} of ${R.length} referrals</p>`
+        : `<p class="empty">${R.length ? 'Nothing matches. Try another tab or clear the filters.' : 'No referrals are being tracked yet. Click <b>Start tracking a referral</b> when a patient is referred or an order is placed.'}</p>`}
+    </section>`;
+}
+
+function viewReferralReports() {
+  const s = ui.rep, R = db.referrals, range = repRange(), cmp = compareRange(range);
+  const now = refMetrics(R, range), before = cmp ? refMetrics(R, cmp) : null;
+  const dl = (k, o) => (before ? deltaHTML(now[k], before[k], { label: cmp.label, ...o }) : '');
+  const tile = (label, val, k, o = {}, unit = '') => `<div class="kpi"><div class="label">${label}</div><div class="value">${val ?? '—'}${val !== null && unit ? `<span class="small muted"> ${unit}</span>` : ''}</div>${dl(k, o)}</div>`;
+  // by surgeon / physician
+  const physRows = db.physicians.map((p) => {
+    const mine = R.filter((r) => refInvolves(r, p.id)); if (!mine.length) return null;
+    const m = refMetrics(mine, range), b = before ? refMetrics(mine, cmp) : null;
+    const recv = mine.flatMap((r) => r.legs).filter((l) => l.to && l.to.physicianId === p.id && inRange(l.sentDate, range));
+    const sent = mine.flatMap((r) => r.legs).filter((l) => l.from && l.from.physicianId === p.id && inRange(l.sentDate, range));
+    const seen = recv.filter((l) => l.completedDate).map((l) => daysBetween(l.sentDate, l.completedDate));
+    return { p, m, b, received: recv.length, sent: sent.length, avgSeenAsReceiver: avg(seen) };
+  }).filter(Boolean);
+  const sortKeys = { name: (x) => physSortName(x.p).toLowerCase(), ordered: (x) => x.m.ordered, received: (x) => x.received, sent: (x) => x.sent, inProcess: (x) => x.m.inProcess, stale: (x) => x.m.stale, completed: (x) => x.m.completed, dropped: (x) => x.m.dropped, dropRate: (x) => x.m.dropRate ?? -1, avgSeen: (x) => x.avgSeenAsReceiver ?? -1, avgAging: (x) => x.m.avgAging ?? -1 };
+  const key = sortKeys[s.sort] || sortKeys.ordered;
+  physRows.sort((a, b) => { const x = key(a), z = key(b); return (x > z ? 1 : x < z ? -1 : 0) * (s.sort === 'name' ? -s.dir : s.dir) * -1 || physSortName(a.p).localeCompare(physSortName(b.p)); });
+  const th = (k, label, cls = 'num') => `<th class="sortable ${cls}" data-act="rep-sort" data-key="${k}">${label}${s.sort === k ? (s.dir < 0 ? ' ▾' : ' ▴') : ''}</th>`;
+  const show = (v) => (v === null || v === undefined ? '<span class="muted">—</span>' : v);
+  const cell = (v, bv, o = {}) => `${show(v)}${before && bv !== null && bv !== undefined && v !== null && v !== undefined && v !== bv ? `<div class="sub ${(o.lowerIsBetter ? v < bv : v > bv) ? 'good' : 'bad'}">${v > bv ? '+' : ''}${Math.round((v - bv) * 10) / 10}</div>` : ''}`;
+  // quarters
+  const t = todayISO(); let { y, q } = quarterOf(t); const quarters = [];
+  for (let i = 0; i < 5; i++) { quarters.unshift(quarterRange(y, q)); if (--q === 0) { q = 4; y--; } }
+  quarters[quarters.length - 1].to = t; quarters[quarters.length - 1].label += ' (to date)';
+  const qm = quarters.map((qr) => ({ qr, m: refMetrics(R, qr) }));
+  // destinations
   const byDest = {};
-  legs.forEach((l) => {
-    const k = l.to ? l.to.label : '—'; const d = byDest[k] = byDest[k] || { n: 0, seen: [], res: [], lost: 0 };
-    d.n++; if (l.lost) d.lost++;
+  R.flatMap((r) => r.legs).filter((l) => inRange(l.sentDate, range)).forEach((l) => {
+    const k = l.to ? l.to.label : '—'; const d = byDest[k] = byDest[k] || { n: 0, seen: [], res: [], lost: 0, open: 0 };
+    d.n++; if (l.lost) d.lost++; if (!l.lost && !l.resultedDate) d.open++;
     if (l.completedDate && l.sentDate) d.seen.push(daysBetween(l.sentDate, l.completedDate));
     if (l.resultedDate && l.completedDate) d.res.push(daysBetween(l.completedDate, l.resultedDate));
   });
   const destRows = Object.entries(byDest).sort((a, b) => b[1].n - a[1].n);
+  const months = s.preset === '12m' || s.preset === 'lasty' || s.preset === 'ytd' ? 12 : s.preset === '90d' || s.preset === 'qtd' || s.preset === 'lastq' ? 6 : 12;
   return `
-    <div class="page-head">
-      <div><h1>Referrals &amp; Orders</h1><p class="lead">Follow each patient hand-off from start to finish so nobody falls through the cracks.</p></div>
-      <div class="actions">
-        <button class="btn" data-act="export-ref-csv">${ico('i-download')}Download spreadsheet</button>
-        <button class="btn primary" data-act="add-referral">${ico('i-plus')}Start tracking a referral</button>
+    <section class="card">
+      <div class="filters" style="margin-bottom:0">
+        <div class="field"><span class="field-label">Period</span><select data-change="rep-preset">${REP_PRESETS.map(([k, l]) => `<option value="${k}" ${s.preset === k ? 'selected' : ''}>${l}</option>`).join('')}</select></div>
+        ${s.preset === 'custom' ? `<div class="field"><span class="field-label">From</span><input type="date" value="${esc(s.from)}" data-change="rep-from"></div><div class="field"><span class="field-label">To</span><input type="date" value="${esc(s.to)}" data-change="rep-to"></div>` : ''}
+        <div class="field"><span class="field-label">Compare with</span><select data-change="rep-compare"><option value="prev" ${s.compare === 'prev' ? 'selected' : ''}>Previous period</option><option value="year" ${s.compare === 'year' ? 'selected' : ''}>Same period last year</option><option value="none" ${s.compare === 'none' ? 'selected' : ''}>No comparison</option></select></div>
+        <div class="field" style="align-self:end"><span class="help">Showing <b>${esc(range.label)}</b> (${fmtDate(range.from)} – ${fmtDate(range.to)})${cmp ? ` vs ${esc(cmp.label)}` : ''}</span></div>
       </div>
-    </div>
-    <div class="kpis" style="margin-bottom:18px">
-      <a class="kpi" href="#/referrals" data-act="ref-tab-link" data-tab="active"><div class="label">In progress</div><div class="value">${withStatus.filter((x) => x.s === 'active' || x.s === 'risk').length}</div></a>
-      <a class="kpi ${withStatus.some((x) => x.s === 'risk') ? 'red' : ''}" href="#/referrals" data-act="ref-tab-link" data-tab="risk"><div class="label">At risk</div><div class="value">${withStatus.filter((x) => x.s === 'risk').length}</div></a>
-      <a class="kpi green" href="#/referrals" data-act="ref-tab-link" data-tab="complete"><div class="label">Completed, last 30 days</div><div class="value">${withStatus.filter((x) => x.s === 'complete' && (x.r.closedAt || '') >= cut30).length}</div></a>
-      <a class="kpi" href="#/referrals" data-act="ref-tab-link" data-tab="lost"><div class="label">Dropped out, last 30 days</div><div class="value">${withStatus.filter((x) => x.s === 'lost' && (x.r.closedAt || '') >= cut30).length}</div></a>
-      <div class="kpi"><div class="label">Avg. days until seen</div><div class="value">${toSeen === null ? '—' : toSeen}</div></div>
-      <div class="kpi"><div class="label">Avg. days until results</div><div class="value">${toResults === null ? '—' : toResults}</div></div>
+    </section>
+    <div class="kpis" style="margin:18px 0">
+      ${tile('Ordered', now.ordered, 'ordered')}
+      ${tile('Completed', now.completed, 'completed')}
+      ${tile('Dropped out', now.dropped, 'dropped', { lowerIsBetter: true })}
+      ${tile('Drop-off rate', now.dropRate === null ? null : now.dropRate + '%', 'dropRate', { lowerIsBetter: true, pct: true })}
+      ${tile('Avg. days until seen', now.avgSeen, 'avgSeen', { lowerIsBetter: true })}
+      ${tile('Avg. days until results', now.avgResults, 'avgResults', { lowerIsBetter: true })}
+      ${tile('Avg. total journey', now.avgJourney, 'avgJourney', { lowerIsBetter: true }, 'days')}
+      <div class="kpi"><div class="label">In process right now</div><div class="value">${now.inProcess}</div><span class="small muted">${now.stale} stale · avg age ${now.avgAging ?? '—'} days</span></div>
     </div>
     <section class="card">
-      <div class="filters"><div class="search"><svg class="i"><use href="#i-search"/></svg><input type="search" placeholder="Search by MRN, initials, doctor, department or service" value="${esc(f.q)}" data-input="ref-q" aria-label="Search referrals"></div></div>
-      <div class="tabs">${tabs.map(([k, l, fn]) => `<button class="${f.tab === k ? 'on' : ''}" data-act="ref-tab" data-tab="${k}">${l} (${withStatus.filter(fn).length})</button>`).join('')}</div>
-      ${rows.length ? `<div class="table-wrap"><table>
-        <thead><tr><th>Patient</th><th>Current step</th><th>Where it stands</th><th>Started · watched by</th><th></th></tr></thead>
-        <tbody>${rows.map(({ r, s }) => { const l = currentLeg(r); const risk = refRiskReason(r); return `
-          <tr class="clickable" data-act="open-ref" data-id="${r.id}">
-            <td><div class="primary-text"><a href="#/referral/${r.id}">${esc(r.mrn)}</a></div><div class="sub">${esc(r.initials || '')}</div></td>
-            <td>${l ? `<div><b>${esc(l.from.label)}</b> ${ico('i-arrow-right', 'sm')} <b>${esc(l.to.label)}</b></div><div class="sub">${esc(l.service || '')}${r.legs.length > 1 ? ` · step ${r.legs.length} of ${r.legs.length}` : ''}</div>` : '<span class="muted">No steps yet</span>'}</td>
-            <td>${refBadge(r)}<div class="sub">${l ? esc(legStatusText(l)) : ''}${risk ? `<br><span style="color:var(--red)">${esc(risk)}</span>` : ''}</div></td>
-            <td class="nowrap">${fmtDate(refFirstDate(r))}<div class="sub">${refDays(r)} days ${s === 'complete' || s === 'lost' ? 'total' : 'so far'}</div><div class="sub">${esc(r.owner || 'Everyone')}</div></td>
-            <td class="nowrap" style="text-align:right"><a class="btn sm" href="#/referral/${r.id}">Open ${ico('i-chevron', 'sm')}</a></td>
-          </tr>`; }).join('')}</tbody></table></div>`
-        : `<p class="empty">${R.length ? 'Nothing here.' : 'No referrals are being tracked yet. Click <b>Start tracking a referral</b> when a patient is referred or an order is placed.'}</p>`}
+      <div class="card-head"><h2>Monthly trend</h2><span class="hint">Last ${months} months · hover a bar for the number</span></div>
+      ${trendChartHTML(monthlySeries(R, months))}
+    </section>
+    <section class="card">
+      <div class="card-head"><h2>By surgeon / physician</h2><span class="hint">${esc(range.label)}${before ? ' · small numbers show the change vs ' + esc(cmp.label) : ''} · click a heading to sort · click a name to see their list</span></div>
+      ${physRows.length ? `<div class="table-wrap"><table class="report">
+        <thead><tr>${th('name', 'Physician', '')}${th('ordered', 'Ordered')}${th('sent', 'Sent by them')}${th('received', 'Received')}${th('inProcess', 'In process')}${th('stale', 'Stale')}${th('completed', 'Completed')}${th('dropped', 'Dropped')}${th('dropRate', 'Drop-off %')}${th('avgSeen', 'Days to see pt.')}${th('avgAging', 'Avg. age open')}</tr></thead>
+        <tbody>${physRows.map(({ p, m, b, received, sent, avgSeenAsReceiver }) => `<tr>
+          <td><a href="#/referrals" data-act="ref-phys-link" data-id="${p.id}"><b>${esc(physSortName(p))}</b></a><div class="sub">${esc(p.specialty || '')}</div></td>
+          <td class="num">${cell(m.ordered, b && b.ordered)}</td><td class="num">${sent}</td><td class="num">${received}</td>
+          <td class="num">${m.inProcess}</td><td class="num">${m.stale ? `<b style="color:var(--red)">${m.stale}</b>` : 0}</td>
+          <td class="num">${cell(m.completed, b && b.completed)}</td><td class="num">${cell(m.dropped, b && b.dropped, { lowerIsBetter: true })}</td>
+          <td class="num">${m.dropRate === null ? '<span class="muted">—</span>' : cell(m.dropRate, b && b.dropRate, { lowerIsBetter: true }) + '%'}</td>
+          <td class="num">${show(avgSeenAsReceiver)}</td><td class="num">${show(m.avgAging)}</td>
+        </tr>`).join('')}</tbody></table></div>` : '<p class="empty">No referrals involve a physician from the Physicians list yet. Choose physicians from the list when starting a referral and they will appear here.</p>'}
+    </section>
+    <section class="card">
+      <div class="card-head"><h2>Quarter by quarter</h2><span class="hint">Last four full quarters plus the current one</span></div>
+      <div class="table-wrap"><table class="report">
+        <thead><tr><th>Quarter</th><th class="num">Ordered</th><th class="num">Completed</th><th class="num">Dropped out</th><th class="num">Drop-off %</th><th class="num">Avg. days until seen</th><th class="num">Avg. days until results</th><th class="num">Avg. total journey</th></tr></thead>
+        <tbody>${qm.map(({ qr, m }) => `<tr><td><b>${esc(qr.label)}</b><div class="sub">${fmtDate(qr.from)} – ${fmtDate(qr.to)}</div></td><td class="num">${m.ordered}</td><td class="num">${m.completed}</td><td class="num">${m.dropped}</td><td class="num">${m.dropRate === null ? '—' : m.dropRate + '%'}</td><td class="num">${show(m.avgSeen)}</td><td class="num">${show(m.avgResults)}</td><td class="num">${show(m.avgJourney)}</td></tr>`).join('')}</tbody>
+      </table></div>
     </section>
     ${destRows.length ? `<section class="card">
-      <div class="card-head"><h2>By destination</h2><span class="hint">Who receives our referrals and orders, and how quickly things move</span></div>
-      <div class="table-wrap"><table>
-        <thead><tr><th>Sent to</th><th class="num">Referrals / orders</th><th class="num">Avg. days until seen</th><th class="num">Avg. days until results</th><th class="num">Dropped out</th></tr></thead>
-        <tbody>${destRows.map(([k, d]) => `<tr><td><b>${esc(k)}</b></td><td class="num">${d.n}</td><td class="num">${avg(d.seen) ?? '—'}</td><td class="num">${avg(d.res) ?? '—'}</td><td class="num">${d.lost ? `<b style="color:var(--red)">${d.lost}</b>` : '0'}</td></tr>`).join('')}</tbody>
+      <div class="card-head"><h2>By destination</h2><span class="hint">Steps sent during ${esc(range.label)}</span></div>
+      <div class="table-wrap"><table class="report">
+        <thead><tr><th>Sent to</th><th class="num">Sent</th><th class="num">Still open</th><th class="num">Avg. days until seen</th><th class="num">Avg. days until results</th><th class="num">Dropped out</th></tr></thead>
+        <tbody>${destRows.map(([k, d]) => `<tr><td><b>${esc(k)}</b></td><td class="num">${d.n}</td><td class="num">${d.open}</td><td class="num">${show(avg(d.seen))}</td><td class="num">${show(avg(d.res))}</td><td class="num">${d.lost ? `<b style="color:var(--red)">${d.lost}</b>` : 0}</td></tr>`).join('')}</tbody>
       </table></div>
     </section>` : ''}`;
+}
+function exportReportCSV() {
+  const range = repRange(), cmp = compareRange(range);
+  const rows = [['Physician', 'Specialty', 'Period', 'Ordered', 'Sent by them', 'Received', 'In process now', 'Stale now', 'Completed', 'Dropped out', 'Drop-off %', 'Avg days until seen (as receiver)', 'Avg age of open (days)', cmp ? 'Ordered (' + cmp.label + ')' : '', cmp ? 'Completed (' + cmp.label + ')' : '', cmp ? 'Dropped (' + cmp.label + ')' : ''].filter(Boolean)];
+  db.physicians.forEach((p) => {
+    const mine = db.referrals.filter((r) => refInvolves(r, p.id)); if (!mine.length) return;
+    const m = refMetrics(mine, range), b = cmp ? refMetrics(mine, cmp) : null;
+    const recv = mine.flatMap((r) => r.legs).filter((l) => l.to && l.to.physicianId === p.id && inRange(l.sentDate, range));
+    const sent = mine.flatMap((r) => r.legs).filter((l) => l.from && l.from.physicianId === p.id && inRange(l.sentDate, range));
+    const row = [physName(p), p.specialty, range.label, m.ordered, sent.length, recv.length, m.inProcess, m.stale, m.completed, m.dropped, m.dropRate ?? '', avg(recv.filter((l) => l.completedDate).map((l) => daysBetween(l.sentDate, l.completedDate))) ?? '', m.avgAging ?? ''];
+    if (b) row.push(b.ordered, b.completed, b.dropped);
+    rows.push(row);
+  });
+  download(`referral-report-${todayISO()}.csv`, '﻿' + toCSV(rows), 'text/csv');
 }
 
 function viewReferral(r) {
@@ -2249,6 +2469,23 @@ function loadSample() {
     { id: uid(), mrn: '131455', initials: 'R.L.', notes: '', status: 'active', createdAt: nowISO(), createdBy: me,
       legs: [L(surg, ct, 'CT cervical spine', -21, -19, null, null)] },
   );
+  // A year of history so the Reports view has something to show. Deterministic, so it looks the same every time.
+  let seed = 7; const rnd = () => { seed = (seed * 9301 + 49297) % 233280; return seed / 233280; };
+  const senders = [uc, { label: 'Primary Care Clinic' }, { label: 'Emergency Department' }, gen];
+  const receivers = [surg, gen, { label: physName(P[3]), physicianId: P[3].id }, ct, mri, pt];
+  const services = { [surg.label]: 'Spine consult', [gen.label]: 'General surgery consult', [physName(P[3])]: 'Podiatry consult', 'Imaging – CT': 'CT scan', 'Imaging – MRI': 'MRI', 'Physical Therapy': 'PT evaluation' };
+  for (let i = 0; i < 40; i++) {
+    const daysAgo = Math.floor(rnd() * 360) + 5;
+    const from = senders[Math.floor(rnd() * senders.length)]; let to = receivers[Math.floor(rnd() * receivers.length)]; if (to.label === from.label) to = surg;
+    const sent = addDays(t, -daysAgo); const r = rnd();
+    const sched = Math.floor(rnd() * 8) + 2, done = sched + Math.floor(rnd() * 12) + 1, res = done + Math.floor(rnd() * 5) + 1;
+    const leg = { id: uid(), from, to, service: services[to.label] || 'Consult', sentDate: sent, scheduledDate: '', completedDate: '', resultedDate: '', log: [] };
+    const ref = { id: uid(), mrn: String(200000 + i * 137), initials: '', notes: '', status: 'active', owner: rnd() < 0.5 ? me : other, createdAt: sent + 'T15:00:00.000Z', createdBy: me, legs: [leg] };
+    if (r < 0.12) { leg.lost = true; leg.lostDate = addDays(sent, sched + 10); leg.lostReason = 'Could not reach the patient'; ref.status = 'lost'; ref.closedAt = leg.lostDate + 'T15:00:00.000Z'; ref.lostReason = leg.lostReason; }
+    else if (daysAgo > res + 3 && r < 0.9) { leg.scheduledDate = addDays(sent, sched); leg.completedDate = addDays(sent, done); leg.resultedDate = addDays(sent, res); ref.status = 'complete'; ref.closedAt = addDays(sent, res + 1) + 'T15:00:00.000Z'; }
+    else { if (daysAgo > sched) leg.scheduledDate = addDays(sent, sched); if (daysAgo > done && rnd() < 0.5) leg.completedDate = addDays(sent, done); }
+    db.referrals.push(ref);
+  }
   db.tasks.push(
     { id: uid(), title: 'Drop off welcome packet at Summit Orthopedic', details: 'Front desk closes at 4:30.', assignedTo: other, assignedBy: me, dueDate: addDays(t, -1), physicianId: P[0].id, referralId: '', done: false, createdAt: nowISO() },
     { id: uid(), title: 'Ask Dr. Chen\'s office which days work for a site tour', details: '', assignedTo: me, assignedBy: other, dueDate: addDays(t, 3), physicianId: P[1].id, referralId: '', done: false, createdAt: nowISO() },
@@ -2343,7 +2580,13 @@ const actions = {
   /* --- referrals --- */
   'open-ref': (el, e) => { if (!e.target.closest('a, button, input')) location.hash = '#/referral/' + el.dataset.id; },
   'ref-tab': (el) => { ui.ref.tab = el.dataset.tab; rerender(); },
-  'ref-tab-link': (el) => { ui.ref.tab = el.dataset.tab; ui.ref.q = ''; },
+  'ref-tab-link': (el) => { ui.ref.tab = el.dataset.tab; ui.ref.q = ''; ui.ref.view = 'list'; },
+  'ref-view': (el) => { ui.ref.view = el.dataset.view; rerender(); },
+  'ref-view-link': () => { ui.ref.view = 'reports'; },
+  'ref-clear': () => { Object.assign(ui.ref, { q: '', phys: '', dest: '', from: '', to: '' }); rerender(); },
+  'ref-phys-link': (el) => { Object.assign(ui.ref, { view: 'list', tab: 'all', phys: el.dataset.id, q: '', dest: '' }); rerender(); },
+  'rep-sort': (el) => { const k = el.dataset.key; ui.rep.dir = ui.rep.sort === k ? -ui.rep.dir : -1; ui.rep.sort = k; rerender(); },
+  'export-rep-csv': () => exportReportCSV(),
   'add-referral': () => openModal({ title: 'Start tracking a referral or order', body: referralFormHTML(null), submitLabel: 'Start tracking', onSubmit: () => {
     const f = $('#ref-form'); if (!f.reportValidity()) return false;
     const fd = new FormData(f); const from = readParty(fd, 'from'), to = readParty(fd, 'to');
@@ -2569,6 +2812,15 @@ document.addEventListener('change', (e) => {
     case 'act-from': ui.act.from = t.value; updateActivityTable(); break;
     case 'act-to': ui.act.to = t.value; updateActivityTable(); break;
     case 'dash-year': ui.year = +t.value; rerender(); break;
+    case 'ref-phys': ui.ref.phys = t.value; rerender(); break;
+    case 'ref-dest': ui.ref.dest = t.value; rerender(); break;
+    case 'ref-from': ui.ref.from = t.value; rerender(); break;
+    case 'ref-to': ui.ref.to = t.value; rerender(); break;
+    case 'ref-sort': ui.ref.sort = t.value; rerender(); break;
+    case 'rep-preset': ui.rep.preset = t.value; rerender(); break;
+    case 'rep-from': ui.rep.from = t.value; rerender(); break;
+    case 'rep-to': ui.rep.to = t.value; rerender(); break;
+    case 'rep-compare': ui.rep.compare = t.value; rerender(); break;
     case 'risk-days': { const v = Math.max(1, Math.round(num(t.value)) || 14); db.settings.riskDays = v; t.value = v; saveDB(); toast('Saved'); updateNavCount(); break; }
     case 'team-name': { const v = t.value.trim(); if (v) { db.settings.team[+t.dataset.i] = v; saveDB(); toast('Saved'); } break; }
   }
