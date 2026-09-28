@@ -145,7 +145,23 @@ function dbUsers(): array {
 }
 function allUsers(): array { global $CFG; $d = dbUsers(); return $d ?: $CFG['users']; }
 function userRecord(array $u): array {
-  return ['id' => strtolower($u['username']), 'username' => strtolower($u['username']), 'name' => $u['name'], 'role' => ($u['role'] ?? 'user') === 'admin' ? 'admin' : 'user', 'team' => ($u['team'] ?? true) !== false, 'hash' => $u['hash']];
+  return ['id' => strtolower($u['username']), 'username' => strtolower($u['username']), 'name' => $u['name'], 'role' => ($u['role'] ?? 'user') === 'admin' ? 'admin' : 'user', 'team' => ($u['team'] ?? true) !== false, 'email' => strtolower(trim((string)($u['email'] ?? ''))), 'hash' => $u['hash'],
+    'resetHash' => $u['resetHash'] ?? '', 'resetExpires' => (int)($u['resetExpires'] ?? 0)];
+}
+function saveUser(array $rec, string $by): void { store()->apply([['op' => 'put', 'collection' => 'users', 'id' => $rec['id'], 'record' => $rec]], $by); }
+function appUrl(): string {
+  global $CFG;
+  if (!empty($CFG['app_url'])) return rtrim($CFG['app_url'], '/');
+  $host = $_SERVER['HTTP_HOST'] ?? 'localhost';
+  $dir = rtrim(dirname($_SERVER['SCRIPT_NAME'] ?? '/'), '/');
+  return 'https://' . $host . $dir;
+}
+function sendMail(string $to, string $subject, string $body): bool {
+  global $CFG;
+  $host = preg_replace('/^www\./', '', explode(':', $_SERVER['HTTP_HOST'] ?? 'localhost')[0]);
+  $from = $CFG['mail_from'] ?? ('noreply@' . $host);
+  $headers = "From: Physician Relations <$from>\r\nReply-To: $from\r\nContent-Type: text/plain; charset=UTF-8\r\nX-Mailer: PHP\r\n";
+  return @mail($to, $subject, $body, $headers);
 }
 function seedUsersIfEmpty(): void {
   global $CFG;
@@ -166,7 +182,8 @@ function currentUser(): ?array {
 }
 function requireUser(): array { $u = currentUser(); if (!$u) fail('Please sign in.', 401); return $u; }
 function requireAdmin(): array { $u = requireUser(); if (($u['role'] ?? '') !== 'admin') fail('Only the administrator can do that.', 403); return $u; }
-function pub(array $u): array { return ['username' => strtolower($u['username']), 'name' => $u['name'], 'role' => $u['role'] ?? 'user', 'team' => ($u['team'] ?? true) !== false]; }
+function pub(array $u): array { return ['username' => strtolower($u['username']), 'name' => $u['name'], 'role' => $u['role'] ?? 'user', 'team' => ($u['team'] ?? true) !== false, 'email' => (string)($u['email'] ?? '')]; }
+function validEmail($v): bool { return $v === '' || filter_var($v, FILTER_VALIDATE_EMAIL) !== false; }
 function pubUsers(): array { return array_values(array_map('pub', allUsers())); }
 function teamDefault(): array { return array_values(array_map(fn($u) => $u['name'], array_filter(allUsers(), fn($u) => ($u['team'] ?? true) !== false))); }
 function validUsername($v): bool { return is_string($v) && preg_match('/^[a-z0-9._-]{2,32}$/i', $v) === 1; }
@@ -232,6 +249,8 @@ try {
       if ($name === '') fail('Please enter the person\'s name.');
       $role = ($body['role'] ?? 'user') === 'admin' ? 'admin' : 'user';
       $team = !empty($body['team']);
+      $email = strtolower(trim((string)($body['email'] ?? '')));
+      if (!validEmail($email)) fail('That email address does not look right.');
       $existing = findUser($username);
       $pw = (string)($body['password'] ?? '');
       if (!$existing && strlen($pw) < 8) fail('Please choose a password of at least 8 characters.');
@@ -241,9 +260,51 @@ try {
         $admins = array_filter(allUsers(), fn($u) => ($u['role'] ?? '') === 'admin' && strtolower($u['username']) !== $username);
         if (!$admins) fail('There must be at least one administrator.');
       }
-      $rec = userRecord(['username' => $username, 'name' => $name, 'role' => $role, 'team' => $team, 'hash' => $pw !== '' ? password_hash($pw, PASSWORD_BCRYPT) : ($existing['hash'] ?? '')]);
-      store()->apply([['op' => 'put', 'collection' => 'users', 'id' => $username, 'record' => $rec]], $me['name']);
+      $rec = userRecord(['username' => $username, 'name' => $name, 'role' => $role, 'team' => $team, 'email' => $email, 'hash' => $pw !== '' ? password_hash($pw, PASSWORD_BCRYPT) : ($existing['hash'] ?? '')]);
+      saveUser($rec, $me['name']);
       out(['ok' => true, 'user' => pub($rec), 'created' => !$existing]);
+    }
+
+    case 'profile': {   // a user updates their own email address
+      $me = requireUser();
+      if ($method !== 'POST') fail('Bad request.');
+      seedUsersIfEmpty();
+      $email = strtolower(trim((string)($body['email'] ?? '')));
+      if (!validEmail($email)) fail('That email address does not look right.');
+      $rec = userRecord(findUser($me['username'])); $rec['email'] = $email;
+      saveUser($rec, $me['name']);
+      out(['ok' => true, 'user' => pub($rec)]);
+    }
+
+    case 'forgot': {   // "Forgot your password?" — emails a one-time reset link
+      if ($method !== 'POST') fail('Bad request.');
+      $last = (int)($_SESSION['forgot_t'] ?? 0);
+      if (time() - $last < 30) fail('Please wait a moment before trying again.', 429);
+      $_SESSION['forgot_t'] = time();
+      seedUsersIfEmpty();
+      $u = findUser(trim((string)($body['username'] ?? '')));
+      $generic = ['ok' => true, 'message' => 'If that username has an email address on file, a reset link is on its way. Check your spam folder if it does not arrive within a few minutes.'];
+      if (!$u || empty($u['email'])) out($generic);
+      $token = bin2hex(random_bytes(20));
+      $rec = userRecord($u); $rec['resetHash'] = hash('sha256', $token); $rec['resetExpires'] = time() + 30 * 60;
+      saveUser($rec, 'system');
+      $link = appUrl() . '/#/reset/' . $token;
+      $body = "Hello {$u['name']},\n\nSomeone asked to reset the password for the Physician Relations login \"{$u['username']}\".\n\nOpen this link within 30 minutes to choose a new password:\n$link\n\nIf you did not ask for this, you can ignore this email — your password has not changed.\n\nNorthwest Specialty Hospital — Physician Relations";
+      if (!sendMail($u['email'], 'Reset your Physician Relations password', $body)) error_log("physician-relations: email could not be sent; reset link for {$u['username']}: $link");
+      out($generic);
+    }
+
+    case 'reset': {
+      if ($method !== 'POST') fail('Bad request.');
+      $token = (string)($body['token'] ?? '');
+      $pw = (string)($body['password'] ?? '');
+      if (strlen($pw) < 8) fail('Please choose a password of at least 8 characters.');
+      $h = hash('sha256', $token); $found = null;
+      foreach (dbUsers() as $u) if (!empty($u['resetHash']) && hash_equals($u['resetHash'], $h)) $found = $u;
+      if (!$found || (int)$found['resetExpires'] < time()) fail('That reset link is not valid any more. Ask for a new one from the sign-in page.');
+      $rec = userRecord($found); $rec['hash'] = password_hash($pw, PASSWORD_BCRYPT); $rec['resetHash'] = ''; $rec['resetExpires'] = 0;
+      saveUser($rec, 'system');
+      out(['ok' => true, 'username' => $rec['username']]);
     }
 
     case 'user_delete': {
@@ -266,7 +327,7 @@ try {
       $pw = (string)($body['password'] ?? '');
       if (strlen($pw) < 8) fail('Please choose a password of at least 8 characters.');
       $rec = userRecord($u); $rec['hash'] = password_hash($pw, PASSWORD_BCRYPT);
-      store()->apply([['op' => 'put', 'collection' => 'users', 'id' => $rec['id'], 'record' => $rec]], $me['name']);
+      saveUser($rec, $me['name']);
       out(['ok' => true]);
     }
 

@@ -16,6 +16,8 @@ return [
   'app_name'     => 'Physician Relations',
   'idle_minutes' => 30,   // sign out after this many idle minutes
   'max_file_mb'  => 15,   // largest attachment allowed
+  'app_url'      => 'https://docdockcrm.com',       // used in password-reset emails
+  'mail_from'    => 'noreply@docdockcrm.com',       // sender address for those emails
 
   'users' => [
     ['username' => 'admin',   'name' => 'Administrator',    'role' => 'admin', 'team' => false,
