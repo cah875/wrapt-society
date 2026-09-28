@@ -16,17 +16,21 @@ return [
   'app_name'     => 'Physician Relations',
   'idle_minutes' => 30,   // sign out after this many idle minutes
   'max_file_mb'  => 15,   // largest attachment allowed
-  'app_url'      => 'https://docdockcrm.com',       // used in password-reset emails
-  'mail_from'    => 'noreply@docdockcrm.com',       // sender address for those emails
+  'app_url'      => 'https://docdockcrm.com',       // used in emails
+  'mail_from'    => 'noreply@docdockcrm.com',       // sender address for emails
+  'timezone'     => 'America/Los_Angeles',          // for the morning email and dates in it
+  'digest_key'   => 'change-this-to-a-long-random-phrase',   // lets digest.php be run from a URL (see README)
 
+  // Logins are seeded from here on first use, then managed in Settings.
+  // An email listed here is copied to a login that has none yet.
   'users' => [
-    ['username' => 'admin',   'name' => 'Administrator',    'role' => 'admin', 'team' => false,
+    ['username' => 'admin',   'name' => 'Christopher Hill', 'role' => 'admin', 'team' => false, 'email' => 'christopher.hill@nwsh.com',
      'hash' => '$2y$12$jk8/CpasRbpUxf4aC8DhyOKHAfk.On36oES/UbyeXnHQVu/AHH0Gu'],
-    ['username' => 'josh',    'name' => 'Josh Tolman',      'role' => 'user',
+    ['username' => 'josh',    'name' => 'Josh Tolman',      'role' => 'user', 'email' => 'josh.tolman@nwsh.com',
      'hash' => '$2y$12$94YgAU.MwlYVBstJyPlXlePF7RPVjPz6zKvkfstv7xLqKHNs//WAW'],
-    ['username' => 'heather', 'name' => 'Heather Claussen', 'role' => 'user',
+    ['username' => 'heather', 'name' => 'Heather Claussen', 'role' => 'user', 'email' => 'heather.claussen@nwsh.com',
      'hash' => '$2y$12$i2sxXFwWiXLZExF4bGNgBOilJOhDXjv08RRYvNMqLDMFsk41lVNAq'],
-    ['username' => 'angela',  'name' => 'Angela Meadows',   'role' => 'user',
+    ['username' => 'angela',  'name' => 'Angela Meadows',   'role' => 'user', 'email' => 'angela.meadows@nwsh.com',
      'hash' => '$2y$12$YpDDyIUMA7c7htLfd3m6xu4qG6MhGNtPZO6K3dFpzFcSVsdp9/H4O'],
   ],
 ];

@@ -14,9 +14,6 @@ ini_set('display_errors', '0');
 error_reporting(E_ALL);
 set_error_handler(function ($no, $str, $file, $line) { throw new ErrorException($str, 0, $no, $file, $line); });
 
-const APP_ID = 'nwsh-physician-relations';
-const COLLECTIONS = ['physicians', 'contacts', 'referrals', 'settings', 'users'];
-
 function out(array $data, int $code = 200): never {
   http_response_code($code);
   header('Content-Type: application/json; charset=utf-8');
@@ -37,97 +34,7 @@ if (!file_exists("$DATA/.htaccess")) @file_put_contents("$DATA/.htaccess", "Requ
 if (!file_exists("$DATA/index.html")) @file_put_contents("$DATA/index.html", '');
 if (!is_dir("$DATA/files")) @mkdir("$DATA/files", 0750, true);
 
-/* ---------- storage: SQLite, with a plain JSON file as fallback ---------- */
-interface Store {
-  public function version(): int;
-  public function all(): array;
-  public function apply(array $ops, string $by): int;
-  public function replace(array $data, string $by): int;
-}
-
-class SqliteStore implements Store {
-  private PDO $pdo;
-  public function __construct(string $file) {
-    $this->pdo = new PDO('sqlite:' . $file);
-    $this->pdo->setAttribute(PDO::ATTR_ERRMODE, PDO::ERRMODE_EXCEPTION);
-    $this->pdo->exec('PRAGMA journal_mode=WAL');
-    $this->pdo->exec('PRAGMA busy_timeout=5000');
-    $this->pdo->exec('CREATE TABLE IF NOT EXISTS records (collection TEXT NOT NULL, id TEXT NOT NULL, json TEXT NOT NULL, updated_at TEXT NOT NULL, updated_by TEXT, PRIMARY KEY (collection, id))');
-    $this->pdo->exec('CREATE TABLE IF NOT EXISTS meta (key TEXT PRIMARY KEY, value TEXT)');
-    $this->pdo->exec("INSERT OR IGNORE INTO meta (key, value) VALUES ('version', '0')");
-  }
-  public function version(): int { return (int)$this->pdo->query("SELECT value FROM meta WHERE key='version'")->fetchColumn(); }
-  public function all(): array {
-    $out = array_fill_keys(COLLECTIONS, []);
-    foreach ($this->pdo->query('SELECT collection, json FROM records') as $r) $out[$r['collection']][] = json_decode($r['json'], true);
-    return $out;
-  }
-  private function bump(): int { $this->pdo->exec("UPDATE meta SET value = CAST(value AS INTEGER) + 1 WHERE key='version'"); return $this->version(); }
-  public function apply(array $ops, string $by): int {
-    $this->pdo->beginTransaction();
-    try {
-      $put = $this->pdo->prepare('INSERT INTO records (collection, id, json, updated_at, updated_by) VALUES (?, ?, ?, ?, ?) ON CONFLICT(collection, id) DO UPDATE SET json = excluded.json, updated_at = excluded.updated_at, updated_by = excluded.updated_by');
-      $del = $this->pdo->prepare('DELETE FROM records WHERE collection = ? AND id = ?');
-      $now = gmdate('c');
-      foreach ($ops as $op) {
-        if ($op['op'] === 'put') $put->execute([$op['collection'], $op['id'], json_encode($op['record'], JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES), $now, $by]);
-        else $del->execute([$op['collection'], $op['id']]);
-      }
-      $v = $this->bump();
-      $this->pdo->commit();
-      return $v;
-    } catch (Throwable $e) { $this->pdo->rollBack(); throw $e; }
-  }
-  public function replace(array $data, string $by): int {
-    $this->pdo->beginTransaction();
-    try {
-      $this->pdo->exec('DELETE FROM records');
-      $put = $this->pdo->prepare('INSERT INTO records (collection, id, json, updated_at, updated_by) VALUES (?, ?, ?, ?, ?)');
-      $now = gmdate('c');
-      foreach ($data as $coll => $rows) foreach ($rows as $row) $put->execute([$coll, $row['id'], json_encode($row, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES), $now, $by]);
-      $v = $this->bump();
-      $this->pdo->commit();
-      return $v;
-    } catch (Throwable $e) { $this->pdo->rollBack(); throw $e; }
-  }
-}
-
-class JsonStore implements Store {
-  private string $file; private array $d; private $fh;
-  public function __construct(string $file) {
-    $this->file = $file;
-    $this->fh = fopen($file, 'c+');
-    flock($this->fh, LOCK_EX);
-    $raw = stream_get_contents($this->fh);
-    $this->d = $raw ? (json_decode($raw, true) ?: []) : [];
-    $this->d += ['version' => 0, 'records' => []];
-  }
-  private function save(): void { rewind($this->fh); ftruncate($this->fh, 0); fwrite($this->fh, json_encode($this->d, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES)); fflush($this->fh); }
-  public function version(): int { return (int)$this->d['version']; }
-  public function all(): array {
-    $out = array_fill_keys(COLLECTIONS, []);
-    foreach ($this->d['records'] as $key => $row) { [$coll] = explode('/', $key, 2); $out[$coll][] = $row; }
-    return $out;
-  }
-  public function apply(array $ops, string $by): int {
-    foreach ($ops as $op) { $k = $op['collection'] . '/' . $op['id']; if ($op['op'] === 'put') $this->d['records'][$k] = $op['record']; else unset($this->d['records'][$k]); }
-    $this->d['version']++; $this->save(); return $this->d['version'];
-  }
-  public function replace(array $data, string $by): int {
-    $this->d['records'] = [];
-    foreach ($data as $coll => $rows) foreach ($rows as $row) $this->d['records'][$coll . '/' . $row['id']] = $row;
-    $this->d['version']++; $this->save(); return $this->d['version'];
-  }
-}
-
-function store(): Store {
-  global $DATA;
-  static $s = null;
-  if ($s) return $s;
-  if (class_exists('PDO') && in_array('sqlite', PDO::getAvailableDrivers(), true)) $s = new SqliteStore("$DATA/physician-relations.sqlite");
-  else $s = new JsonStore("$DATA/physician-relations.json");
-  return $s;
-}
+require __DIR__ . '/lib.php';
 
 /* ---------- session / auth ---------- */
 $secure = !empty($_SERVER['HTTPS']) && $_SERVER['HTTPS'] !== 'off';
@@ -145,27 +52,25 @@ function dbUsers(): array {
 }
 function allUsers(): array { global $CFG; $d = dbUsers(); return $d ?: $CFG['users']; }
 function userRecord(array $u): array {
-  return ['id' => strtolower($u['username']), 'username' => strtolower($u['username']), 'name' => $u['name'], 'role' => ($u['role'] ?? 'user') === 'admin' ? 'admin' : 'user', 'team' => ($u['team'] ?? true) !== false, 'email' => strtolower(trim((string)($u['email'] ?? ''))), 'hash' => $u['hash'],
+  return ['id' => strtolower($u['username']), 'username' => strtolower($u['username']), 'name' => $u['name'], 'role' => ($u['role'] ?? 'user') === 'admin' ? 'admin' : 'user', 'team' => ($u['team'] ?? true) !== false, 'email' => strtolower(trim((string)($u['email'] ?? ''))), 'digest' => ($u['digest'] ?? true) !== false, 'hash' => $u['hash'],
     'resetHash' => $u['resetHash'] ?? '', 'resetExpires' => (int)($u['resetExpires'] ?? 0)];
 }
+// Copies an email (and a real name in place of "Administrator") from config.php to logins that have none yet.
+function syncUsersFromConfig(): void {
+  global $CFG;
+  foreach (dbUsers() as $u) {
+    $c = null; foreach ($CFG['users'] as $x) if (strcasecmp($x['username'], $u['username']) === 0) $c = $x;
+    if (!$c) continue;
+    $rec = userRecord($u); $changed = false;
+    if ($rec['email'] === '' && !empty($c['email'])) { $rec['email'] = strtolower($c['email']); $changed = true; }
+    if ($rec['name'] === 'Administrator' && !empty($c['name']) && $c['name'] !== 'Administrator') { $rec['name'] = $c['name']; $changed = true; }
+    if ($changed) saveUser($rec, 'system');
+  }
+}
 function saveUser(array $rec, string $by): void { store()->apply([['op' => 'put', 'collection' => 'users', 'id' => $rec['id'], 'record' => $rec]], $by); }
-function appUrl(): string {
-  global $CFG;
-  if (!empty($CFG['app_url'])) return rtrim($CFG['app_url'], '/');
-  $host = $_SERVER['HTTP_HOST'] ?? 'localhost';
-  $dir = rtrim(dirname($_SERVER['SCRIPT_NAME'] ?? '/'), '/');
-  return 'https://' . $host . $dir;
-}
-function sendMail(string $to, string $subject, string $body): bool {
-  global $CFG;
-  $host = preg_replace('/^www\./', '', explode(':', $_SERVER['HTTP_HOST'] ?? 'localhost')[0]);
-  $from = $CFG['mail_from'] ?? ('noreply@' . $host);
-  $headers = "From: Physician Relations <$from>\r\nReply-To: $from\r\nContent-Type: text/plain; charset=UTF-8\r\nX-Mailer: PHP\r\n";
-  return @mail($to, $subject, $body, $headers);
-}
 function seedUsersIfEmpty(): void {
   global $CFG;
-  if (dbUsers()) return;
+  if (dbUsers()) { syncUsersFromConfig(); return; }
   $ops = array_map(fn($u) => ['op' => 'put', 'collection' => 'users', 'id' => strtolower($u['username']), 'record' => userRecord($u)], $CFG['users']);
   store()->apply($ops, 'system');
 }
@@ -182,7 +87,7 @@ function currentUser(): ?array {
 }
 function requireUser(): array { $u = currentUser(); if (!$u) fail('Please sign in.', 401); return $u; }
 function requireAdmin(): array { $u = requireUser(); if (($u['role'] ?? '') !== 'admin') fail('Only the administrator can do that.', 403); return $u; }
-function pub(array $u): array { return ['username' => strtolower($u['username']), 'name' => $u['name'], 'role' => $u['role'] ?? 'user', 'team' => ($u['team'] ?? true) !== false, 'email' => (string)($u['email'] ?? '')]; }
+function pub(array $u): array { return ['username' => strtolower($u['username']), 'name' => $u['name'], 'role' => $u['role'] ?? 'user', 'team' => ($u['team'] ?? true) !== false, 'email' => (string)($u['email'] ?? ''), 'digest' => ($u['digest'] ?? true) !== false]; }
 function validEmail($v): bool { return $v === '' || filter_var($v, FILTER_VALIDATE_EMAIL) !== false; }
 function pubUsers(): array { return array_values(array_map('pub', allUsers())); }
 function teamDefault(): array { return array_values(array_map(fn($u) => $u['name'], array_filter(allUsers(), fn($u) => ($u['team'] ?? true) !== false))); }
@@ -260,20 +165,43 @@ try {
         $admins = array_filter(allUsers(), fn($u) => ($u['role'] ?? '') === 'admin' && strtolower($u['username']) !== $username);
         if (!$admins) fail('There must be at least one administrator.');
       }
-      $rec = userRecord(['username' => $username, 'name' => $name, 'role' => $role, 'team' => $team, 'email' => $email, 'hash' => $pw !== '' ? password_hash($pw, PASSWORD_BCRYPT) : ($existing['hash'] ?? '')]);
+      $rec = userRecord(['username' => $username, 'name' => $name, 'role' => $role, 'team' => $team, 'email' => $email, 'digest' => array_key_exists('digest', $body) ? !empty($body['digest']) : (($existing['digest'] ?? true) !== false), 'hash' => $pw !== '' ? password_hash($pw, PASSWORD_BCRYPT) : ($existing['hash'] ?? '')]);
       saveUser($rec, $me['name']);
       out(['ok' => true, 'user' => pub($rec), 'created' => !$existing]);
     }
 
-    case 'profile': {   // a user updates their own email address
+    case 'profile': {   // a user updates their own email address / morning email choice
       $me = requireUser();
       if ($method !== 'POST') fail('Bad request.');
       seedUsersIfEmpty();
       $email = strtolower(trim((string)($body['email'] ?? '')));
       if (!validEmail($email)) fail('That email address does not look right.');
       $rec = userRecord(findUser($me['username'])); $rec['email'] = $email;
+      if (array_key_exists('digest', $body)) $rec['digest'] = !empty($body['digest']);
       saveUser($rec, $me['name']);
       out(['ok' => true, 'user' => pub($rec)]);
+    }
+
+    case 'digest_status': {
+      requireAdmin();
+      $row = null; foreach (store()->all()['settings'] as $s) if (($s['id'] ?? '') === 'digest') $row = $s;
+      out(['ok' => true, 'status' => $row ?: ['lastRun' => '', 'sent' => []]]);
+    }
+
+    case 'digest_test': {   // sends the signed-in user their own digest right now, and returns the text
+      $me = requireUser();
+      if ($method !== 'POST') fail('Bad request.');
+      seedUsersIfEmpty();
+      $u = findUser($me['username']);
+      if (empty($u['email'])) fail('Add an email address to your login first (Settings → My login).');
+      define('DIGEST_LIB_ONLY', true);
+      require_once __DIR__ . '/digest.php';
+      $d = buildDigestFor($u, true);
+      $text = $d ? $d['body'] : "Nothing is overdue, due this week, or at risk for you right now — on a real morning you would get no email.";
+      $subject = $d ? $d['subject'] : '[Test] Physician Relations morning email — nothing to report';
+      $sent = sendMail($u['email'], $subject, $text . "\n\n(This was a test send requested from Settings.)");
+      if (!$sent) fail('The server could not send the email. Check the mail settings with the host.');
+      out(['ok' => true, 'to' => $u['email'], 'text' => $text]);
     }
 
     case 'forgot': {   // "Forgot your password?" — emails a one-time reset link

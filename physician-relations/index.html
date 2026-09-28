@@ -753,7 +753,7 @@ function touchSession() {
   try { sessionStorage.setItem(SESSION_KEY, JSON.stringify({ username: session.username, lastActive: session.lastActive })); } catch {}
 }
 async function startSession(user) {
-  session = { username: user.username, name: user.name, role: user.role, email: user.email || '', lastActive: Date.now(), users: user.users };
+  session = { username: user.username, name: user.name, role: user.role, email: user.email || '', digest: user.digest !== false, lastActive: Date.now(), users: user.users };
   if (MODE === 'server') {
     try { db = dbFromServer(await api('load')); }
     catch (e) { session = null; showLoginError('Signed in, but the records could not be loaded: ' + e.message); return; }
@@ -982,7 +982,7 @@ function route() {
       break;
     }
     case 'activity': main.innerHTML = viewActivity(); updateActivityTable(); break;
-    case 'settings': main.innerHTML = viewSettings(); break;
+    case 'settings': main.innerHTML = viewSettings(); loadDigestStatus(); break;
     default: main.innerHTML = viewHome();
   }
   window.scrollTo(0, 0);
@@ -1553,13 +1553,13 @@ function viewReferrals() {
       <div class="filters"><div class="search"><svg class="i"><use href="#i-search"/></svg><input type="search" placeholder="Search by MRN, initials, doctor, department or service" value="${esc(f.q)}" data-input="ref-q" aria-label="Search referrals"></div></div>
       <div class="tabs">${tabs.map(([k, l, fn]) => `<button class="${f.tab === k ? 'on' : ''}" data-act="ref-tab" data-tab="${k}">${l} (${withStatus.filter(fn).length})</button>`).join('')}</div>
       ${rows.length ? `<div class="table-wrap"><table>
-        <thead><tr><th>Patient</th><th>Current step</th><th>Where it stands</th><th>Started</th><th></th></tr></thead>
+        <thead><tr><th>Patient</th><th>Current step</th><th>Where it stands</th><th>Started · watched by</th><th></th></tr></thead>
         <tbody>${rows.map(({ r, s }) => { const l = currentLeg(r); const risk = refRiskReason(r); return `
           <tr class="clickable" data-act="open-ref" data-id="${r.id}">
             <td><div class="primary-text"><a href="#/referral/${r.id}">${esc(r.mrn)}</a></div><div class="sub">${esc(r.initials || '')}</div></td>
             <td>${l ? `<div><b>${esc(l.from.label)}</b> ${ico('i-arrow-right', 'sm')} <b>${esc(l.to.label)}</b></div><div class="sub">${esc(l.service || '')}${r.legs.length > 1 ? ` · step ${r.legs.length} of ${r.legs.length}` : ''}</div>` : '<span class="muted">No steps yet</span>'}</td>
             <td>${refBadge(r)}<div class="sub">${l ? esc(legStatusText(l)) : ''}${risk ? `<br><span style="color:var(--red)">${esc(risk)}</span>` : ''}</div></td>
-            <td class="nowrap">${fmtDate(refFirstDate(r))}<div class="sub">${refDays(r)} days ${s === 'complete' || s === 'lost' ? 'total' : 'so far'}</div></td>
+            <td class="nowrap">${fmtDate(refFirstDate(r))}<div class="sub">${refDays(r)} days ${s === 'complete' || s === 'lost' ? 'total' : 'so far'}</div><div class="sub">${esc(r.owner || 'Everyone')}</div></td>
             <td class="nowrap" style="text-align:right"><a class="btn sm" href="#/referral/${r.id}">Open ${ico('i-chevron', 'sm')}</a></td>
           </tr>`; }).join('')}</tbody></table></div>`
         : `<p class="empty">${R.length ? 'Nothing here.' : 'No referrals are being tracked yet. Click <b>Start tracking a referral</b> when a patient is referred or an order is placed.'}</p>`}
@@ -1582,7 +1582,7 @@ function viewReferral(r) {
         <div class="avatar" aria-hidden="true">${esc((r.initials || r.mrn || '?').slice(0, 2).toUpperCase())}</div>
         <div class="info">
           <h1>Patient ${esc(r.mrn)}${r.initials ? ` <span class="muted" style="font-weight:400">(${esc(r.initials)})</span>` : ''}</h1>
-          <div class="sub">Started ${fmtDate(refFirstDate(r))} · ${refDays(r)} days ${active ? 'so far' : 'total'} · ${r.legs.length} step${r.legs.length === 1 ? '' : 's'}</div>
+          <div class="sub">Started ${fmtDate(refFirstDate(r))} · ${refDays(r)} days ${active ? 'so far' : 'total'} · ${r.legs.length} step${r.legs.length === 1 ? '' : 's'} · watched by <b>${esc(r.owner || 'everyone')}</b></div>
         </div>
         <div>${refBadge(r)}</div>
         <div class="actions no-print" style="display:flex;gap:10px;flex-wrap:wrap">
@@ -1639,6 +1639,10 @@ function referralFormHTML(r) {
       <label><span class="req">Patient MRN / ID</span><input name="mrn" required value="${esc(r.mrn || '')}" placeholder="e.g. 104233"></label>
       <label><span>Patient initials <span class="help">(optional)</span></span><input name="initials" maxlength="5" value="${esc(r.initials || '')}" placeholder="e.g. J.D."></label>
     </div>
+    <label><span>Who is keeping an eye on this? <span class="help">(gets the morning email if it stalls)</span></span><select name="owner">
+      ${(() => { const team = db.settings.team.slice(); const cur = r.owner !== undefined ? r.owner : (team.includes(session.name) ? session.name : ''); if (cur && !team.includes(cur)) team.push(cur);
+        return `<option value="" ${cur === '' ? 'selected' : ''}>Everyone</option>` + team.map((n) => `<option ${n === cur ? 'selected' : ''}>${esc(n)}</option>`).join(''); })()}
+    </select></label>
     ${r.id ? '' : `<fieldset><legend>First step</legend><div class="form">
       <div class="row2">
         <label><span class="req">Referred / ordered by</span>${partyPickerHTML('from', null)}</label>
@@ -1754,9 +1758,11 @@ function loginsCardHTML() {
       <h2>My login</h2>
       <p class="small muted">You are signed in as <b>${esc(session.name)}</b> (username <code>${esc(session.username)}</code>).</p>
       <form class="form" data-form="myemail" autocomplete="off" style="margin-bottom:18px">
-        <label><span>Email for password resets</span><input name="email" type="email" value="${esc(session.email || '')}" placeholder="name@nwsh.com"></label>
-        <div><button class="btn" type="submit">Save email</button></div>
+        <label><span>Email <span class="help">(for password resets and the morning email)</span></span><input name="email" type="email" value="${esc(session.email || '')}" placeholder="name@nwsh.com"></label>
+        <label class="check"><input type="checkbox" name="digest" ${session.digest !== false ? 'checked' : ''}> Send me the morning email — my overdue follow-ups, what is due this week, and referrals at risk. Only on days there is something to report.</label>
+        <div style="display:flex;gap:10px;flex-wrap:wrap"><button class="btn" type="submit">Save</button><button class="btn" type="button" data-act="digest-test">Send me a test email now</button></div>
       </form>
+      ${isAdmin() ? `<div id="digest-status" class="notice info" style="margin-bottom:18px">${ico('i-info')}<div>Morning email: checking…</div></div>` : ''}
       <h3>Change my password</h3>
       <form class="form" data-form="mypassword" autocomplete="off">
         <label><span class="req">Current password</span><input name="current" type="password" required autocomplete="current-password"></label>
@@ -1805,9 +1811,21 @@ function userFormHTML(u) {
       <label><input type="radio" name="role" value="admin" ${u.role === 'admin' ? 'checked' : ''}><span><b>Administrator</b><span class="small muted">Everything, plus logins, deleting records, backups and erasing data.</span></span></label>
     </div></div>
     <label class="check"><input type="checkbox" name="team" ${u.team ? 'checked' : ''}> Show this person in the "Who made the contact?" list</label>
+    <label class="check"><input type="checkbox" name="digest" ${u.digest !== false ? 'checked' : ''}> Send the morning email (overdue follow-ups and referrals at risk)</label>
   </form>`;
 }
 async function refreshUsers() { try { session.users = (await api('users')).users; } catch {} }
+async function loadDigestStatus() {
+  const el = $('#digest-status'); if (!el || MODE !== 'server') return;
+  try {
+    const s = (await api('digest_status')).status;
+    const noEmail = (session.users || []).filter((u) => !u.email && u.digest !== false).map((u) => u.name);
+    el.querySelector('div').innerHTML = s.lastRun
+      ? `<b>Morning email</b> last ran ${fmtDate(s.lastRun)} at ${esc(s.lastRunAt || '')} — sent to ${s.sent && s.sent.length ? esc(s.sent.join(', ')) : 'nobody (nothing to report)'}.${s.skipped && s.skipped.length ? ` Skipped: ${esc(s.skipped.join('; '))}.` : ''}`
+      : `<b>Morning email</b> has not run yet. It needs the daily schedule set up in cPanel (see README). Use "Send me a test email now" to check delivery.`;
+    if (noEmail.length) el.querySelector('div').innerHTML += ` <span style="color:var(--amber)">No email on file: ${esc(noEmail.join(', '))}.</span>`;
+  } catch (e) { el.querySelector('div').textContent = 'Morning email status could not be loaded: ' + e.message; }
+}
 
 /* ===================== Physician form (modal) ===================== */
 function physicianFormHTML(p) {
@@ -2213,13 +2231,13 @@ const actions = {
     const f = $('#ref-form'); if (!f.reportValidity()) return false;
     const fd = new FormData(f); const from = readParty(fd, 'from'), to = readParty(fd, 'to');
     if (!from || !to) { toast('Please choose who sent it and who receives it.', 'err'); return false; }
-    const r = { id: uid(), mrn: String(fd.get('mrn')).trim(), initials: String(fd.get('initials') || '').trim(), notes: String(fd.get('notes') || '').trim(), status: 'active', createdAt: nowISO(), createdBy: session.name,
+    const r = { id: uid(), mrn: String(fd.get('mrn')).trim(), initials: String(fd.get('initials') || '').trim(), owner: String(fd.get('owner') || ''), notes: String(fd.get('notes') || '').trim(), status: 'active', createdAt: nowISO(), createdBy: session.name,
       legs: [{ id: uid(), from, to, service: String(fd.get('service')).trim(), sentDate: fd.get('sentDate'), log: [{ date: todayISO(), by: session.name, text: `Sent to ${to.label}` }] }] };
     db.referrals.push(r); saveDB(); toast('Now tracking this referral'); location.hash = '#/referral/' + r.id; return true;
   } }),
   'edit-referral': (el) => { const r = getRef(el.dataset.id); openModal({ title: 'Edit patient details', body: referralFormHTML(r), submitLabel: 'Save changes', narrow: true, onSubmit: () => {
     const f = $('#ref-form'); if (!f.reportValidity()) return false; const fd = new FormData(f);
-    Object.assign(r, { mrn: String(fd.get('mrn')).trim(), initials: String(fd.get('initials') || '').trim(), notes: String(fd.get('notes') || '').trim(), updatedAt: nowISO(), updatedBy: session.name });
+    Object.assign(r, { mrn: String(fd.get('mrn')).trim(), initials: String(fd.get('initials') || '').trim(), owner: String(fd.get('owner') || ''), notes: String(fd.get('notes') || '').trim(), updatedAt: nowISO(), updatedBy: session.name });
     saveDB(); toast('Saved'); rerender(); return true;
   } }); },
   'delete-referral': (el) => { const r = getRef(el.dataset.id); confirmBox(`Permanently delete the referral record for patient <b>${esc(r.mrn)}</b>?`, () => { db.referrals = db.referrals.filter((x) => x.id !== r.id); saveDB(); toast('Deleted'); location.hash = '#/referrals'; }, 'Delete permanently', true); },
@@ -2266,10 +2284,19 @@ const actions = {
   },
   'export-ref-csv': () => exportReferralsCSV(),
   /* --- logins --- */
+  'digest-test': async (el) => {
+    if (MODE !== 'server') return toast('Test emails only work on the website, not in preview mode.', 'err');
+    el.disabled = true;
+    try {
+      const r = await api('digest_test', {});
+      openModal({ title: 'Test email sent to ' + r.to, narrow: false, body: `<p class="small muted">Check your inbox (and spam folder). This is what it says:</p><pre style="white-space:pre-wrap;font:14px/1.5 var(--font);background:var(--surface-2);padding:14px;border-radius:8px;margin:0">${esc(r.text)}</pre>` });
+    } catch (e) { toast(e.message, 'err'); }
+    finally { el.disabled = false; }
+  },
   'user-add': () => openModal({ title: 'Add a login', body: userFormHTML(null), submitLabel: 'Create login', onSubmit: async () => {
     const f = $('#user-form'); if (!f.reportValidity()) return false; const fd = new FormData(f);
     try {
-      await api('user_save', { username: fd.get('username'), name: fd.get('name'), email: fd.get('email'), role: fd.get('role'), team: !!fd.get('team'), password: fd.get('password') });
+      await api('user_save', { username: fd.get('username'), name: fd.get('name'), email: fd.get('email'), role: fd.get('role'), team: !!fd.get('team'), digest: !!fd.get('digest'), password: fd.get('password') });
       await refreshUsers();
       if (!db.settings.team.includes(String(fd.get('name')).trim()) && fd.get('team')) { db.settings.team.push(String(fd.get('name')).trim()); saveDB(); }
       toast(`Login created for ${fd.get('name')}`); rerender(); return true;
@@ -2280,7 +2307,7 @@ const actions = {
     openModal({ title: 'Edit login — ' + u.name, body: userFormHTML(u), submitLabel: 'Save changes', onSubmit: async () => {
       const f = $('#user-form'); if (!f.reportValidity()) return false; const fd = new FormData(f);
       try {
-        await api('user_save', { username: u.username, name: fd.get('name'), email: fd.get('email'), role: fd.get('role'), team: !!fd.get('team') });
+        await api('user_save', { username: u.username, name: fd.get('name'), email: fd.get('email'), role: fd.get('role'), team: !!fd.get('team'), digest: !!fd.get('digest') });
         await refreshUsers(); if (u.username === session.username) session.name = String(fd.get('name')).trim(), $('#user-name').textContent = session.name;
         toast('Saved'); rerender(); return true;
       } catch (e) { toast(e.message, 'err'); return false; }
@@ -2383,7 +2410,7 @@ document.addEventListener('submit', async (e) => {
     db.settings.departments = [...new Set(form.list.value.split('\n').map((s) => s.trim()).filter(Boolean))];
     saveDB(); toast('Department list saved');
   } else if (kind === 'myemail') {
-    try { const r = await api('profile', { email: form.email.value.trim() }); session.email = r.user.email; toast('Email saved'); }
+    try { const r = await api('profile', { email: form.email.value.trim(), digest: form.digest.checked }); session.email = r.user.email; session.digest = r.user.digest; toast('Saved'); }
     catch (e) { toast(e.message, 'err'); }
   } else if (kind === 'mypassword') {
     if (form.password.value !== form.confirm.value) { toast('The two new passwords do not match.', 'err'); form.confirm.focus(); return; }
