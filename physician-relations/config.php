@@ -18,6 +18,19 @@ return [
   'max_file_mb'  => 15,   // largest attachment allowed
   'app_url'      => 'https://docdockcrm.com',       // used in emails
   'mail_from'    => 'noreply@docdockcrm.com',       // sender address for emails
+
+  // HOW EMAIL IS SENT. Shared hosting silently drops mail from the built-in mailer,
+  // so the app signs in to a real mailbox and sends through it.
+  // 1. cPanel → Email Accounts → Create:  noreply@docdockcrm.com  (any strong password)
+  // 2. Put that password on the 'pass' line below and re-upload this file.
+  // 'host' is the server name shown in cPanel (top right / "Server Information").
+  'smtp' => [
+    'host'   => 'premium76-3.web-hosting.com',
+    'port'   => 465,
+    'secure' => 'ssl',                  // 465 = ssl, 587 = tls
+    'user'   => 'noreply@docdockcrm.com',
+    'pass'   => '',                     // <-- mailbox password goes here (leave empty to use the built-in mailer)
+  ],
   'timezone'     => 'America/Los_Angeles',          // for the morning email and dates in it
   'digest_key'   => 'change-this-to-a-long-random-phrase',   // lets digest.php be run from a URL (see README)
 

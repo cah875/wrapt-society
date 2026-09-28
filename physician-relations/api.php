@@ -191,6 +191,7 @@ try {
     case 'digest_test': {   // sends the signed-in user their own digest right now, and returns the text
       $me = requireUser();
       if ($method !== 'POST') fail('Bad request.');
+      global $MAIL_ERROR;
       seedUsersIfEmpty();
       $u = findUser($me['username']);
       if (empty($u['email'])) fail('Add an email address to your login first (Settings → My login).');
@@ -200,8 +201,9 @@ try {
       $text = $d ? $d['body'] : "Nothing is overdue, due this week, or at risk for you right now — on a real morning you would get no email.";
       $subject = $d ? $d['subject'] : '[Test] Physician Relations morning email — nothing to report';
       $sent = sendMail($u['email'], $subject, $text . "\n\n(This was a test send requested from Settings.)");
-      if (!$sent) fail('The server could not send the email. Check the mail settings with the host.');
-      out(['ok' => true, 'to' => $u['email'], 'text' => $text]);
+      if (!$sent) fail('The email could not be sent. ' . ($MAIL_ERROR ?: 'Check the mail settings in config.php.'));
+      $via = !empty($CFG['smtp']['pass']) ? 'the ' . $CFG['smtp']['user'] . ' mailbox' : "the server's built-in mailer (unreliable on shared hosting — see config.php)";
+      out(['ok' => true, 'to' => $u['email'], 'text' => $text, 'via' => $via]);
     }
 
     case 'forgot': {   // "Forgot your password?" — emails a one-time reset link

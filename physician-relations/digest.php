@@ -150,7 +150,7 @@ foreach (digestData()['users'] as $u) {
   if (!$d) { $skipped[] = "{$u['name']} (nothing to report)"; continue; }
   $addr = $to ?: $u['email'];
   if ($dry) { echo "---- To: {$u['name']} <$addr>\nSubject: {$d['subject']}\n\n{$d['body']}\n\n"; $sent[] = $u['name']; continue; }
-  if (sendMail($addr, $d['subject'], $d['body'])) $sent[] = $u['name']; else $skipped[] = "{$u['name']} (mail failed)";
+  if (sendMail($addr, $d['subject'], $d['body'])) $sent[] = $u['name']; else $skipped[] = "{$u['name']} (mail failed: $MAIL_ERROR)";
 }
 if ((int)date('N') === 1 || $force) {
   $w = buildWeeklySummary();

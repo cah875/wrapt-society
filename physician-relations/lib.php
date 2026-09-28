@@ -108,11 +108,60 @@ function appUrl(): string {
   return 'https://' . $host . $dir;
 }
 
+$MAIL_ERROR = '';
+/* Sends through the SMTP mailbox in config.php when one is set up (reliable on shared
+   hosting), otherwise through PHP's built-in mail(). $MAIL_ERROR explains a failure. */
 function sendMail(string $to, string $subject, string $body): bool {
-  global $CFG;
+  global $CFG, $MAIL_ERROR;
+  $MAIL_ERROR = '';
   $host = preg_replace('/^www\./', '', explode(':', $_SERVER['HTTP_HOST'] ?? 'localhost')[0]);
   $from = $CFG['mail_from'] ?? ('noreply@' . $host);
+  $smtp = $CFG['smtp'] ?? [];
+  if (!empty($smtp['host']) && !empty($smtp['user']) && !empty($smtp['pass'])) return smtpSend($smtp, $from, 'Physician Relations', $to, $subject, $body, $MAIL_ERROR);
   $headers = "From: Physician Relations <$from>\r\nReply-To: $from\r\nContent-Type: text/plain; charset=UTF-8\r\nX-Mailer: PHP\r\n";
-  return @mail($to, $subject, $body, $headers);
+  $ok = @mail($to, $subject, $body, $headers);
+  if (!$ok) $MAIL_ERROR = 'The server\'s built-in mailer refused the message. Set up the SMTP mailbox in config.php.';
+  return $ok;
+}
+function smtpSend(array $s, string $from, string $fromName, string $to, string $subject, string $body, string &$err): bool {
+  $host = $s['host']; $port = (int)($s['port'] ?? 465); $secure = strtolower((string)($s['secure'] ?? 'ssl'));
+  $ctx = stream_context_create(['ssl' => ['verify_peer' => true, 'verify_peer_name' => true, 'SNI_enabled' => true, 'peer_name' => $host]]);
+  $fp = @stream_socket_client(($secure === 'ssl' ? 'ssl://' : 'tcp://') . $host . ':' . $port, $errno, $errstr, 20, STREAM_CLIENT_CONNECT, $ctx);
+  if (!$fp) { $err = "Could not connect to mail server $host:$port — $errstr"; return false; }
+  stream_set_timeout($fp, 20);
+  $read = function () use ($fp) { $data = ''; while (($line = fgets($fp, 1024)) !== false) { $data .= $line; if (strlen($line) < 4 || $line[3] === ' ') break; } return $data; };
+  $cmd = function (?string $c, string $expect) use ($fp, $read, &$err) {
+    if ($c !== null) fwrite($fp, $c . "\r\n");
+    $r = $read();
+    if (substr($r, 0, 3) !== $expect) { $err = 'Mail server said: ' . trim($r ?: '(no reply)'); return false; }
+    return true;
+  };
+  $ehlo = 'EHLO ' . (preg_replace('/[^a-z0-9.-]/i', '', $s['ehlo'] ?? 'docdockcrm.com') ?: 'localhost');
+  if (!$cmd(null, '220') || !$cmd($ehlo, '250')) { fclose($fp); return false; }
+  if ($secure === 'tls') {
+    if (!$cmd('STARTTLS', '220')) { fclose($fp); return false; }
+    if (!@stream_socket_enable_crypto($fp, true, STREAM_CRYPTO_METHOD_TLS_CLIENT)) { $err = 'Could not start TLS with the mail server.'; fclose($fp); return false; }
+    if (!$cmd($ehlo, '250')) { fclose($fp); return false; }
+  }
+  if (!$cmd('AUTH LOGIN', '334') || !$cmd(base64_encode($s['user']), '334')) { fclose($fp); return false; }
+  if (!$cmd(base64_encode($s['pass']), '235')) { $err = 'The mail server rejected the mailbox username or password in config.php.'; fclose($fp); return false; }
+  if (!$cmd("MAIL FROM:<$from>", '250') || !$cmd("RCPT TO:<$to>", '250') || !$cmd('DATA', '354')) { fclose($fp); return false; }
+  $enc = fn($t) => '=?UTF-8?B?' . base64_encode($t) . '?=';
+  $msg = implode("\r\n", [
+    'Date: ' . date('r'),
+    'From: ' . $enc($fromName) . " <$from>",
+    "To: <$to>",
+    'Subject: ' . $enc($subject),
+    'Message-ID: <' . bin2hex(random_bytes(8)) . '@' . substr(strrchr($from, '@'), 1) . '>',
+    'MIME-Version: 1.0',
+    'Content-Type: text/plain; charset=UTF-8',
+    'Content-Transfer-Encoding: 8bit',
+    'X-Mailer: Physician Relations',
+    '',
+    preg_replace('/^\./m', '..', str_replace(["\r\n", "\r"], "\n", $body) === $body ? str_replace("\n", "\r\n", $body) : str_replace("\n", "\r\n", str_replace(["\r\n", "\r"], "\n", $body))),
+  ]);
+  if (!$cmd($msg . "\r\n.", '250')) { fclose($fp); return false; }
+  fwrite($fp, "QUIT\r\n"); fclose($fp);
+  return true;
 }
 

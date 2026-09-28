@@ -2289,7 +2289,7 @@ const actions = {
     el.disabled = true;
     try {
       const r = await api('digest_test', {});
-      openModal({ title: 'Test email sent to ' + r.to, narrow: false, body: `<p class="small muted">Check your inbox (and spam folder). This is what it says:</p><pre style="white-space:pre-wrap;font:14px/1.5 var(--font);background:var(--surface-2);padding:14px;border-radius:8px;margin:0">${esc(r.text)}</pre>` });
+      openModal({ title: 'Test email sent to ' + r.to, narrow: false, body: `<p class="small muted">Sent via ${esc(r.via || 'the server')}. Check your inbox (and spam folder). This is what it says:</p><pre style="white-space:pre-wrap;font:14px/1.5 var(--font);background:var(--surface-2);padding:14px;border-radius:8px;margin:0">${esc(r.text)}</pre>` });
     } catch (e) { toast(e.message, 'err'); }
     finally { el.disabled = false; }
   },
