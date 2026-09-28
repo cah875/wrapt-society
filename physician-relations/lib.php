@@ -6,7 +6,7 @@
 declare(strict_types=1);
 
 const APP_ID = 'nwsh-physician-relations';
-const COLLECTIONS = ['physicians', 'contacts', 'referrals', 'settings', 'users'];
+const COLLECTIONS = ['physicians', 'contacts', 'referrals', 'tasks', 'settings', 'users'];
 
 /* ---------- storage: SQLite, with a plain JSON file as fallback ---------- */
 interface Store {

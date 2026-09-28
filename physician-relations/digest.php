@@ -31,7 +31,7 @@ function digestData(): array {
   if ($d === null) {
     $all = store()->all();
     $settings = []; foreach ($all['settings'] as $s) if (($s['id'] ?? '') === 'main') $settings = $s;
-    $d = ['physicians' => $all['physicians'], 'contacts' => $all['contacts'], 'referrals' => $all['referrals'], 'users' => $all['users'], 'settings' => $settings, 'riskDays' => max(1, (int)($settings['riskDays'] ?? 14))];
+    $d = ['physicians' => $all['physicians'], 'contacts' => $all['contacts'], 'referrals' => $all['referrals'], 'tasks' => $all['tasks'] ?? [], 'users' => $all['users'], 'settings' => $settings, 'riskDays' => max(1, (int)($settings['riskDays'] ?? 14))];
   }
   return $d;
 }
@@ -72,6 +72,14 @@ function buildDigestFor(array $user, bool $isTest = false): ?array {
     if ($c['fuDate'] < $today) { $n = dDays($c['fuDate'], $today); $overdue[] = [$c['fuDate'], "$line · was due " . dFmt($c['fuDate']) . " ($n day" . ($n === 1 ? '' : 's') . " ago)\n    $url/#/physician/{$c['physicianId']}"]; }
     elseif ($c['fuDate'] <= $weekEnd) $soon[] = [$c['fuDate'], "$line · " . ($c['fuDate'] === $today ? 'today' : dFmt($c['fuDate'])) . "\n    $url/#/physician/{$c['physicianId']}"];
   }
+  $tOver = []; $tSoon = [];
+  foreach ($d['tasks'] as $t) {
+    if (!empty($t['done']) || ($t['assignedTo'] ?? '') !== $name || empty($t['dueDate'])) continue;
+    $line = "• {$t['title']} · from {$t['assignedBy']}";
+    $lnk = !empty($t['physicianId']) ? "$url/#/physician/{$t['physicianId']}" : (!empty($t['referralId']) ? "$url/#/referral/{$t['referralId']}" : "$url/#/followups");
+    if ($t['dueDate'] < $today) { $n = dDays($t['dueDate'], $today); $tOver[] = [$t['dueDate'], "$line · was due " . dFmt($t['dueDate']) . " ($n day" . ($n === 1 ? '' : 's') . " ago)\n    $lnk"]; }
+    elseif ($t['dueDate'] <= $weekEnd) $tSoon[] = [$t['dueDate'], "$line · " . ($t['dueDate'] === $today ? 'today' : dFmt($t['dueDate'])) . "\n    $lnk"];
+  }
   $risk = [];
   foreach ($d['referrals'] as $r) {
     $why = refRisk($r); if (!$why) continue;
@@ -79,21 +87,24 @@ function buildDigestFor(array $user, bool $isTest = false): ?array {
     if ($owner && $owner !== $name) continue;              // assigned to someone else
     $risk[] = "• " . refLine($r) . " · $why" . ($owner ? '' : ' · (unassigned)') . "\n    $url/#/referral/{$r['id']}";
   }
-  if (!$overdue && !$soon && !$risk) return null;
+  if (!$overdue && !$soon && !$risk && !$tOver && !$tSoon) return null;
   usort($overdue, fn($a, $b) => strcmp($a[0], $b[0])); usort($soon, fn($a, $b) => strcmp($a[0], $b[0]));
+  usort($tOver, fn($a, $b) => strcmp($a[0], $b[0])); usort($tSoon, fn($a, $b) => strcmp($a[0], $b[0]));
   $first = explode(' ', $name)[0];
   $lines = ["Good morning, $first — " . date('l, F j'), ''];
-  if ($overdue || $risk) {
+  if ($overdue || $risk || $tOver) {
     $lines[] = 'NEEDS ATTENTION TODAY';
+    foreach ($tOver as $o) $lines[] = 'Overdue task ' . $o[1];
     foreach ($overdue as $o) $lines[] = 'Overdue follow-up ' . $o[1];
     foreach ($risk as $x) $lines[] = 'Referral at risk ' . $x;
     $lines[] = '';
   }
-  if ($soon) { $lines[] = 'DUE THIS WEEK'; foreach ($soon as $s) $lines[] = 'Follow-up ' . $s[1]; $lines[] = ''; }
+  if ($soon || $tSoon) { $lines[] = 'DUE THIS WEEK'; foreach ($tSoon as $s) $lines[] = 'Task ' . $s[1]; foreach ($soon as $s) $lines[] = 'Follow-up ' . $s[1]; $lines[] = ''; }
   $lines[] = "Open Physician Relations: $url";
   $lines[] = '';
   $lines[] = 'You get this because these items are assigned to you. Turn it off in Settings → My login.';
-  $n = count($overdue) + count($risk);
+  $n = count($overdue) + count($risk) + count($tOver);
+  $soon = array_merge($tSoon, $soon);
   $subject = ($isTest ? '[Test] ' : '') . ($n ? ($n === 1 ? '1 item needs' : "$n items need") . ' attention today' : count($soon) . ' follow-up' . (count($soon) === 1 ? '' : 's') . ' due this week') . ' — Physician Relations';
   return ['subject' => $subject, 'body' => implode("\n", $lines)];
 }

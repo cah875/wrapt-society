@@ -182,6 +182,33 @@ try {
       out(['ok' => true, 'user' => pub($rec)]);
     }
 
+    case 'task_notify': {   // emails the assignee (new task) or the assigner (task done)
+      $me = requireUser();
+      if ($method !== 'POST') fail('Bad request.');
+      global $MAIL_ERROR;
+      seedUsersIfEmpty();
+      $event = ($body['event'] ?? '') === 'done' ? 'done' : 'assigned';
+      $task = null; foreach (store()->all()['tasks'] as $t) if (($t['id'] ?? '') === ($body['taskId'] ?? '')) $task = $t;
+      if (!$task) fail('That task could not be found (it may not have finished saving).');
+      $toName = $event === 'done' ? ($task['assignedBy'] ?? '') : ($task['assignedTo'] ?? '');
+      $target = null; foreach (allUsers() as $u) if ($u['name'] === $toName) $target = $u;
+      if (!$target || empty($target['email'])) out(['ok' => true, 'emailed' => null, 'reason' => "$toName has no email on file"]);
+      if (($target['digest'] ?? true) === false) out(['ok' => true, 'emailed' => null, 'reason' => "$toName has turned off email"]);
+      $url = appUrl(); $first = explode(' ', $target['name'])[0]; $due = !empty($task['dueDate']) ? date('D, M j', strtotime($task['dueDate'] . ' 00:00:00')) : 'no due date';
+      $link = $url . '/#/followups';
+      if (!empty($task['physicianId'])) $link = $url . '/#/physician/' . $task['physicianId'];
+      elseif (!empty($task['referralId'])) $link = $url . '/#/referral/' . $task['referralId'];
+      if ($event === 'assigned') {
+        $subject = $me['name'] . ' assigned you a task: ' . $task['title'];
+        $text = "Hello $first,\n\n{$me['name']} assigned you a task in Physician Relations:\n\n  {$task['title']}\n  Due: $due" . (!empty($task['details']) ? "\n\n  {$task['details']}" : '') . "\n\nOpen it: $link\n\nMark it done in the app when it is finished and {$me['name']} will be told automatically.";
+      } else {
+        $subject = $me['name'] . ' completed: ' . $task['title'];
+        $text = "Hello $first,\n\n{$me['name']} marked this task as done:\n\n  {$task['title']}" . (!empty($task['details']) ? "\n  {$task['details']}" : '') . "\n\nSee it: $link";
+      }
+      if (!sendMail($target['email'], $subject, $text)) fail('The email could not be sent. ' . $MAIL_ERROR);
+      out(['ok' => true, 'emailed' => $target['name']]);
+    }
+
     case 'digest_status': {
       requireAdmin();
       $row = null; foreach (store()->all()['settings'] as $s) if (($s['id'] ?? '') === 'digest') $row = $s;

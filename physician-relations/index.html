@@ -372,7 +372,7 @@
         <a href="#/home" data-nav="home"><svg class="i"><use href="#i-home"/></svg>Home</a>
         <a href="#/physicians" data-nav="physicians"><svg class="i"><use href="#i-people"/></svg>Physicians</a>
         <a href="#/referrals" data-nav="referrals"><svg class="i"><use href="#i-route"/></svg>Referrals<span class="count" id="nav-ref-count" hidden></span></a>
-        <a href="#/followups" data-nav="followups"><svg class="i"><use href="#i-flag"/></svg>Follow-Ups<span class="count" id="nav-fu-count" hidden></span></a>
+        <a href="#/followups" data-nav="followups"><svg class="i"><use href="#i-flag"/></svg>To-Do<span class="count" id="nav-fu-count" hidden></span></a>
         <a href="#/activity" data-nav="activity"><svg class="i"><use href="#i-list"/></svg>Activity</a>
       </nav>
       <div class="userbox">
@@ -589,6 +589,7 @@ function emptyDB() {
     physicians: [],
     contacts: [],
     referrals: [],
+    tasks: [],
     meta: { createdAt: nowISO(), updatedAt: nowISO() },
   };
 }
@@ -599,6 +600,7 @@ function normalizeDB(d) {
   d.physicians = d.physicians || [];
   d.contacts = d.contacts || [];
   d.referrals = d.referrals || [];
+  d.tasks = d.tasks || [];
   d.meta = d.meta || base.meta;
   return d;
 }
@@ -617,7 +619,7 @@ function dbFromServer(res) {
   const settingsRow = (d.settings || []).find((s) => s.id === 'main') || {};
   const out = normalizeDB({
     settings: Object.assign({ team: (res.defaults && res.defaults.team) || [] }, settingsRow),
-    physicians: d.physicians || [], contacts: d.contacts || [], referrals: d.referrals || [],
+    physicians: d.physicians || [], contacts: d.contacts || [], referrals: d.referrals || [], tasks: d.tasks || [],
     meta: { updatedAt: settingsRow.updatedAt || nowISO() },
   });
   delete out.settings.id;
@@ -627,7 +629,7 @@ function dbFromServer(res) {
 }
 function takeSnapshot(d) {
   const s = {};
-  ['physicians', 'contacts', 'referrals'].forEach((c) => d[c].forEach((r) => { s[c + '/' + r.id] = JSON.stringify(r); }));
+  ['physicians', 'contacts', 'referrals', 'tasks'].forEach((c) => d[c].forEach((r) => { s[c + '/' + r.id] = JSON.stringify(r); }));
   s['settings/main'] = JSON.stringify({ id: 'main', ...d.settings });
   return s;
 }
@@ -889,6 +891,61 @@ function yearsInData() {
 }
 function methodLabel(m) { return `${ico(METHOD_ICON[m] || 'i-info', 'sm')} ${esc(m)}`; }
 
+/* ---------- Tasks ---------- */
+const getTask = (id) => db.tasks.find((t) => t.id === id);
+function taskState(t) {
+  if (t.done) return 'done';
+  if (!t.dueDate) return 'later';
+  const d = daysBetween(todayISO(), t.dueDate);
+  return d < 0 ? 'over' : d <= 7 ? 'soon' : 'later';
+}
+function taskBadge(t) {
+  const st = taskState(t);
+  if (st === 'done') return '<span class="badge b-done">Done</span>';
+  if (!t.dueDate) return '<span class="badge b-a">No due date</span>';
+  const d = daysBetween(todayISO(), t.dueDate);
+  return `<span class="badge b-${st}">${d < 0 ? `${-d} day${-d === 1 ? '' : 's'} overdue` : d === 0 ? 'Due today' : d === 1 ? 'Due tomorrow' : `Due in ${d} days`}</span>`;
+}
+function taskLink(t) {
+  if (t.physicianId) { const p = getPhys(t.physicianId); if (p) return `<a href="#/physician/${p.id}">${esc(physName(p))}</a>`; }
+  if (t.referralId) { const r = getRef(t.referralId); if (r) return `<a href="#/referral/${r.id}">Referral · patient ${esc(r.mrn)}</a>`; }
+  return '';
+}
+function taskFormHTML(t, ctx) {
+  t = t || {}; ctx = ctx || {};
+  const team = db.settings.team.slice(); const cur = t.assignedTo || ''; if (cur && !team.includes(cur)) team.push(cur);
+  const linked = t.physicianId || ctx.physicianId ? getPhys(t.physicianId || ctx.physicianId) : null;
+  const linkedRef = t.referralId || ctx.referralId ? getRef(t.referralId || ctx.referralId) : null;
+  return `<form class="form" id="task-form" data-pid="${esc(t.physicianId || ctx.physicianId || '')}" data-rid="${esc(t.referralId || ctx.referralId || '')}">
+    <label><span class="req">What needs to be done?</span><input name="title" required value="${esc(t.title || '')}" placeholder="e.g. Call Dr. Glassman's office about block time"></label>
+    <div class="row2">
+      <label><span class="req">Assign to</span><select name="assignedTo" required><option value="">Choose…</option>${team.map((n) => `<option ${n === cur ? 'selected' : ''}>${esc(n)}</option>`).join('')}</select></label>
+      <div class="field"><label for="task-due"><span class="field-label">Due date <span class="help">(optional)</span></span></label><input type="date" id="task-due" name="dueDate" value="${esc(t.dueDate || '')}">
+        <div class="quick">${[[1, 'Tomorrow'], [3, 'In 3 days'], [7, 'In 1 week'], [14, 'In 2 weeks']].map(([d, l]) => `<button type="button" class="btn" data-act="task-quick" data-days="${d}">${l}</button>`).join('')}</div></div>
+    </div>
+    <label><span>Details <span class="help">(optional)</span></span><textarea name="details" rows="3">${esc(t.details || '')}</textarea></label>
+    ${linked ? `<p class="help" style="margin:0">Linked to <b>${esc(physName(linked))}</b>.</p>` : linkedRef ? `<p class="help" style="margin:0">Linked to <b>referral for patient ${esc(linkedRef.mrn)}</b>.</p>` : ''}
+    ${MODE === 'server' ? '<p class="help" style="margin:0">The person you assign it to gets an email right away.</p>' : ''}
+  </form>`;
+}
+function taskRowHTML(t) {
+  const canEdit = isAdmin() || t.assignedBy === session.name || t.assignedTo === session.name;
+  return `<li>
+    <div class="grow"><b>${esc(t.title)}</b>${t.details ? `<div class="small" style="white-space:pre-wrap">${esc(t.details)}</div>` : ''}
+      <div class="small muted">For <b>${esc(t.assignedTo)}</b> · from ${esc(t.assignedBy)} · ${t.dueDate ? 'due ' + fmtDate(t.dueDate) : 'no due date'}${t.done ? ` · done ${fmtDate(t.doneAt)} by ${esc(t.doneBy || '')}` : ''}${taskLink(t) ? ' · ' + taskLink(t) : ''}</div></div>
+    <div style="display:grid;gap:6px;justify-items:end">${taskBadge(t)}
+      <div class="no-print" style="display:flex;gap:6px;flex-wrap:wrap;justify-content:flex-end">
+        ${t.done ? `<button class="btn sm" data-act="task-reopen" data-id="${t.id}">Reopen</button>` : `<button class="btn sm primary" data-act="task-done" data-id="${t.id}">${ico('i-check', 'sm')}Done</button>`}
+        ${canEdit ? `<button class="btn sm" data-act="task-edit" data-id="${t.id}">Edit</button><button class="btn sm danger" data-act="task-delete" data-id="${t.id}">Delete</button>` : ''}
+      </div></div>
+  </li>`;
+}
+async function notifyTask(t, event) {
+  if (MODE !== 'server') return;
+  try { const r = await api('task_notify', { taskId: t.id, event }); if (r.emailed) toast(`${r.emailed} was emailed`); }
+  catch (e) { toast('Saved, but the email could not be sent: ' + e.message, 'err'); }
+}
+
 /* ---------- Referrals & orders ---------- */
 const getRef = (id) => db.referrals.find((r) => r.id === id);
 function legStage(l) { return l.lost ? 'lost' : l.resultedDate ? 'resulted' : l.completedDate ? 'completed' : l.scheduledDate ? 'scheduled' : 'sent'; }
@@ -989,7 +1046,7 @@ function route() {
 }
 function rerender() { const y = window.scrollY; route(); window.scrollTo(0, y); }
 function updateNavCount() {
-  const n = openFollowups().filter((c) => fuState(c) === 'over').length;
+  const n = openFollowups().filter((c) => fuState(c) === 'over').length + db.tasks.filter((t) => taskState(t) === 'over').length;
   const el = $('#nav-fu-count');
   el.hidden = !n; el.textContent = n;
   const m = db.referrals.filter((r) => refStatus(r) === 'risk').length;
@@ -1044,6 +1101,7 @@ function viewHome() {
   const maxPipe = Math.max(1, ...pipe.map((x) => x.n));
   const attention = [...overdue, ...soon].sort((a, b) => a.fuDate.localeCompare(b.fuDate)).slice(0, 8);
   const riskRefs = db.referrals.filter((r) => refStatus(r) === 'risk').sort((a, b) => refWaiting(b) - refWaiting(a)).slice(0, 5);
+  const myTasks = db.tasks.filter((t) => !t.done && t.assignedTo === session.name && ['over', 'soon'].includes(taskState(t))).sort((a, b) => a.dueDate.localeCompare(b.dueDate)).slice(0, 6);
   const activeRefs = db.referrals.filter((r) => ['active', 'risk'].includes(refStatus(r))).length;
   const recent = db.contacts.slice().sort(byContactDesc).slice(0, 8);
 
@@ -1053,6 +1111,8 @@ function viewHome() {
         <h2>Needs attention</h2>
         <span class="hint">${riskRefs.length ? `<b style="color:var(--red)">${riskRefs.length} referral${riskRefs.length === 1 ? '' : 's'} at risk</b> · ` : ''}${overdue.length ? `<b style="color:var(--red)">${overdue.length} overdue</b> · ` : ''}${soon.length} due this week · <a href="#/followups">Follow-ups</a> · <a href="#/referrals">Referrals</a></span>
       </div>
+      ${myTasks.length ? `<ul class="list">${myTasks.map((t) => `<li><div class="grow"><b>Task for you:</b> ${esc(t.title)}<div class="small muted">From ${esc(t.assignedBy)} · due ${fmtDate(t.dueDate)}${taskLink(t) ? ' · ' + taskLink(t) : ''}</div></div>
+            <div style="text-align:right;display:grid;gap:6px;justify-items:end">${taskBadge(t)}<button class="btn sm primary" data-act="task-done" data-id="${t.id}">${ico('i-check', 'sm')}Done</button></div></li>`).join('')}</ul>` : ''}
       ${riskRefs.length ? `<ul class="list">${riskRefs.map((r) => { const l = currentLeg(r); return `<li><div class="grow"><a href="#/referral/${r.id}"><b>Referral · patient ${esc(r.mrn)}</b></a>
             <div class="small muted">${l ? `${esc(l.from.label)} to ${esc(l.to.label)} · ${esc(l.service || '')}` : ''}</div>
             <div class="small" style="color:var(--red)">${esc(refRiskReason(r))}</div></div>
@@ -1063,7 +1123,7 @@ function viewHome() {
             <div class="small muted">${esc(c.ask || c.comm || '').slice(0, 120)}</div>
             <div class="small muted">Assigned to ${esc(c.who)} · Follow up by ${fmtDate(c.fuDate)}</div></div>
             <div style="text-align:right;display:grid;gap:6px;justify-items:end">${fuBadge(c)}<a class="btn sm" href="#/physician/${c.physicianId}">Open</a></div></li>`;
-      }).join('')}</ul>` : (riskRefs.length ? '' : `<p class="empty">Nothing is overdue or due this week, and no referrals are at risk. Nice work.</p>`)}
+      }).join('')}</ul>` : (riskRefs.length || myTasks.length ? '' : `<p class="empty">Nothing is overdue or due this week, and no referrals are at risk. Nice work.</p>`)}
     </section>
 
     <div class="kpis" style="margin-top:18px">
@@ -1222,6 +1282,7 @@ function viewPhysician(p) {
         </div>
         <div>${stageBadge(p)}</div>
         <div class="actions no-print" style="display:flex;gap:10px;flex-wrap:wrap">
+          <button class="btn" data-act="task-add" data-pid="${p.id}">${ico('i-flag')}Assign a task</button>
           <button class="btn" data-act="edit-physician" data-id="${p.id}">${ico('i-edit')}Edit details</button>
           <button class="btn" data-act="print">${ico('i-print')}Print</button>
           ${isAdmin() ? `<button class="btn danger" data-act="delete-physician" data-id="${p.id}">${ico('i-trash')}Delete</button>` : ''}
@@ -1302,6 +1363,7 @@ function viewPhysician(p) {
       </div>
 
       <div>
+        ${(() => { const ts = db.tasks.filter((t) => t.physicianId === p.id && !t.done); return ts.length ? `<section class="card"><div class="card-head"><h2>Open tasks</h2><button class="btn sm no-print" data-act="task-add" data-pid="${p.id}">${ico('i-plus', 'sm')}Assign a task</button></div><ul class="list">${ts.map(taskRowHTML).join('')}</ul></section>` : ''; })()}
         <section class="card no-print">
           <div class="card-head"><h2>Log a contact</h2><span class="hint">Record every call, email, visit or text</span></div>
           ${contactFormHTML(p.id, null)}
@@ -1407,6 +1469,11 @@ function contactItemHTML(c) {
 /* ===================== View: Follow-ups ===================== */
 function viewFollowups() {
   const f = ui.fu;
+  const switcher = `<div class="toggle" role="group" aria-label="What to show" style="margin-right:10px">
+      <button class="${f.view !== 'tasks' ? 'on' : ''}" data-act="fu-view" data-view="fu">Follow-ups</button>
+      <button class="${f.view === 'tasks' ? 'on' : ''}" data-act="fu-view" data-view="tasks">Tasks${(() => { const n = db.tasks.filter((t) => taskState(t) === 'over').length; return n ? ` (${n} overdue)` : ''; })()}</button>
+    </div>`;
+  if (f.view === 'tasks') return viewTasks(switcher);
   const all = db.contacts.filter((c) => c.fuDate).filter((c) => !f.mine || c.who === session.name);
   const tabs = [
     ['over', 'Overdue', (c) => fuState(c) === 'over'],
@@ -1418,8 +1485,9 @@ function viewFollowups() {
   const rows = all.filter(tab[2]).sort((a, b) => f.tab === 'done' ? (b.fuDoneDate || '').localeCompare(a.fuDoneDate || '') : a.fuDate.localeCompare(b.fuDate));
   return `
     <div class="page-head">
-      <div><h1>Follow-Ups</h1><p class="lead">Things we said we would do next.</p></div>
+      <div><h1>To-Do</h1><p class="lead">Follow-ups we promised, and tasks assigned between team members.</p></div>
       <div class="actions">
+        ${switcher}
         <div class="toggle" role="group" aria-label="Whose follow-ups">
           <button class="${!f.mine ? 'on' : ''}" data-act="fu-mine" data-mine="0">Everyone</button>
           <button class="${f.mine ? 'on' : ''}" data-act="fu-mine" data-mine="1">Just mine</button>
@@ -1442,6 +1510,29 @@ function viewFollowups() {
               : `<button class="btn sm primary" data-act="fu-log" data-id="${c.id}">Log a contact</button> <button class="btn sm" data-act="fu-done" data-id="${c.id}">${ico('i-check', 'sm')}Done</button>`}</td>
           </tr>`;
         }).join('')}</tbody></table></div>` : `<p class="empty">${f.tab === 'over' ? 'Nothing is overdue.' : f.tab === 'soon' ? 'Nothing is due this week.' : f.tab === 'later' ? 'No upcoming follow-ups.' : 'No completed follow-ups yet.'}</p>`}
+    </section>`;
+}
+
+function viewTasks(switcher) {
+  const f = ui.fu;
+  const all = db.tasks.filter((t) => !f.mine || t.assignedTo === session.name || t.assignedBy === session.name);
+  const tabs = [
+    ['open', 'Open', (t) => !t.done],
+    ['over', 'Overdue', (t) => taskState(t) === 'over'],
+    ['mine', 'Assigned to me', (t) => !t.done && t.assignedTo === session.name],
+    ['byme', 'Assigned by me', (t) => !t.done && t.assignedBy === session.name],
+    ['done', 'Completed', (t) => t.done],
+  ];
+  const tab = tabs.find((x) => x[0] === f.ttab) || tabs[0];
+  const rows = all.filter(tab[2]).sort((a, b) => f.ttab === 'done' ? (b.doneAt || '').localeCompare(a.doneAt || '') : (a.dueDate || '9999').localeCompare(b.dueDate || '9999') || (a.createdAt || '').localeCompare(b.createdAt || ''));
+  return `
+    <div class="page-head">
+      <div><h1>To-Do</h1><p class="lead">Follow-ups we promised, and tasks assigned between team members.</p></div>
+      <div class="actions">${switcher}<button class="btn primary" data-act="task-add">${ico('i-plus')}Assign a task</button></div>
+    </div>
+    <section class="card">
+      <div class="tabs">${tabs.map(([k, l, fn]) => `<button class="${(f.ttab || 'open') === k ? 'on' : ''}" data-act="task-tab" data-tab="${k}">${l} (${all.filter(fn).length})</button>`).join('')}</div>
+      ${rows.length ? `<ul class="list">${rows.map(taskRowHTML).join('')}</ul>` : `<p class="empty">${db.tasks.length ? 'Nothing here.' : 'No tasks yet. Click <b>Assign a task</b> to give someone something to do — they get an email right away.'}</p>`}
     </section>`;
 }
 
@@ -1586,6 +1677,7 @@ function viewReferral(r) {
         </div>
         <div>${refBadge(r)}</div>
         <div class="actions no-print" style="display:flex;gap:10px;flex-wrap:wrap">
+          <button class="btn" data-act="task-add" data-rid="${r.id}">${ico('i-flag')}Assign a task</button>
           <button class="btn" data-act="edit-referral" data-id="${r.id}">${ico('i-edit')}Edit patient</button>
           ${active ? `<button class="btn" data-act="close-referral" data-id="${r.id}">${ico('i-check')}Close — care complete</button>` : `<button class="btn" data-act="reopen-referral" data-id="${r.id}">Reopen</button>`}
           ${isAdmin() ? `<button class="btn danger" data-act="delete-referral" data-id="${r.id}">${ico('i-trash')}Delete</button>` : ''}
@@ -1596,6 +1688,7 @@ function viewReferral(r) {
       ${r.notes ? `<p style="margin:14px 0 0;white-space:pre-wrap">${esc(r.notes)}</p>` : ''}
     </section>
 
+    ${(() => { const ts = db.tasks.filter((t) => t.referralId === r.id && !t.done); return ts.length ? `<section class="card"><div class="card-head"><h2>Open tasks</h2></div><ul class="list">${ts.map(taskRowHTML).join('')}</ul></section>` : ''; })()}
     ${r.legs.map((l, i) => legCardHTML(r, l, i, active)).join('')}
 
     ${active ? `<div class="no-print" style="margin-top:18px;display:flex;gap:10px;flex-wrap:wrap">
@@ -2008,7 +2101,7 @@ async function importBackup(file) {
     const d = normalizeDB(data.db);
     if (MODE === 'server') {
       try {
-        const r = await api('replace', { data: { physicians: d.physicians, contacts: d.contacts, referrals: d.referrals, settings: [{ id: 'main', ...d.settings }] } });
+        const r = await api('replace', { data: { physicians: d.physicians, contacts: d.contacts, referrals: d.referrals, tasks: d.tasks, settings: [{ id: 'main', ...d.settings }] } });
         serverVersion = r.version; db = d; snapshot = takeSnapshot(db);
       } catch (e) { toast('The backup could not be restored: ' + e.message, 'err'); return; }
     } else {
@@ -2156,6 +2249,10 @@ function loadSample() {
     { id: uid(), mrn: '131455', initials: 'R.L.', notes: '', status: 'active', createdAt: nowISO(), createdBy: me,
       legs: [L(surg, ct, 'CT cervical spine', -21, -19, null, null)] },
   );
+  db.tasks.push(
+    { id: uid(), title: 'Drop off welcome packet at Summit Orthopedic', details: 'Front desk closes at 4:30.', assignedTo: other, assignedBy: me, dueDate: addDays(t, -1), physicianId: P[0].id, referralId: '', done: false, createdAt: nowISO() },
+    { id: uid(), title: 'Ask Dr. Chen\'s office which days work for a site tour', details: '', assignedTo: me, assignedBy: other, dueDate: addDays(t, 3), physicianId: P[1].id, referralId: '', done: false, createdAt: nowISO() },
+  );
   saveDB(); toast('Sample records loaded'); rerender();
 }
 
@@ -2223,6 +2320,26 @@ const actions = {
     });
   },
   'fu-tab': (el) => { ui.fu.tab = el.dataset.tab; rerender(); },
+  'fu-view': (el) => { ui.fu.view = el.dataset.view; rerender(); },
+  'task-tab': (el) => { ui.fu.ttab = el.dataset.tab; rerender(); },
+  'task-quick': (el) => { const inp = el.closest('form').querySelector('[name=dueDate]'); inp.value = addDays(todayISO(), +el.dataset.days); },
+  'task-add': (el) => openModal({ title: 'Assign a task', body: taskFormHTML(null, { physicianId: el.dataset.pid, referralId: el.dataset.rid }), submitLabel: 'Assign task', onSubmit: async () => {
+    const f = $('#task-form'); if (!f.reportValidity()) return false; const fd = new FormData(f);
+    const t = { id: uid(), title: String(fd.get('title')).trim(), details: String(fd.get('details') || '').trim(), assignedTo: fd.get('assignedTo'), assignedBy: session.name, dueDate: fd.get('dueDate') || '', physicianId: f.dataset.pid || '', referralId: f.dataset.rid || '', done: false, createdAt: nowISO() };
+    db.tasks.push(t); saveDB(); toast(`Task assigned to ${t.assignedTo}`); rerender();
+    if (t.assignedTo !== session.name) { await pushOps(); notifyTask(t, 'assigned'); }
+    return true;
+  } }),
+  'task-edit': (el) => { const t = getTask(el.dataset.id); openModal({ title: 'Edit task', body: taskFormHTML(t), submitLabel: 'Save changes', onSubmit: async () => {
+    const f = $('#task-form'); if (!f.reportValidity()) return false; const fd = new FormData(f); const before = t.assignedTo;
+    Object.assign(t, { title: String(fd.get('title')).trim(), details: String(fd.get('details') || '').trim(), assignedTo: fd.get('assignedTo'), dueDate: fd.get('dueDate') || '', updatedAt: nowISO(), updatedBy: session.name });
+    saveDB(); toast('Saved'); rerender();
+    if (t.assignedTo !== before && t.assignedTo !== session.name) { await pushOps(); notifyTask(t, 'assigned'); }
+    return true;
+  } }); },
+  'task-done': async (el) => { const t = getTask(el.dataset.id); t.done = true; t.doneAt = todayISO(); t.doneBy = session.name; saveDB(); toast('Task marked done'); rerender(); if (t.assignedBy !== session.name) { await pushOps(); notifyTask(t, 'done'); } },
+  'task-reopen': (el) => { const t = getTask(el.dataset.id); t.done = false; t.doneAt = ''; t.doneBy = ''; saveDB(); toast('Task reopened'); rerender(); },
+  'task-delete': (el) => { const t = getTask(el.dataset.id); confirmBox(`Delete the task "<b>${esc(t.title)}</b>"?`, () => { db.tasks = db.tasks.filter((x) => x.id !== t.id); saveDB(); toast('Task deleted'); rerender(); }, 'Delete', true); },
   /* --- referrals --- */
   'open-ref': (el, e) => { if (!e.target.closest('a, button, input')) location.hash = '#/referral/' + el.dataset.id; },
   'ref-tab': (el) => { ui.ref.tab = el.dataset.tab; rerender(); },
