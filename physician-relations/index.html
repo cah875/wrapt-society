@@ -1672,30 +1672,83 @@ function viewSettings() {
           <button class="btn" data-act="export-contacts-csv">Activity spreadsheet</button>
         </div>
         ${isAdmin() ? `<div style="margin-top:18px;padding-top:14px;border-top:1px solid var(--border)">
-          <button class="btn danger" data-act="clear-all">${ico('i-trash')}Erase all data in this browser…</button></div>` : ''}
+          <button class="btn danger" data-act="clear-all">${ico('i-trash')}Erase all ${MODE === 'server' ? 'records' : 'data in this browser'}…</button>
+          ${MODE === 'server' ? '<span class="help" style="margin-left:10px">Removes physicians, contacts, referrals and attachments. Logins are kept.</span>' : ''}</div>` : ''}
       </section>
 
-      ${isAdmin() ? `<section class="card">
-        <h2>Logins</h2>
-        <table><thead><tr><th>Username</th><th>Name</th><th>Role</th></tr></thead>
-          <tbody>${(session.users || CONFIG.users).map((u) => `<tr><td class="mono">${esc(u.username)}</td><td>${esc(u.name)}</td><td>${esc(u.role)}</td></tr>`).join('')}</tbody></table>
-        <h3 style="margin-top:18px">Password hash generator</h3>
-        <p class="small muted" style="margin-top:0">${MODE === 'server' ? 'Logins are defined in <code>config.php</code> on the web server.' : 'In preview mode, logins are defined in the <code>CONFIG</code> block at the top of index.html.'} To change a password, generate a hash here, paste it into that user's <code>hash</code> line, and re-upload the file.</p>
-        <form class="form" data-form="hash" autocomplete="off">
-          <div class="row2">
-            <label><span>Username</span><select name="username">${(session.users || CONFIG.users).map((u) => `<option>${esc(u.username)}</option>`).join('')}</select></label>
-            <label><span>New password</span><input name="password" type="text" minlength="8" required autocomplete="new-password"></label>
-          </div>
-          <div><button class="btn" type="submit">Generate hash</button></div>
-          <div id="hash-out" class="hash-out mono" hidden></div>
-        </form>
-      </section>` : `<section class="card">
-        <h2>Your login</h2>
-        <p>You are signed in as <b>${esc(session.name)}</b> (username <code>${esc(session.username)}</code>).</p>
-        <p class="small muted">To change your password, ask the administrator.</p>
-      </section>`}
+      ${loginsCardHTML()}
     </div>`;
 }
+
+/* ===================== Logins (Settings) ===================== */
+function loginsCardHTML() {
+  if (MODE !== 'server') {
+    return `<section class="card">
+      <h2>Logins <span class="tag">preview mode</span></h2>
+      <p class="small muted">In preview mode the logins are the ones written in the <code>CONFIG</code> block at the top of index.html. On the website, the administrator manages logins here in Settings.</p>
+      ${isAdmin() ? `<h3 style="margin-top:14px">Password hash generator</h3>
+      <form class="form" data-form="hash" autocomplete="off">
+        <div class="row2">
+          <label><span>Username</span><select name="username">${CONFIG.users.map((u) => `<option>${esc(u.username)}</option>`).join('')}</select></label>
+          <label><span>New password</span><input name="password" type="text" minlength="8" required autocomplete="new-password"></label>
+        </div>
+        <div><button class="btn" type="submit">Generate hash</button></div>
+        <div id="hash-out" class="hash-out mono" hidden></div>
+      </form>` : ''}
+    </section>`;
+  }
+  const mine = `<section class="card">
+      <h2>Change my password</h2>
+      <p class="small muted">You are signed in as <b>${esc(session.name)}</b> (username <code>${esc(session.username)}</code>).</p>
+      <form class="form" data-form="mypassword" autocomplete="off">
+        <label><span class="req">Current password</span><input name="current" type="password" required autocomplete="current-password"></label>
+        <div class="row2">
+          <label><span class="req">New password</span><input name="password" type="password" minlength="8" required autocomplete="new-password"></label>
+          <label><span class="req">Type it again</span><input name="confirm" type="password" minlength="8" required autocomplete="new-password"></label>
+        </div>
+        <div><button class="btn" type="submit">Change password</button></div>
+      </form>
+    </section>`;
+  if (!isAdmin()) return mine;
+  const users = session.users || [];
+  return `<section class="card">
+      <div class="card-head"><h2>Logins</h2><button class="btn primary sm" data-act="user-add">${ico('i-plus', 'sm')}Add a login</button></div>
+      <div class="table-wrap"><table>
+        <thead><tr><th>Name</th><th>Username</th><th>Role</th><th>In contact list</th><th></th></tr></thead>
+        <tbody>${users.map((u) => `<tr>
+          <td><b>${esc(u.name)}</b>${u.username === session.username ? ' <span class="tag">you</span>' : ''}</td>
+          <td class="mono">${esc(u.username)}</td>
+          <td>${u.role === 'admin' ? '<span class="badge b-c">Administrator</span>' : 'User'}</td>
+          <td>${u.team ? 'Yes' : '<span class="muted">No</span>'}</td>
+          <td class="nowrap" style="text-align:right">
+            <button class="btn sm" data-act="user-edit" data-u="${esc(u.username)}">Edit</button>
+            <button class="btn sm" data-act="user-reset" data-u="${esc(u.username)}">Reset password</button>
+            ${u.username !== session.username ? `<button class="btn sm danger" data-act="user-delete" data-u="${esc(u.username)}">Remove</button>` : ''}
+          </td></tr>`).join('')}</tbody>
+      </table></div>
+      <p class="help" style="margin-top:10px">Administrators can add and remove logins, delete records, restore backups and erase data. Users can do everything else.</p>
+    </section>` + mine;
+}
+function userFormHTML(u) {
+  const isNew = !u;
+  u = u || { role: 'user', team: true };
+  return `<form class="form" id="user-form" autocomplete="off">
+    <div class="row2">
+      <label><span class="req">Full name</span><input name="name" required value="${esc(u.name || '')}" placeholder="e.g. Chris Hill"></label>
+      <label><span class="req">Username</span><input name="username" required value="${esc(u.username || '')}" ${isNew ? '' : 'readonly style="background:var(--surface-2)"'} pattern="[A-Za-z0-9._\\-]{2,32}" title="Letters, numbers, dots, dashes or underscores" autocapitalize="none" spellcheck="false" placeholder="e.g. chris"></label>
+    </div>
+    ${isNew ? `<div class="row2">
+      <label><span class="req">Password</span><input name="password" type="text" minlength="8" required autocomplete="new-password" placeholder="At least 8 characters"></label>
+      <span class="help" style="align-self:end;padding-bottom:12px">Write it down for them — it is not shown again. They can change it later in Settings.</span>
+    </div>` : ''}
+    <div class="field"><span class="field-label">Role</span><div class="radio-list">
+      <label><input type="radio" name="role" value="user" ${u.role !== 'admin' ? 'checked' : ''}><span><b>User</b><span class="small muted">Can add and edit physicians, contacts and referrals.</span></span></label>
+      <label><input type="radio" name="role" value="admin" ${u.role === 'admin' ? 'checked' : ''}><span><b>Administrator</b><span class="small muted">Everything, plus logins, deleting records, backups and erasing data.</span></span></label>
+    </div></div>
+    <label class="check"><input type="checkbox" name="team" ${u.team ? 'checked' : ''}> Show this person in the "Who made the contact?" list</label>
+  </form>`;
+}
+async function refreshUsers() { try { session.users = (await api('users')).users; } catch {} }
 
 /* ===================== Physician form (modal) ===================== */
 function physicianFormHTML(p) {
@@ -2085,6 +2138,45 @@ const actions = {
       } });
   },
   'export-ref-csv': () => exportReferralsCSV(),
+  /* --- logins --- */
+  'user-add': () => openModal({ title: 'Add a login', body: userFormHTML(null), submitLabel: 'Create login', onSubmit: async () => {
+    const f = $('#user-form'); if (!f.reportValidity()) return false; const fd = new FormData(f);
+    try {
+      await api('user_save', { username: fd.get('username'), name: fd.get('name'), role: fd.get('role'), team: !!fd.get('team'), password: fd.get('password') });
+      await refreshUsers();
+      if (!db.settings.team.includes(String(fd.get('name')).trim()) && fd.get('team')) { db.settings.team.push(String(fd.get('name')).trim()); saveDB(); }
+      toast(`Login created for ${fd.get('name')}`); rerender(); return true;
+    } catch (e) { toast(e.message, 'err'); return false; }
+  } }),
+  'user-edit': (el) => {
+    const u = (session.users || []).find((x) => x.username === el.dataset.u); if (!u) return;
+    openModal({ title: 'Edit login — ' + u.name, body: userFormHTML(u), submitLabel: 'Save changes', onSubmit: async () => {
+      const f = $('#user-form'); if (!f.reportValidity()) return false; const fd = new FormData(f);
+      try {
+        await api('user_save', { username: u.username, name: fd.get('name'), role: fd.get('role'), team: !!fd.get('team') });
+        await refreshUsers(); if (u.username === session.username) session.name = String(fd.get('name')).trim(), $('#user-name').textContent = session.name;
+        toast('Saved'); rerender(); return true;
+      } catch (e) { toast(e.message, 'err'); return false; }
+    } });
+  },
+  'user-reset': (el) => {
+    const u = (session.users || []).find((x) => x.username === el.dataset.u); if (!u) return;
+    openModal({ title: 'Reset password — ' + u.name, narrow: true, submitLabel: 'Set new password', body: `<form class="form" id="reset-form" autocomplete="off">
+        <label><span class="req">New password for ${esc(u.username)}</span><input name="password" type="text" minlength="8" required autocomplete="new-password" placeholder="At least 8 characters"></label>
+        <p class="help" style="margin:0">Give this to ${esc(u.name.split(' ')[0])} — it is not shown again. They can change it in Settings.</p></form>`,
+      onSubmit: async () => {
+        const f = $('#reset-form'); if (!f.reportValidity()) return false;
+        try { await api('user_save', { username: u.username, name: u.name, role: u.role, team: u.team, password: f.password.value }); toast('Password updated'); return true; }
+        catch (e) { toast(e.message, 'err'); return false; }
+      } });
+  },
+  'user-delete': (el) => {
+    const u = (session.users || []).find((x) => x.username === el.dataset.u); if (!u) return;
+    confirmBox(`Remove the login for <b>${esc(u.name)}</b> (${esc(u.username)})? Records they entered are kept.`, async () => {
+      try { await api('user_delete', { username: u.username }); await refreshUsers(); toast('Login removed'); rerender(); }
+      catch (e) { toast(e.message, 'err'); }
+    }, 'Remove login', true);
+  },
   'ref-search': (el) => { ui.ref.tab = 'all'; ui.ref.q = el.dataset.q; },
   'fu-mine': (el) => { ui.fu.mine = el.dataset.mine === '1'; rerender(); },
   'edit-contact': (el) => {
@@ -2112,7 +2204,7 @@ const actions = {
   'export-contacts-csv': () => exportContactsCSV(),
   'clear-all': () => confirmBox(`Erase <b>all</b> physicians, contacts, referrals and attachments ${MODE === 'server' ? 'in the shared database' : 'stored in this browser'}? Export a backup first if you might need them.`, async () => {
     if (MODE === 'server') {
-      try { const r = await api('clear'); serverVersion = r.version; db = emptyDB(); snapshot = takeSnapshot(db); }
+      try { const r = await api('clear', {}); serverVersion = r.version; db = emptyDB(); snapshot = takeSnapshot(db); }
       catch (e) { toast('Could not erase: ' + e.message, 'err'); return; }
     } else { try { await Files.clear(); } catch {} db = emptyDB(); }
     saveDB(); toast('All data erased'); location.hash = '#/home'; rerender();
@@ -2160,6 +2252,12 @@ document.addEventListener('submit', async (e) => {
   } else if (kind === 'departments') {
     db.settings.departments = [...new Set(form.list.value.split('\n').map((s) => s.trim()).filter(Boolean))];
     saveDB(); toast('Department list saved');
+  } else if (kind === 'mypassword') {
+    if (form.password.value !== form.confirm.value) { toast('The two new passwords do not match.', 'err'); form.confirm.focus(); return; }
+    const btn = form.querySelector('[type=submit]'); btn.disabled = true;
+    try { await api('password', { current: form.current.value, password: form.password.value }); toast('Your password has been changed'); form.reset(); }
+    catch (e) { toast(e.message, 'err'); }
+    finally { btn.disabled = false; }
   } else if (kind === 'hash') {
     const u = form.username.value;
     const out = $('#hash-out'); out.hidden = false;

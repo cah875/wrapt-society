@@ -15,7 +15,7 @@ error_reporting(E_ALL);
 set_error_handler(function ($no, $str, $file, $line) { throw new ErrorException($str, 0, $no, $file, $line); });
 
 const APP_ID = 'nwsh-physician-relations';
-const COLLECTIONS = ['physicians', 'contacts', 'referrals', 'settings'];
+const COLLECTIONS = ['physicians', 'contacts', 'referrals', 'settings', 'users'];
 
 function out(array $data, int $code = 200): never {
   http_response_code($code);
@@ -136,9 +136,25 @@ session_set_cookie_params(['lifetime' => 0, 'path' => '/', 'secure' => $secure, 
 ini_set('session.gc_maxlifetime', (string)($CFG['idle_minutes'] * 60 * 2));
 session_start();
 
-function findUser(string $username): ?array {
+/* Logins live in the database (collection "users") so the admin can manage them from
+   Settings. config.php only seeds the very first set; after that it is a fallback. */
+function dbUsers(): array {
+  static $cache = null;
+  if ($cache === null) { $cache = store()->all()['users'] ?? []; usort($cache, fn($a, $b) => strcasecmp($a['username'], $b['username'])); }
+  return $cache;
+}
+function allUsers(): array { global $CFG; $d = dbUsers(); return $d ?: $CFG['users']; }
+function userRecord(array $u): array {
+  return ['id' => strtolower($u['username']), 'username' => strtolower($u['username']), 'name' => $u['name'], 'role' => ($u['role'] ?? 'user') === 'admin' ? 'admin' : 'user', 'team' => ($u['team'] ?? true) !== false, 'hash' => $u['hash']];
+}
+function seedUsersIfEmpty(): void {
   global $CFG;
-  foreach ($CFG['users'] as $u) if (strcasecmp($u['username'], $username) === 0) return $u;
+  if (dbUsers()) return;
+  $ops = array_map(fn($u) => ['op' => 'put', 'collection' => 'users', 'id' => strtolower($u['username']), 'record' => userRecord($u)], $CFG['users']);
+  store()->apply($ops, 'system');
+}
+function findUser(string $username): ?array {
+  foreach (allUsers() as $u) if (strcasecmp($u['username'], $username) === 0) return $u;
   return null;
 }
 function currentUser(): ?array {
@@ -150,8 +166,10 @@ function currentUser(): ?array {
 }
 function requireUser(): array { $u = currentUser(); if (!$u) fail('Please sign in.', 401); return $u; }
 function requireAdmin(): array { $u = requireUser(); if (($u['role'] ?? '') !== 'admin') fail('Only the administrator can do that.', 403); return $u; }
-function pub(array $u): array { return ['username' => $u['username'], 'name' => $u['name'], 'role' => $u['role'] ?? 'user']; }
-function teamDefault(): array { global $CFG; return array_values(array_map(fn($u) => $u['name'], array_filter($CFG['users'], fn($u) => ($u['team'] ?? true) !== false))); }
+function pub(array $u): array { return ['username' => strtolower($u['username']), 'name' => $u['name'], 'role' => $u['role'] ?? 'user', 'team' => ($u['team'] ?? true) !== false]; }
+function pubUsers(): array { return array_values(array_map('pub', allUsers())); }
+function teamDefault(): array { return array_values(array_map(fn($u) => $u['name'], array_filter(allUsers(), fn($u) => ($u['team'] ?? true) !== false))); }
+function validUsername($v): bool { return is_string($v) && preg_match('/^[a-z0-9._-]{2,32}$/i', $v) === 1; }
 
 $method = $_SERVER['REQUEST_METHOD'] ?? 'GET';
 $action = (string)($_GET['action'] ?? '');
@@ -174,6 +192,7 @@ try {
       if ($method !== 'POST') fail('Bad request.');
       $lockUntil = (int)($_SESSION['lock'] ?? 0);
       if (time() < $lockUntil) fail('Too many attempts. Please wait ' . ($lockUntil - time()) . ' seconds and try again.', 429);
+      seedUsersIfEmpty();
       $u = findUser(trim((string)($body['username'] ?? '')));
       if ($u && password_verify((string)($body['password'] ?? ''), $u['hash'])) {
         session_regenerate_id(true);
@@ -195,8 +214,60 @@ try {
     case 'me': {
       $u = requireUser();
       $r = ['ok' => true, 'user' => pub($u)];
-      if (($u['role'] ?? '') === 'admin') $r['users'] = array_map('pub', $CFG['users']);
+      if (($u['role'] ?? '') === 'admin') $r['users'] = pubUsers();
       out($r);
+    }
+
+    case 'users':
+      requireAdmin();
+      out(['ok' => true, 'users' => pubUsers()]);
+
+    case 'user_save': {
+      $me = requireAdmin();
+      if ($method !== 'POST') fail('Bad request.');
+      seedUsersIfEmpty();
+      $username = strtolower(trim((string)($body['username'] ?? '')));
+      if (!validUsername($username)) fail('Usernames can only contain letters, numbers, dots, dashes or underscores (2–32 characters).');
+      $name = trim((string)($body['name'] ?? ''));
+      if ($name === '') fail('Please enter the person\'s name.');
+      $role = ($body['role'] ?? 'user') === 'admin' ? 'admin' : 'user';
+      $team = !empty($body['team']);
+      $existing = findUser($username);
+      $pw = (string)($body['password'] ?? '');
+      if (!$existing && strlen($pw) < 8) fail('Please choose a password of at least 8 characters.');
+      if ($pw !== '' && strlen($pw) < 8) fail('Passwords must be at least 8 characters.');
+      if ($existing && strtolower($existing['username']) === strtolower($me['username']) && $role !== 'admin') fail('You cannot remove your own administrator access.');
+      if ($existing && ($existing['role'] ?? '') === 'admin' && $role !== 'admin') {
+        $admins = array_filter(allUsers(), fn($u) => ($u['role'] ?? '') === 'admin' && strtolower($u['username']) !== $username);
+        if (!$admins) fail('There must be at least one administrator.');
+      }
+      $rec = userRecord(['username' => $username, 'name' => $name, 'role' => $role, 'team' => $team, 'hash' => $pw !== '' ? password_hash($pw, PASSWORD_BCRYPT) : ($existing['hash'] ?? '')]);
+      store()->apply([['op' => 'put', 'collection' => 'users', 'id' => $username, 'record' => $rec]], $me['name']);
+      out(['ok' => true, 'user' => pub($rec), 'created' => !$existing]);
+    }
+
+    case 'user_delete': {
+      $me = requireAdmin();
+      if ($method !== 'POST') fail('Bad request.');
+      seedUsersIfEmpty();
+      $username = strtolower(trim((string)($body['username'] ?? '')));
+      if ($username === strtolower($me['username'])) fail('You cannot remove your own login.');
+      if (!findUser($username)) fail('That login does not exist.');
+      store()->apply([['op' => 'del', 'collection' => 'users', 'id' => $username]], $me['name']);
+      out(['ok' => true]);
+    }
+
+    case 'password': {
+      $me = requireUser();
+      if ($method !== 'POST') fail('Bad request.');
+      seedUsersIfEmpty();
+      $u = findUser($me['username']);
+      if (!$u || !password_verify((string)($body['current'] ?? ''), $u['hash'])) fail('Your current password is not correct.');
+      $pw = (string)($body['password'] ?? '');
+      if (strlen($pw) < 8) fail('Please choose a password of at least 8 characters.');
+      $rec = userRecord($u); $rec['hash'] = password_hash($pw, PASSWORD_BCRYPT);
+      store()->apply([['op' => 'put', 'collection' => 'users', 'id' => $rec['id'], 'record' => $rec]], $me['name']);
+      out(['ok' => true]);
     }
 
     case 'version':
@@ -206,7 +277,8 @@ try {
     case 'load': {
       requireUser();
       $s = store();
-      out(['ok' => true, 'version' => $s->version(), 'data' => $s->all(), 'defaults' => ['team' => teamDefault()]]);
+      $data = $s->all(); unset($data['users']);   // password hashes never leave the server
+      out(['ok' => true, 'version' => $s->version(), 'data' => $data, 'defaults' => ['team' => teamDefault()]]);
     }
 
     case 'batch': {
@@ -215,7 +287,7 @@ try {
       $ops = $body['ops'] ?? null;
       if (!is_array($ops) || count($ops) > 5000) fail('Bad request.');
       foreach ($ops as $op) {
-        if (!in_array($op['op'] ?? '', ['put', 'del'], true) || !in_array($op['collection'] ?? '', COLLECTIONS, true) || !$validId($op['id'] ?? null)) fail('Bad request.');
+        if (!in_array($op['op'] ?? '', ['put', 'del'], true) || !in_array($op['collection'] ?? '', COLLECTIONS, true) || $op['collection'] === 'users' || !$validId($op['id'] ?? null)) fail('Bad request.');
         if ($op['op'] === 'put' && (!is_array($op['record'] ?? null) || ($op['record']['id'] ?? null) !== $op['id'])) fail('Bad request.');
         if ($op['op'] === 'del' && $op['collection'] === 'physicians' && ($u['role'] ?? '') !== 'admin') fail('Only the administrator can delete a physician.', 403);
       }
@@ -227,8 +299,8 @@ try {
       if ($method !== 'POST') fail('Bad request.');
       $data = $body['data'] ?? null;
       if (!is_array($data)) fail('Bad request.');
-      $clean = [];
-      foreach (COLLECTIONS as $c) foreach (($data[$c] ?? []) as $row) if (is_array($row) && $validId($row['id'] ?? null)) $clean[$c][] = $row;
+      $clean = ['users' => dbUsers()];   // a backup never touches logins
+      foreach (COLLECTIONS as $c) if ($c !== 'users') foreach (($data[$c] ?? []) as $row) if (is_array($row) && $validId($row['id'] ?? null)) $clean[$c][] = $row;
       out(['ok' => true, 'version' => store()->replace($clean, $u['name'])]);
     }
 
@@ -236,7 +308,7 @@ try {
       $u = requireAdmin();
       if ($method !== 'POST') fail('Bad request.');
       foreach (glob("$DATA/files/*") ?: [] as $f) @unlink($f);
-      out(['ok' => true, 'version' => store()->replace([], $u['name'])]);
+      out(['ok' => true, 'version' => store()->replace(['users' => dbUsers()], $u['name'])]);
     }
 
     case 'upload': {
