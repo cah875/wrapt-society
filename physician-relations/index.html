@@ -926,6 +926,9 @@ function contactSubject(c) {
   return { label: 'Unknown', href: '#/activity', sub: '', kind: 'none' };
 }
 const subjectLink = (c) => { const s = contactSubject(c); return `<a href="${s.href}">${esc(s.label)}</a>`; };
+/* Relationship with NWSH, from the hospital's own encounter data (roster import) */
+const NWSH_REL = { staff: ['Active medical staff', 'b-d'], referring: ['Referring to NWSH (2026)', 'b-c'], lapsed: ['Referred in 2025 only', 'b-soon'], none: ['Not yet referring', 'b-a'] };
+function nwshBadge(p) { const r = NWSH_REL[p.nwshRelation || 'none']; return `<span class="badge ${r[1]}">${r[0]}</span>`; }
 
 /* ---------- Tasks ---------- */
 const getTask = (id) => db.tasks.find((t) => t.id === id);
@@ -1042,7 +1045,7 @@ function readParty(fd, name) {
 
 /* ===================== UI state ===================== */
 const ui = {
-  phys: { q: '', stage: '', type: '', spec: '', clinic: '', sort: 'name' },
+  phys: { q: '', stage: '', type: '', spec: '', clinic: '', rel: '', sort: 'name' },
   clin: { q: '', city: '', type: '', has: '', sort: 'name', limit: 100 },
   fu: { tab: 'over', mine: false },
   ref: { tab: 'active', q: '', view: 'list', sort: 'attention', phys: '', dest: '', from: '', to: '' },
@@ -1174,7 +1177,8 @@ function viewHome() {
 
     <div class="kpis" style="margin-top:18px">
       <a class="kpi" href="#/physicians" data-act="filter-phys" data-stage=""><div class="label">Physicians</div><div class="value">${P.length}</div></a>
-      <a class="kpi" href="#/physicians" data-act="filter-phys" data-type="referrer"><div class="label">Referrers</div><div class="value">${count((p) => p.relType === 'referrer')}</div></a>
+      <a class="kpi" href="#/physicians" data-act="filter-phys" data-rel="referring" data-sort="enc"><div class="label">Referring to NWSH, 2026</div><div class="value">${count((p) => p.nwshRelation === 'referring')}</div></a>
+      ${count((p) => p.nwshRelation === 'lapsed') ? `<a class="kpi red" href="#/physicians" data-act="filter-phys" data-rel="lapsed" data-sort="enc25"><div class="label">Referred in 2025, not yet in 2026</div><div class="value">${count((p) => p.nwshRelation === 'lapsed')}</div></a>` : ''}
       <a class="kpi" href="#/physicians" data-act="filter-phys" data-stage="b"><div class="label">In credentialing</div><div class="value">${count((p) => p.stage === 'b' || p.stage === 'c')}</div></a>
       <a class="kpi green" href="#/physicians" data-act="filter-phys" data-stage="d"><div class="label">On-boarded</div><div class="value">${count((p) => p.stage === 'd')}</div></a>
       <a class="kpi ${overdue.length ? 'red' : ''}" href="#/followups"><div class="label">Overdue follow-ups</div><div class="value">${overdue.length}</div></a>
@@ -1252,6 +1256,10 @@ function viewPhysicians() {
             <option value="stage:d" ${f.stage === 'd' ? 'selected' : ''}>Step 4 · On-Boarded</option>
           </optgroup>
         </select></div>
+        <div class="field"><span class="field-label">Relationship with NWSH</span><select data-change="phys-rel" aria-label="Relationship with NWSH">
+          <option value="">Any</option>
+          ${Object.entries(NWSH_REL).map(([k, [l]]) => `<option value="${k}" ${f.rel === k ? 'selected' : ''}>${l}</option>`).join('')}
+        </select></div>
         <div class="field"><span class="field-label">Specialty</span><select data-change="phys-spec" aria-label="Specialty">
           <option value="">All specialties</option>${specs.map((s) => `<option ${f.spec === s ? 'selected' : ''}>${esc(s)}</option>`).join('')}
         </select></div>
@@ -1262,6 +1270,10 @@ function viewPhysicians() {
           <option value="stale" ${f.sort === 'stale' ? 'selected' : ''}>Longest since contact</option>
           <option value="status" ${f.sort === 'status' ? 'selected' : ''}>Status</option>
           <option value="practice" ${f.sort === 'practice' ? 'selected' : ''}>Practice</option>
+          <option value="enc" ${f.sort === 'enc' ? 'selected' : ''}>Most NWSH encounters 2026</option>
+          <option value="proc" ${f.sort === 'proc' ? 'selected' : ''}>Most procedure cases 2026</option>
+          <option value="enc25" ${f.sort === 'enc25' ? 'selected' : ''}>Most encounters 2025</option>
+          <option value="seen" ${f.sort === 'seen' ? 'selected' : ''}>Longest since seen at NWSH</option>
         </select></div>
       </div>
       <div class="table-wrap" id="phys-table"></div>
@@ -1275,6 +1287,7 @@ function updatePhysTable() {
     if (f.stage && (p.stage || 'a') !== f.stage) return false;
     if (f.type && (p.relType || 'prospect') !== f.type) return false;
     if (f.spec && p.specialty !== f.spec) return false;
+    if (f.rel && (p.nwshRelation || 'none') !== f.rel) return false;
     if (f.clinic && p.clinicId !== f.clinic && !(p.otherClinicIds || []).includes(f.clinic)) return false;
     if (q) {
       const k = p.clinicId ? getClinic(p.clinicId) : null;
@@ -1290,18 +1303,24 @@ function updatePhysTable() {
     next: (r) => (r.nf ? r.nf.fuDate : '9999'),
     last: (r) => (r.lc ? r.lc.date : ''),
     stale: (r) => (r.lc ? r.lc.date : ''),
+    enc: (r) => (r.p.nwsh ? r.p.nwsh.encounters2026 : -1),
+    proc: (r) => (r.p.nwsh ? r.p.nwsh.procedures2026 : -1),
+    enc25: (r) => (r.p.nwsh ? r.p.nwsh.encounters2025 : -1),
+    seen: (r) => (r.p.nwsh && r.p.nwsh.lastSeen ? r.p.nwsh.lastSeen : '9999'),
   };
   const key = keys[f.sort] || keys.name;
-  const dir = f.sort === 'last' ? -1 : 1;
+  const dir = ['last', 'enc', 'proc', 'enc25'].includes(f.sort) ? -1 : 1;
   rows.sort((a, b) => { const x = key(a), z = key(b); return (x > z ? 1 : x < z ? -1 : 0) * dir || physSortName(a.p).localeCompare(physSortName(b.p)); });
   el.innerHTML = rows.length ? `
     <table>
-      <thead><tr><th>Physician</th><th>Status</th><th>Last contact</th><th>Next follow-up</th><th></th></tr></thead>
+      <thead><tr><th>Physician</th><th>Status</th><th>With NWSH</th><th class="num">2026 cases / encounters</th><th>Last contact</th><th>Next follow-up</th><th></th></tr></thead>
       <tbody>${rows.map(({ p, lc, nf }) => `
         <tr class="clickable" data-act="open-phys" data-id="${p.id}">
           <td><div class="primary-text"><a href="#/physician/${p.id}">${esc(physSortName(p))}${p.credentials ? `, ${esc(p.credentials)}` : ''}</a></div>
               <div class="sub">${[p.specialty, p.practice].filter(Boolean).map(esc).join(' · ') || '&nbsp;'}</div></td>
           <td>${stageBadge(p)}</td>
+          <td>${nwshBadge(p)}</td>
+          <td class="num nowrap">${p.nwsh ? `<b>${fmtNum(p.nwsh.procedures2026)}</b> / ${fmtNum(p.nwsh.encounters2026)}<div class="sub">${p.nwsh.lastSeen ? 'seen ' + fmtDate(p.nwsh.lastSeen) : p.nwsh.encounters2025 ? fmtNum(p.nwsh.encounters2025) + ' in 2025' : ''}</div>` : '<span class="muted">—</span>'}</td>
           <td class="nowrap">${lc ? `${fmtDate(lc.date)}<div class="sub">${esc(lc.method)} · ${esc(lc.who)}</div>` : '<span class="muted">Never</span>'}</td>
           <td class="nowrap">${nf ? `${fmtDate(nf.fuDate)}<div>${fuBadge(nf)}</div>` : '<span class="muted">None scheduled</span>'}</td>
           <td class="nowrap" style="text-align:right"><a class="btn sm" href="#/physician/${p.id}">Open ${ico('i-chevron', 'sm')}</a></td>
@@ -1522,6 +1541,22 @@ function viewPhysician(p) {
           <p class="small muted" style="margin:16px 0 0">Added ${fmtTS(p.createdAt)} by ${esc(p.createdBy)}${p.updatedAt ? ` · Last updated ${fmtTS(p.updatedAt)} by ${esc(p.updatedBy)}` : ''}</p>
         </section>
 
+        ${p.nwsh ? `<section class="card">
+          <div class="card-head"><h2>Activity at NWSH</h2>${nwshBadge(p)}</div>
+          <div class="kpis" style="grid-template-columns:repeat(auto-fit,minmax(120px,1fr));margin-bottom:12px">
+            <div class="kpi"><div class="label">Procedure cases 2026</div><div class="value">${fmtNum(p.nwsh.procedures2026)}</div><span class="small muted">${fmtNum(p.nwsh.procedures2025)} in 2025</span></div>
+            <div class="kpi"><div class="label">Encounters 2026</div><div class="value">${fmtNum(p.nwsh.encounters2026)}</div><span class="small muted">${fmtNum(p.nwsh.encounters2025)} in 2025</span></div>
+            <div class="kpi"><div class="label">Clinic visits 2026</div><div class="value">${fmtNum(p.nwsh.clinicVisits2026)}</div></div>
+            <div class="kpi ${p.nwsh.lastSeen && daysBetween(p.nwsh.lastSeen, todayISO()) > 90 ? 'red' : ''}"><div class="label">Last seen at NWSH</div><div class="value" style="font-size:20px">${p.nwsh.lastSeen ? fmtDate(p.nwsh.lastSeen) : '—'}</div>${p.nwsh.lastSeen ? `<span class="small muted">${daysBetween(p.nwsh.lastSeen, todayISO())} days ago</span>` : ''}</div>
+          </div>
+          <dl class="dl">
+            <dt>Role</dt><dd>${orDash(p.nwsh.role)}</dd>
+            <dt>Primary service line</dt><dd>${orDash(p.nwsh.serviceLine)}</dd>
+            <dt>Service lines</dt><dd>${orDash(p.nwsh.serviceLines)}</dd>
+            <dt>Clinics (visits)</dt><dd>${orDash(p.nwsh.clinics)}</dd>
+          </dl>
+          <p class="help" style="margin:10px 0 0">Source: ${esc(p.nwsh.source)}. Encounters minus procedure cases are loaded as the "ancillary actual" below.</p>
+        </section>` : ''}
         <section class="card">
           <div class="card-head"><h2>Goals &amp; actuals</h2><button class="btn sm no-print" data-act="add-goal" data-id="${p.id}">${ico('i-plus', 'sm')}Add a year</button></div>
           ${goalsTableHTML(p)}
@@ -2703,7 +2738,7 @@ const actions = {
   },
   'open-phys': (el, e) => { if (!e.target.closest('a, button, input')) location.hash = '#/physician/' + el.dataset.id; },
   'open-href': (el, e) => { if (!e.target.closest('a, button, input')) location.hash = el.dataset.href; },
-  'filter-phys': (el) => { Object.assign(ui.phys, { q: '', spec: '', stage: el.dataset.stage || '', type: el.dataset.type || '' }); },
+  'filter-phys': (el) => { Object.assign(ui.phys, { q: '', spec: '', stage: el.dataset.stage || '', type: el.dataset.type || '', rel: el.dataset.rel || '', sort: el.dataset.sort || ui.phys.sort }); },
   print: () => window.print(),
   'advance-stage': (el) => {
     const p = getPhys(el.dataset.id); const next = STAGES[stageIndex(p) + 1]; if (!next) return;
@@ -3011,6 +3046,7 @@ document.addEventListener('change', (e) => {
     case 'clin-has': ui.clin.has = t.value; rerender(); break;
     case 'clin-sort': ui.clin.sort = t.value; rerender(); break;
     case 'phys-clinic': ui.phys.clinic = t.value; updatePhysTable(); break;
+    case 'phys-rel': ui.phys.rel = t.value; updatePhysTable(); break;
     case 'ref-phys': ui.ref.phys = t.value; rerender(); break;
     case 'ref-dest': ui.ref.dest = t.value; rerender(); break;
     case 'ref-from': ui.ref.from = t.value; rerender(); break;
