@@ -442,7 +442,13 @@ const STAGES = [
 // Contact management → 2) How
 const METHODS = ['Phone Call', 'Email', 'In Person', 'Text'];
 const METHOD_ICON = { 'Phone Call': 'i-phone', 'Email': 'i-mail', 'In Person': 'i-person', 'Text': 'i-text' };
-const CREDENTIALS = ['MD', 'DO', 'DPM', 'DDS', 'PA-C', 'NP', 'CRNA', 'Other'];
+const CREDENTIALS = ['MD', 'DO', 'DPM', 'DDS', 'DMD', 'PA-C', 'PA', 'NP', 'ARNP', 'FNP-C', 'DNP-C', 'DNP', 'CRNA', 'DC', 'PT', 'DPT', 'OD', 'PhD', 'PsyD', 'LCSW', 'Other'];
+const DEFAULT_ACCOUNT_TYPES = [
+  'Primary Care Providers', 'Urgent Care / Express Care', 'Hospitals / Medical Centers', 'Hospitals / Emergency Departments', 'Orthopedics / Spine / Musculoskeletal',
+  'Physical Therapy / Rehabilitation', 'Chiropractic', 'Pain Management', 'ENT / Audiology', 'Cardiology', 'Endocrinology / Diabetes & Metabolism', 'Gastroenterology',
+  'Urology', "Women's Health / OB-GYN", 'Pediatrics', 'Dermatology', 'Pulmonology / Sleep Medicine', 'Dental / Oral Surgery', 'Imaging', 'Home Health / Senior Care',
+  'Occupational Medicine', 'Employer Group', 'Health Brokers', 'Other Specialty / Healthcare Accounts',
+];
 const DEFAULT_SPECIALTIES = [
   'Anesthesiology', 'Cardiology', 'Cardiothoracic Surgery', 'Colorectal Surgery', 'Dermatology', 'Emergency Medicine',
   'ENT / Otolaryngology', 'Family Medicine', 'Gastroenterology', 'General Surgery', 'Hospitalist', 'Internal Medicine',
@@ -596,8 +602,10 @@ function emptyDB() {
       team: CONFIG.users.filter((u) => u.team !== false).map((u) => u.name),
       specialties: DEFAULT_SPECIALTIES.slice(),
       departments: DEFAULT_DEPARTMENTS.slice(),
+      accountTypes: DEFAULT_ACCOUNT_TYPES.slice(),
       riskDays: 14,
     },
+    clinics: [],
     physicians: [],
     contacts: [],
     referrals: [],
@@ -613,6 +621,7 @@ function normalizeDB(d) {
   d.contacts = d.contacts || [];
   d.referrals = d.referrals || [];
   d.tasks = d.tasks || [];
+  d.clinics = d.clinics || [];
   d.meta = d.meta || base.meta;
   return d;
 }
@@ -631,7 +640,7 @@ function dbFromServer(res) {
   const settingsRow = (d.settings || []).find((s) => s.id === 'main') || {};
   const out = normalizeDB({
     settings: Object.assign({ team: (res.defaults && res.defaults.team) || [] }, settingsRow),
-    physicians: d.physicians || [], contacts: d.contacts || [], referrals: d.referrals || [], tasks: d.tasks || [],
+    clinics: d.clinics || [], physicians: d.physicians || [], contacts: d.contacts || [], referrals: d.referrals || [], tasks: d.tasks || [],
     meta: { updatedAt: settingsRow.updatedAt || nowISO() },
   });
   delete out.settings.id;
@@ -641,7 +650,7 @@ function dbFromServer(res) {
 }
 function takeSnapshot(d) {
   const s = {};
-  ['physicians', 'contacts', 'referrals', 'tasks'].forEach((c) => d[c].forEach((r) => { s[c + '/' + r.id] = JSON.stringify(r); }));
+  ['clinics', 'physicians', 'contacts', 'referrals', 'tasks'].forEach((c) => d[c].forEach((r) => { s[c + '/' + r.id] = JSON.stringify(r); }));
   s['settings/main'] = JSON.stringify({ id: 'main', ...d.settings });
   return s;
 }
@@ -903,6 +912,21 @@ function yearsInData() {
 }
 function methodLabel(m) { return `${ico(METHOD_ICON[m] || 'i-info', 'sm')} ${esc(m)}`; }
 
+/* ---------- Clinics & accounts ---------- */
+const getClinic = (id) => db.clinics.find((c) => c.id === id);
+function clinicPhysicians(cid) { return db.physicians.filter((p) => p.clinicId === cid || (p.otherClinicIds || []).includes(cid)).sort((a, b) => physSortName(a).localeCompare(physSortName(b))); }
+function clinicContacts(cid) { const pids = new Set(clinicPhysicians(cid).map((p) => p.id)); return db.contacts.filter((c) => c.clinicId === cid || (c.physicianId && pids.has(c.physicianId))).sort(byContactDesc); }
+function clinicAddress(c) { return [c.address, [c.city, c.state].filter(Boolean).join(', ') + (c.zip ? ' ' + c.zip : '')].filter((x) => x && x.trim()); }
+/* A contact is about a physician, a clinic, or both. */
+function contactSubject(c) {
+  const p = c.physicianId ? getPhys(c.physicianId) : null;
+  const k = c.clinicId ? getClinic(c.clinicId) : (p && p.clinicId ? getClinic(p.clinicId) : null);
+  if (p) return { label: physName(p), href: '#/physician/' + p.id, sub: k ? k.name : (p.practice || ''), kind: 'physician' };
+  if (k) return { label: k.name, href: '#/clinic/' + k.id, sub: k.city || '', kind: 'clinic' };
+  return { label: 'Unknown', href: '#/activity', sub: '', kind: 'none' };
+}
+const subjectLink = (c) => { const s = contactSubject(c); return `<a href="${s.href}">${esc(s.label)}</a>`; };
+
 /* ---------- Tasks ---------- */
 const getTask = (id) => db.tasks.find((t) => t.id === id);
 function taskState(t) {
@@ -920,6 +944,7 @@ function taskBadge(t) {
 }
 function taskLink(t) {
   if (t.physicianId) { const p = getPhys(t.physicianId); if (p) return `<a href="#/physician/${p.id}">${esc(physName(p))}</a>`; }
+  if (t.clinicId) { const k = getClinic(t.clinicId); if (k) return `<a href="#/clinic/${k.id}">${esc(k.name)}</a>`; }
   if (t.referralId) { const r = getRef(t.referralId); if (r) return `<a href="#/referral/${r.id}">Referral · patient ${esc(r.mrn)}</a>`; }
   return '';
 }
@@ -928,7 +953,8 @@ function taskFormHTML(t, ctx) {
   const team = db.settings.team.slice(); const cur = t.assignedTo || ''; if (cur && !team.includes(cur)) team.push(cur);
   const linked = t.physicianId || ctx.physicianId ? getPhys(t.physicianId || ctx.physicianId) : null;
   const linkedRef = t.referralId || ctx.referralId ? getRef(t.referralId || ctx.referralId) : null;
-  return `<form class="form" id="task-form" data-pid="${esc(t.physicianId || ctx.physicianId || '')}" data-rid="${esc(t.referralId || ctx.referralId || '')}">
+  const linkedClinic = t.clinicId || ctx.clinicId ? getClinic(t.clinicId || ctx.clinicId) : null;
+  return `<form class="form" id="task-form" data-pid="${esc(t.physicianId || ctx.physicianId || '')}" data-rid="${esc(t.referralId || ctx.referralId || '')}" data-cid="${esc(t.clinicId || ctx.clinicId || '')}">
     <label><span class="req">What needs to be done?</span><input name="title" required value="${esc(t.title || '')}" placeholder="e.g. Call Dr. Glassman's office about block time"></label>
     <div class="row2">
       <label><span class="req">Assign to</span><select name="assignedTo" required><option value="">Choose…</option>${team.map((n) => `<option ${n === cur ? 'selected' : ''}>${esc(n)}</option>`).join('')}</select></label>
@@ -936,7 +962,7 @@ function taskFormHTML(t, ctx) {
         <div class="quick">${[[1, 'Tomorrow'], [3, 'In 3 days'], [7, 'In 1 week'], [14, 'In 2 weeks']].map(([d, l]) => `<button type="button" class="btn" data-act="task-quick" data-days="${d}">${l}</button>`).join('')}</div></div>
     </div>
     <label><span>Details <span class="help">(optional)</span></span><textarea name="details" rows="3">${esc(t.details || '')}</textarea></label>
-    ${linked ? `<p class="help" style="margin:0">Linked to <b>${esc(physName(linked))}</b>.</p>` : linkedRef ? `<p class="help" style="margin:0">Linked to <b>referral for patient ${esc(linkedRef.mrn)}</b>.</p>` : ''}
+    ${linked ? `<p class="help" style="margin:0">Linked to <b>${esc(physName(linked))}</b>.</p>` : linkedRef ? `<p class="help" style="margin:0">Linked to <b>referral for patient ${esc(linkedRef.mrn)}</b>.</p>` : linkedClinic ? `<p class="help" style="margin:0">Linked to <b>${esc(linkedClinic.name)}</b>.</p>` : ''}
     ${MODE === 'server' ? '<p class="help" style="margin:0">The person you assign it to gets an email right away.</p>' : ''}
   </form>`;
 }
@@ -1016,7 +1042,8 @@ function readParty(fd, name) {
 
 /* ===================== UI state ===================== */
 const ui = {
-  phys: { q: '', stage: '', type: '', spec: '', sort: 'name' },
+  phys: { q: '', stage: '', type: '', spec: '', clinic: '', sort: 'name' },
+  clin: { q: '', city: '', type: '', has: '', sort: 'name', limit: 100 },
   fu: { tab: 'over', mine: false },
   ref: { tab: 'active', q: '', view: 'list', sort: 'attention', phys: '', dest: '', from: '', to: '' },
   rep: { preset: '12m', from: '', to: '', compare: 'prev', sort: 'ordered', dir: -1 },
@@ -1033,7 +1060,7 @@ function route() {
   }
   const parts = location.hash.replace(/^#\/?/, '').split('/');
   const view = parts[0] || 'home';
-  const navKey = view === 'physician' ? 'physicians' : view === 'referral' ? 'referrals' : view;
+  const navKey = view === 'physician' || view === 'clinics' || view === 'clinic' ? 'physicians' : view === 'referral' ? 'referrals' : view;
   $$('[data-nav]').forEach((a) => a.classList.toggle('active', a.dataset.nav === navKey));
   updateNavCount();
   const main = $('#view');
@@ -1045,6 +1072,12 @@ function route() {
       break;
     }
     case 'followups': main.innerHTML = viewFollowups(); break;
+    case 'clinics': main.innerHTML = viewClinics(); break;
+    case 'clinic': {
+      const k = getClinic(parts[1]);
+      main.innerHTML = k ? viewClinic(k) : `<div class="card empty">That clinic could not be found. <a href="#/clinics">Back to all clinics</a></div>`;
+      break;
+    }
     case 'referrals': main.innerHTML = viewReferrals(); break;
     case 'referral': {
       const r = getRef(parts[1]);
@@ -1131,11 +1164,11 @@ function viewHome() {
             <div class="small" style="color:var(--red)">${esc(refRiskReason(r))}</div></div>
             <div style="text-align:right;display:grid;gap:6px;justify-items:end">${refBadge(r)}<a class="btn sm" href="#/referral/${r.id}">Open</a></div></li>`; }).join('')}</ul>` : ''}
       ${attention.length ? `<ul class="list">${attention.map((c) => {
-        const p = getPhys(c.physicianId);
-        return `<li><div class="grow"><a href="#/physician/${c.physicianId}"><b>${esc(p ? physName(p) : 'Unknown')}</b></a>
+        const sj = contactSubject(c);
+        return `<li><div class="grow"><a href="${sj.href}"><b>${esc(sj.label)}</b></a>
             <div class="small muted">${esc(c.ask || c.comm || '').slice(0, 120)}</div>
             <div class="small muted">Assigned to ${esc(c.who)} · Follow up by ${fmtDate(c.fuDate)}</div></div>
-            <div style="text-align:right;display:grid;gap:6px;justify-items:end">${fuBadge(c)}<a class="btn sm" href="#/physician/${c.physicianId}">Open</a></div></li>`;
+            <div style="text-align:right;display:grid;gap:6px;justify-items:end">${fuBadge(c)}<a class="btn sm" href="${sj.href}">Open</a></div></li>`;
       }).join('')}</ul>` : (riskRefs.length || myTasks.length ? '' : `<p class="empty">Nothing is overdue or due this week, and no referrals are at risk. Nice work.</p>`)}
     </section>
 
@@ -1173,8 +1206,8 @@ function viewHome() {
     <section class="card" style="margin-top:18px">
       <div class="card-head"><h2>Recent activity</h2><a href="#/activity">See the full log</a></div>
       ${recent.length ? `<ul class="list">${recent.map((c) => {
-        const p = getPhys(c.physicianId);
-        return `<li><div class="grow"><a href="#/physician/${c.physicianId}"><b>${esc(p ? physName(p) : 'Unknown')}</b></a> <span class="muted small">· ${methodLabel(c.method)} · ${esc(c.who)}</span>
+        const sj = contactSubject(c);
+        return `<li><div class="grow"><a href="${sj.href}"><b>${esc(sj.label)}</b></a> <span class="muted small">· ${methodLabel(c.method)} · ${esc(c.who)}</span>
           <div class="small muted">${esc(c.comm || '').slice(0, 140)}</div></div>
           <div class="small muted nowrap">${fmtDate(c.date)}</div></li>`;
       }).join('')}</ul>` : '<p class="empty">No contacts have been logged yet.</p>'}
@@ -1196,6 +1229,7 @@ function viewPhysicians() {
     <div class="page-head">
       <div><h1>Physicians</h1><p class="lead">Everyone we are building a relationship with.</p></div>
       <div class="actions">
+        ${dirSwitcher('physicians')}
         <button class="btn" data-act="export-phys-csv">${ico('i-download')}Download spreadsheet</button>
         <button class="btn" data-act="import-phys-csv">${ico('i-upload')}Upload spreadsheet</button>
         <button class="btn primary" data-act="add-physician">${ico('i-plus')}Add a Physician</button>
@@ -1241,8 +1275,10 @@ function updatePhysTable() {
     if (f.stage && (p.stage || 'a') !== f.stage) return false;
     if (f.type && (p.relType || 'prospect') !== f.type) return false;
     if (f.spec && p.specialty !== f.spec) return false;
+    if (f.clinic && p.clinicId !== f.clinic && !(p.otherClinicIds || []).includes(f.clinic)) return false;
     if (q) {
-      const hay = [p.firstName, p.lastName, p.credentials, p.specialty, p.practice, p.npi, p.email, p.pmName, p.city].join(' ').toLowerCase();
+      const k = p.clinicId ? getClinic(p.clinicId) : null;
+      const hay = [p.firstName, p.lastName, p.credentials, p.specialty, p.practice, k && k.name, k && k.city, p.npi, p.email, p.pmName, p.city].join(' ').toLowerCase();
       if (!hay.includes(q)) return false;
     }
     return true;
@@ -1274,6 +1310,140 @@ function updatePhysTable() {
     </table>
     <p class="count-line">Showing ${rows.length} of ${db.physicians.length} physicians</p>`
     : `<div class="empty">${db.physicians.length ? 'No physicians match. Try a different search or choose "All physicians" above.' : 'No physicians yet. Click <b>Add a Physician</b> to enter the first one.'}</div>`;
+}
+
+/* ===================== View: Clinics & accounts ===================== */
+function dirSwitcher(view) {
+  return `<div class="toggle" role="group" aria-label="Directory" style="margin-right:10px">
+    <button class="${view === 'physicians' ? 'on' : ''}" data-act="go" data-href="#/physicians">Physicians (${db.physicians.length})</button>
+    <button class="${view === 'clinics' ? 'on' : ''}" data-act="go" data-href="#/clinics">Clinics &amp; accounts (${db.clinics.length})</button>
+  </div>`;
+}
+function viewClinics() {
+  const f = ui.clin;
+  const q = f.q.trim().toLowerCase();
+  const cities = [...new Set(db.clinics.map((c) => c.city).filter(Boolean))].sort();
+  const types = [...new Set(db.clinics.map((c) => c.type).filter(Boolean))].sort();
+  let rows = db.clinics.map((k) => { const cs = clinicContacts(k.id); const nf = cs.filter((c) => c.fuDate && !c.fuDone).sort((a, b) => a.fuDate.localeCompare(b.fuDate))[0]; return { k, n: clinicPhysicians(k.id).length, lc: cs[0] || null, nf: nf || null }; })
+    .filter(({ k, n }) => {
+      if (f.city && k.city !== f.city) return false;
+      if (f.type && k.type !== f.type) return false;
+      if (f.has === 'yes' && !n) return false; if (f.has === 'no' && n) return false;
+      if (q) { const hay = [k.name, k.type, k.city, k.address, k.specialties, k.phone, k.notes, ...clinicPhysicians(k.id).map(physName)].join(' ').toLowerCase(); if (!hay.includes(q)) return false; }
+      return true;
+    });
+  const keys = { name: (r) => r.k.name.toLowerCase(), city: (r) => (r.k.city || '').toLowerCase() + r.k.name.toLowerCase(), type: (r) => (r.k.type || '').toLowerCase() + r.k.name.toLowerCase(), last: (r) => (r.lc ? r.lc.date : ''), stale: (r) => (r.lc ? r.lc.date : ''), providers: (r) => -r.n };
+  const key = keys[f.sort] || keys.name, dir = f.sort === 'last' ? -1 : 1;
+  rows.sort((a, b) => { const x = key(a), z = key(b); return (x > z ? 1 : x < z ? -1 : 0) * dir || a.k.name.localeCompare(b.k.name); });
+  const shown = rows.slice(0, f.limit || 100);
+  return `
+    <div class="page-head">
+      <div><h1>Clinics &amp; accounts</h1><p class="lead">Every clinic, practice and account in the territory. Providers sit under their clinic.</p></div>
+      <div class="actions">${dirSwitcher('clinics')}<button class="btn primary" data-act="add-clinic">${ico('i-plus')}Add a clinic</button></div>
+    </div>
+    <section class="card">
+      <div class="filters">
+        <div class="search"><svg class="i"><use href="#i-search"/></svg><input type="search" id="clinic-search" placeholder="Type a clinic, city, provider or type of account" value="${esc(f.q)}" data-input="clin-q" aria-label="Find a clinic"></div>
+        <div class="field"><span class="field-label">City</span><select data-change="clin-city"><option value="">All cities</option>${cities.map((c) => `<option ${f.city === c ? 'selected' : ''}>${esc(c)}</option>`).join('')}</select></div>
+        <div class="field"><span class="field-label">Type of account</span><select data-change="clin-type"><option value="">All types</option>${types.map((t) => `<option ${f.type === t ? 'selected' : ''}>${esc(t)}</option>`).join('')}</select></div>
+        <div class="field"><span class="field-label">Providers</span><select data-change="clin-has"><option value="">Any</option><option value="yes" ${f.has === 'yes' ? 'selected' : ''}>Has named providers</option><option value="no" ${f.has === 'no' ? 'selected' : ''}>No providers yet</option></select></div>
+        <div class="field"><span class="field-label">Sort by</span><select data-change="clin-sort">${[['name', 'Clinic name'], ['city', 'City'], ['type', 'Type of account'], ['last', 'Most recently contacted'], ['stale', 'Longest since contact'], ['providers', 'Most providers']].map(([k, l]) => `<option value="${k}" ${f.sort === k ? 'selected' : ''}>${l}</option>`).join('')}</select></div>
+      </div>
+      ${shown.length ? `<div class="table-wrap"><table>
+        <thead><tr><th>Clinic / account</th><th>Type</th><th>City</th><th class="num">Providers</th><th>Last contact</th><th>Next follow-up</th><th></th></tr></thead>
+        <tbody>${shown.map(({ k, n, lc, nf }) => `<tr class="clickable" data-act="open-href" data-href="#/clinic/${k.id}">
+          <td><div class="primary-text"><a href="#/clinic/${k.id}">${esc(k.name)}</a></div><div class="sub">${esc(k.address || '')}</div></td>
+          <td class="small">${esc(k.type || '')}</td><td class="nowrap">${esc(k.city || '')}</td>
+          <td class="num">${n || '<span class="muted">—</span>'}</td>
+          <td class="nowrap">${lc ? `${fmtDate(lc.date)}<div class="sub">${esc(lc.method)} · ${esc(lc.who)}</div>` : '<span class="muted">Never</span>'}</td>
+          <td class="nowrap">${nf ? `${fmtDate(nf.fuDate)}<div>${fuBadge(nf)}</div>` : '<span class="muted">—</span>'}</td>
+          <td class="nowrap" style="text-align:right"><a class="btn sm" href="#/clinic/${k.id}">Open ${ico('i-chevron', 'sm')}</a></td></tr>`).join('')}</tbody></table></div>
+        <p class="count-line">Showing ${shown.length} of ${rows.length} clinics${rows.length > shown.length ? ` · <button class="btn link" data-act="clin-more">Show more</button>` : ''}</p>`
+        : `<div class="empty">${db.clinics.length ? 'No clinics match. Try a different search.' : 'No clinics yet. Click <b>Add a clinic</b>, or restore the territory file from Settings.'}</div>`}
+    </section>`;
+}
+function viewClinic(k) {
+  const people = clinicPhysicians(k.id), cs = clinicContacts(k.id);
+  const tasks = db.tasks.filter((t) => !t.done && (t.clinicId === k.id || people.some((p) => p.id === t.physicianId)));
+  return `
+    <a class="back no-print" href="#/clinics">${ico('i-arrow-left')}All clinics</a>
+    <section class="card">
+      <div class="phys-head">
+        <div class="avatar" style="background:var(--brown)" aria-hidden="true">${esc(k.name.replace(/[^A-Za-z ]/g, '').split(' ').filter(Boolean).slice(0, 2).map((w) => w[0]).join('').toUpperCase() || 'C')}</div>
+        <div class="info"><h1>${esc(k.name)}</h1><div class="sub">${[k.type, k.city].filter(Boolean).map(esc).join(' · ')}</div></div>
+        <div class="actions no-print" style="display:flex;gap:10px;flex-wrap:wrap">
+          <button class="btn" data-act="task-add" data-cid="${k.id}">${ico('i-flag')}Assign a task</button>
+          <button class="btn" data-act="edit-clinic" data-id="${k.id}">${ico('i-edit')}Edit details</button>
+          ${isAdmin() ? `<button class="btn danger" data-act="delete-clinic" data-id="${k.id}">${ico('i-trash')}Delete</button>` : ''}
+        </div>
+      </div>
+    </section>
+    <div class="detail-grid">
+      <div>
+        <section class="card">
+          <div class="card-head"><h2>Clinic details</h2><button class="btn sm no-print" data-act="edit-clinic" data-id="${k.id}">${ico('i-edit', 'sm')}Edit</button></div>
+          <dl class="dl">
+            <dt>Address</dt><dd>${clinicAddress(k).map(esc).join('<br>') || '<span class="muted">—</span>'}</dd>
+            <dt>Phone</dt><dd>${telLink(k.phone)}</dd>
+            <dt>Fax</dt><dd>${orDash(k.fax)}</dd>
+            <dt>Type</dt><dd>${orDash(k.type)}</dd>
+            <dt>Specialties</dt><dd>${orDash(k.specialties)}</dd>
+            <dt>Office contact</dt><dd>${orDash(k.pmName)}${k.pmTitle ? ` <span class="muted">(${esc(k.pmTitle)})</span>` : ''}${k.pmPhone ? `<br>${telLink(k.pmPhone)}` : ''}${k.pmEmail ? `<br>${mailLink(k.pmEmail)}` : ''}</dd>
+          </dl>
+          ${k.notes ? `<div class="section-label">Notes</div><div style="white-space:pre-wrap">${esc(k.notes)}</div>` : ''}
+        </section>
+        <section class="card">
+          <div class="card-head"><h2>Providers here <span class="muted" style="font-weight:400">(${people.length})</span></h2><button class="btn sm no-print" data-act="add-physician" data-cid="${k.id}">${ico('i-plus', 'sm')}Add a provider</button></div>
+          ${people.length ? `<ul class="list">${people.map((p) => { const lc = lastContact(p.id); return `<li><div class="grow"><a href="#/physician/${p.id}"><b>${esc(physName(p))}</b></a><div class="small muted">${esc(p.specialty || '')}${p.clinicId !== k.id ? ' · also at other locations' : ''}</div></div><div style="text-align:right">${stageBadge(p)}<div class="small muted">${lc ? 'Last contact ' + fmtDate(lc.date) : 'Never contacted'}</div></div></li>`; }).join('')}</ul>` : '<p class="empty">No named providers yet. Add one, or log contacts against the clinic itself.</p>'}
+        </section>
+        ${tasks.length ? `<section class="card"><div class="card-head"><h2>Open tasks</h2></div><ul class="list">${tasks.map(taskRowHTML).join('')}</ul></section>` : ''}
+      </div>
+      <div>
+        <section class="card no-print">
+          <div class="card-head"><h2>Log a contact</h2><span class="hint">A visit, call, email or text with this clinic</span></div>
+          ${contactFormHTML('', null, k.id)}
+        </section>
+        <section class="card">
+          <div class="card-head"><h2>Contact history <span class="muted" style="font-weight:400">(${cs.length})</span></h2><span class="hint">Includes contacts with providers here</span></div>
+          ${cs.length ? `<ul class="timeline">${cs.map((c) => (c.physicianId ? `<li style="border-left-color:var(--green)"><div class="small muted" style="margin-bottom:4px">With ${subjectLink(c)}</div>` + contactItemHTML(c).replace(/^<li>/, '') : contactItemHTML(c))).join('')}</ul>` : '<p class="empty">No contacts logged with this clinic yet.</p>'}
+        </section>
+      </div>
+    </div>`;
+}
+function clinicFormHTML(k) {
+  k = k || {}; const v = (x) => esc(k[x] || '');
+  const types = [...new Set([...(db.settings.accountTypes || DEFAULT_ACCOUNT_TYPES), ...db.clinics.map((c) => c.type).filter(Boolean)])].sort();
+  return `<form class="form" id="clinic-form">
+    <label><span class="req">Clinic / account name</span><input name="name" required value="${v('name')}"></label>
+    <div class="row2">
+      <label><span>Type of account</span><input name="type" list="type-list" value="${v('type')}" placeholder="Start typing…"><datalist id="type-list">${types.map((t) => `<option value="${esc(t)}">`).join('')}</datalist></label>
+      <label><span>Specialties</span><input name="specialties" value="${v('specialties')}" placeholder="e.g. Family Medicine; Urgent Care"></label>
+    </div>
+    <label><span>Street address</span><input name="address" value="${v('address')}"></label>
+    <div class="row3">
+      <label><span>City</span><input name="city" value="${v('city')}"></label>
+      <label><span>State</span><input name="state" maxlength="2" value="${v('state')}"></label>
+      <label><span>ZIP</span><input name="zip" value="${v('zip')}"></label>
+    </div>
+    <div class="row2">
+      <label><span>Phone</span><input name="phone" type="tel" value="${v('phone')}"></label>
+      <label><span>Fax</span><input name="fax" type="tel" value="${v('fax')}"></label>
+    </div>
+    <fieldset><legend>Office manager / contact</legend><div class="row2">
+      <label><span>Name</span><input name="pmName" value="${v('pmName')}"></label>
+      <label><span>Title</span><input name="pmTitle" value="${v('pmTitle')}"></label>
+      <label><span>Phone</span><input name="pmPhone" type="tel" value="${v('pmPhone')}"></label>
+      <label><span>Email</span><input name="pmEmail" type="email" value="${v('pmEmail')}"></label>
+    </div></fieldset>
+    <label><span>Notes</span><textarea name="notes" rows="3">${v('notes')}</textarea></label>
+  </form>`;
+}
+function saveClinicFromForm(form, id) {
+  if (!form.reportValidity()) return false;
+  const d = Object.fromEntries(new FormData(form).entries()); Object.keys(d).forEach((x) => (d[x] = String(d[x]).trim())); if (d.state) d.state = d.state.toUpperCase();
+  if (id) { const k = getClinic(id); Object.assign(k, d, { updatedAt: nowISO(), updatedBy: session.name }); db.physicians.forEach((p) => { if (p.clinicId === id) p.practice = k.name; }); saveDB(); toast('Clinic saved'); rerender(); }
+  else { const k = { id: uid(), ...d, createdAt: nowISO(), createdBy: session.name }; db.clinics.push(k); saveDB(); toast(`${k.name} added`); location.hash = '#/clinic/' + k.id; }
+  return true;
 }
 
 /* ===================== View: Physician detail ===================== */
@@ -1337,9 +1507,9 @@ function viewPhysician(p) {
           </dl>
           <div class="section-label">Specialty</div>
           <dl class="dl"><dt>Specialty</dt><dd>${orDash(p.specialty)}</dd></dl>
-          <div class="section-label">Practice</div>
+          <div class="section-label">Clinic / practice</div>
           <dl class="dl">
-            <dt>Practice</dt><dd>${orDash(p.practice)}</dd>
+            <dt>Clinic</dt><dd>${p.clinicId && getClinic(p.clinicId) ? `<a href="#/clinic/${p.clinicId}"><b>${esc(getClinic(p.clinicId).name)}</b></a>${(p.otherClinicIds || []).filter(getClinic).length ? `<div class="small muted">Also at: ${(p.otherClinicIds || []).filter(getClinic).map((id) => `<a href="#/clinic/${id}">${esc(getClinic(id).name)}</a>`).join(', ')}</div>` : ''}` : orDash(p.practice)}</dd>
             <dt>Address</dt><dd>${addr || '<span class="muted">—</span>'}</dd>
           </dl>
           <div class="section-label">Practice manager / contact</div>
@@ -1433,13 +1603,16 @@ function goalFormHTML(g) {
   </form>`;
 }
 
-function contactFormHTML(pid, c) {
+function contactFormHTML(pid, c, clinicId) {
   const team = db.settings.team.slice();
   const who = c ? c.who : (team.includes(session.name) ? session.name : team[0]);
   if (who && !team.includes(who)) team.push(who);
   const method = c ? c.method : '';
   const fid = c ? 'edit' : 'new';
-  return `<form class="form" data-form="contact" data-pid="${pid}" data-cid="${c ? c.id : ''}">
+  const kid = c ? (c.clinicId || '') : (clinicId || '');
+  const clinicPeople = kid && !pid ? clinicPhysicians(kid) : [];
+  return `<form class="form" data-form="contact" data-pid="${esc(pid || '')}" data-kid="${esc(kid)}" data-cid="${c ? c.id : ''}">
+    ${clinicPeople.length ? `<label><span>Who at the clinic? <span class="help">(optional — leave as "the clinic" for a general visit)</span></span><select name="physicianId"><option value="">The clinic in general</option>${clinicPeople.map((p) => `<option value="${p.id}">${esc(physName(p))}</option>`).join('')}</select></label>` : ''}
     <div class="row2">
       <label><span class="req">Date of contact</span><input type="date" name="date" required value="${esc(c ? c.date : todayISO())}"></label>
       <label><span class="req"><span class="stepnum">1</span>Who made the contact?</span><select name="who" required>${team.map((n) => `<option ${n === who ? 'selected' : ''}>${esc(n)}</option>`).join('')}</select></label>
@@ -1518,10 +1691,10 @@ function viewFollowups() {
       ${rows.length ? `<div class="table-wrap"><table>
         <thead><tr><th>Follow up by</th><th>Physician</th><th>What we said we'd do</th><th>Assigned to</th><th></th></tr></thead>
         <tbody>${rows.map((c) => {
-          const p = getPhys(c.physicianId);
+          const sj = contactSubject(c);
           return `<tr>
             <td class="nowrap"><b>${fmtDate(c.fuDate)}</b><div>${fuBadge(c)}</div></td>
-            <td><div class="primary-text"><a href="#/physician/${c.physicianId}">${esc(p ? physName(p) : 'Unknown')}</a></div><div class="sub">${p ? esc(p.practice || '') : ''}</div></td>
+            <td><div class="primary-text"><a href="${sj.href}">${esc(sj.label)}</a></div><div class="sub">${esc(sj.sub)}</div></td>
             <td>${c.ask ? esc(c.ask) : '<span class="muted">No ask recorded</span>'}<div class="sub">${methodLabel(c.method)} on ${fmtDate(c.date)}: ${esc((c.comm || '').slice(0, 100))}${(c.comm || '').length > 100 ? '…' : ''}</div></td>
             <td class="nowrap">${esc(c.who)}</td>
             <td class="nowrap" style="text-align:right">${c.fuDone
@@ -1583,8 +1756,8 @@ function filteredActivity() {
     if (f.from && c.date < f.from) return false;
     if (f.to && c.date > f.to) return false;
     if (q) {
-      const p = getPhys(c.physicianId);
-      const hay = [c.comm, c.ask, c.who, p && physName(p), p && p.practice].join(' ').toLowerCase();
+      const sj = contactSubject(c);
+      const hay = [c.comm, c.ask, c.who, sj.label, sj.sub].join(' ').toLowerCase();
       if (!hay.includes(q)) return false;
     }
     return true;
@@ -1599,10 +1772,10 @@ function updateActivityTable() {
     <div class="table-wrap"><table>
       <thead><tr><th>Date</th><th>Physician</th><th>Who</th><th>How</th><th>What was communicated</th><th>Ask</th><th>Follow-up</th></tr></thead>
       <tbody>${rows.map((c) => {
-        const p = getPhys(c.physicianId);
-        return `<tr class="clickable" data-act="open-phys" data-id="${c.physicianId}">
+        const sj = contactSubject(c);
+        return `<tr class="clickable" data-act="open-href" data-href="${sj.href}">
           <td class="nowrap">${fmtDate(c.date)}</td>
-          <td><a href="#/physician/${c.physicianId}"><b>${esc(p ? physName(p) : 'Unknown')}</b></a></td>
+          <td><a href="${sj.href}"><b>${esc(sj.label)}</b></a>${sj.sub ? `<div class="sub">${esc(sj.sub)}</div>` : ''}</td>
           <td class="nowrap">${esc(c.who)}</td>
           <td class="nowrap">${methodLabel(c.method)}</td>
           <td>${esc((c.comm || '').slice(0, 200))}${(c.comm || '').length > 200 ? '…' : ''}${(c.attachments || []).length ? ` <span class="tag">${ico('i-clip', 'sm')} ${c.attachments.length}</span>` : ''}</td>
@@ -2145,6 +2318,7 @@ function physicianFormHTML(p) {
   p = p || {};
   const v = (k) => esc(p[k] || '');
   return `<form class="form" data-form="physician" data-id="${p.id || ''}" id="phys-form">
+    ${!p.id && p.clinicId && getClinic(p.clinicId) ? `<div class="notice info">${ico('i-info')}<div>Adding a provider at <b>${esc(getClinic(p.clinicId).name)}</b>.</div></div>` : ''}
     <fieldset><legend>Contact information</legend><div class="form">
       <div class="row3">
         <label><span class="req">First name</span><input name="firstName" required value="${v('firstName')}"></label>
@@ -2165,9 +2339,10 @@ function physicianFormHTML(p) {
       <label><span>Specialty</span><input name="specialty" list="spec-list" value="${v('specialty')}" placeholder="Start typing to see suggestions"></label>
       <datalist id="spec-list">${db.settings.specialties.map((s) => `<option value="${esc(s)}">`).join('')}</datalist>
     </fieldset>
-    <fieldset><legend>Practice</legend><div class="form">
-      <label><span>Practice / group name</span><input name="practice" list="practice-list" value="${v('practice')}"></label>
-      <datalist id="practice-list">${[...new Set(db.physicians.map((x) => x.practice).filter(Boolean))].map((s) => `<option value="${esc(s)}">`).join('')}</datalist>
+    <fieldset><legend>Clinic / practice</legend><div class="form">
+      <label><span>Clinic <span class="help">(choose from the clinic list — type to search)</span></span><input name="clinicName" list="clinic-list" value="${esc(p.clinicId && getClinic(p.clinicId) ? getClinic(p.clinicId).name : '')}" placeholder="Start typing the clinic name…" autocomplete="off"></label>
+      <datalist id="clinic-list">${db.clinics.slice().sort((a, b) => a.name.localeCompare(b.name)).map((k) => `<option value="${esc(k.name)}">${esc(k.city || '')}</option>`).join('')}</datalist>
+      <label><span>Practice / group name <span class="help">(if not in the clinic list)</span></span><input name="practice" value="${v('practice')}"></label>
       <label><span>Street address</span><input name="address" value="${v('address')}"></label>
       <div class="row3">
         <label><span>City</span><input name="city" value="${v('city')}"></label>
@@ -2230,6 +2405,11 @@ function savePhysicianFromForm(form) {
   const data = Object.fromEntries(new FormData(form).entries());
   Object.keys(data).forEach((k) => (data[k] = String(data[k]).trim()));
   if (data.state) data.state = data.state.toUpperCase();
+  const clinicName = data.clinicName; delete data.clinicName;
+  const clinic = clinicName ? db.clinics.find((k) => k.name.toLowerCase() === clinicName.toLowerCase()) : null;
+  if (clinicName && !clinic) { toast(`"${clinicName}" is not in the clinic list. Pick a name from the list, or add the clinic first.`, 'err'); return false; }
+  data.clinicId = clinic ? clinic.id : '';
+  if (clinic) { if (!data.practice) data.practice = clinic.name; ['address', 'city', 'state', 'zip'].forEach((f) => { if (!data[f] && clinic[f]) data[f] = clinic[f]; }); }
   const id = form.dataset.id;
   if (id) {
     Object.assign(getPhys(id), data, { updatedAt: nowISO(), updatedBy: session.name });
@@ -2272,7 +2452,8 @@ async function saveContactFromForm(form) {
     Object.assign(c, fields, { attachments: [...(c.attachments || []), ...attachments], updatedAt: nowISO(), updatedBy: session.name });
     toast('Contact updated');
   } else {
-    db.contacts.push({ id: uid(), physicianId: form.dataset.pid, ...fields, attachments, fuDone: false, createdAt: nowISO(), createdBy: session.name });
+    const physicianId = form.dataset.pid || String(fd.get('physicianId') || '');
+    db.contacts.push({ id: uid(), physicianId, clinicId: form.dataset.kid || '', ...fields, attachments, fuDone: false, createdAt: nowISO(), createdBy: session.name });
     toast('Contact saved' + (fields.fuDate ? ` — follow-up set for ${fmtDate(fields.fuDate)}` : ''));
   }
   saveDB(); rerender();
@@ -2321,7 +2502,7 @@ async function importBackup(file) {
     const d = normalizeDB(data.db);
     if (MODE === 'server') {
       try {
-        const r = await api('replace', { data: { physicians: d.physicians, contacts: d.contacts, referrals: d.referrals, tasks: d.tasks, settings: [{ id: 'main', ...d.settings }] } });
+        const r = await api('replace', { data: { clinics: d.clinics, physicians: d.physicians, contacts: d.contacts, referrals: d.referrals, tasks: d.tasks, settings: [{ id: 'main', ...d.settings }] } });
         serverVersion = r.version; db = d; snapshot = takeSnapshot(db);
       } catch (e) { toast('The backup could not be restored: ' + e.message, 'err'); return; }
     } else {
@@ -2417,8 +2598,8 @@ function exportContactsCSV() {
   const list = location.hash.startsWith('#/activity') ? filteredActivity() : db.contacts.slice().sort(byContactDesc);
   const rows = [['Date', 'Physician', 'Practice', 'Who Contacted', 'How', 'What Was Communicated', 'Ask', 'Follow-Up Date', 'Follow-Up Done', 'Attachments', 'Logged By', 'Logged At']];
   list.forEach((c) => {
-    const p = getPhys(c.physicianId);
-    rows.push([c.date, p ? physName(p) : '', p ? p.practice : '', c.who, c.method, c.comm, c.ask, c.fuDate, c.fuDone ? 'Yes' : c.fuDate ? 'No' : '', (c.attachments || []).map((a) => a.name).join('; '), c.createdBy, c.createdAt]);
+    const sj = contactSubject(c);
+    rows.push([c.date, sj.kind === 'physician' ? sj.label : '', sj.kind === 'physician' ? sj.sub : sj.label, c.who, c.method, c.comm, c.ask, c.fuDate, c.fuDone ? 'Yes' : c.fuDate ? 'No' : '', (c.attachments || []).map((a) => a.name).join('; '), c.createdBy, c.createdAt]);
   });
   download(`activity-${todayISO()}.csv`, '﻿' + toCSV(rows), 'text/csv');
 }
@@ -2497,7 +2678,18 @@ function loadSample() {
 const actions = {
   logout: () => logout(),
   'go-search': () => { ui.phys.q = ''; setTimeout(() => { const s = $('#phys-search'); if (s) s.focus(); }, 50); },
-  'add-physician': () => openModal({ title: 'Add a physician', body: physicianFormHTML(null), submitLabel: 'Add physician', onSubmit: () => savePhysicianFromForm($('#phys-form')) }),
+  'add-physician': (el) => openModal({ title: 'Add a physician', body: physicianFormHTML(el && el.dataset.cid ? { clinicId: el.dataset.cid } : null), submitLabel: 'Add physician', onSubmit: () => savePhysicianFromForm($('#phys-form')) }),
+  go: (el) => { location.hash = el.dataset.href; },
+  'add-clinic': () => openModal({ title: 'Add a clinic or account', body: clinicFormHTML(null), submitLabel: 'Add clinic', onSubmit: () => saveClinicFromForm($('#clinic-form'), '') }),
+  'edit-clinic': (el) => { const k = getClinic(el.dataset.id); openModal({ title: 'Edit ' + k.name, body: clinicFormHTML(k), submitLabel: 'Save changes', onSubmit: () => saveClinicFromForm($('#clinic-form'), k.id) }); },
+  'delete-clinic': (el) => {
+    const k = getClinic(el.dataset.id); const n = clinicPhysicians(k.id).length;
+    confirmBox(`Delete <b>${esc(k.name)}</b>? ${n ? `Its ${n} provider${n === 1 ? '' : 's'} will be kept but no longer linked to a clinic. ` : ''}Contacts logged with the clinic are kept in the activity log.`, () => {
+      db.physicians.forEach((p) => { if (p.clinicId === k.id) p.clinicId = ''; p.otherClinicIds = (p.otherClinicIds || []).filter((x) => x !== k.id); });
+      db.clinics = db.clinics.filter((x) => x.id !== k.id); saveDB(); toast('Clinic deleted'); location.hash = '#/clinics';
+    }, 'Delete', true);
+  },
+  'clin-more': () => { ui.clin.limit = (ui.clin.limit || 100) + 200; rerender(); },
   'edit-physician': (el) => { const p = getPhys(el.dataset.id); openModal({ title: 'Edit ' + physName(p), body: physicianFormHTML(p), submitLabel: 'Save changes', onSubmit: () => savePhysicianFromForm($('#phys-form')) }); },
   'delete-physician': (el) => {
     const p = getPhys(el.dataset.id);
@@ -2510,6 +2702,7 @@ const actions = {
     }, 'Delete permanently', true);
   },
   'open-phys': (el, e) => { if (!e.target.closest('a, button, input')) location.hash = '#/physician/' + el.dataset.id; },
+  'open-href': (el, e) => { if (!e.target.closest('a, button, input')) location.hash = el.dataset.href; },
   'filter-phys': (el) => { Object.assign(ui.phys, { q: '', spec: '', stage: el.dataset.stage || '', type: el.dataset.type || '' }); },
   print: () => window.print(),
   'advance-stage': (el) => {
@@ -2544,10 +2737,10 @@ const actions = {
   'fu-done': (el) => { const c = getContact(el.dataset.id); c.fuDone = true; c.fuDoneDate = todayISO(); c.fuDoneBy = session.name; saveDB(); toast('Follow-up marked done'); rerender(); },
   'fu-reopen': (el) => { const c = getContact(el.dataset.id); c.fuDone = false; c.fuDoneDate = ''; c.fuDoneBy = ''; saveDB(); toast('Follow-up reopened'); rerender(); },
   'fu-log': (el) => {
-    const c = getContact(el.dataset.id); const p = getPhys(c.physicianId);
+    const c = getContact(el.dataset.id); const sj = contactSubject(c);
     openModal({
-      title: 'Log a contact — ' + physName(p),
-      body: `<div class="notice info" style="margin-bottom:16px">${ico('i-info')}<div>Saving this will also mark the follow-up "<b>${esc(c.ask || 'from ' + fmtDate(c.date))}</b>" as done.</div></div>` + contactFormHTML(p.id, null).replace(/<div><button class="btn primary lg" type="submit">[\s\S]*?<\/button><\/div>/, ''),
+      title: 'Log a contact — ' + sj.label,
+      body: `<div class="notice info" style="margin-bottom:16px">${ico('i-info')}<div>Saving this will also mark the follow-up "<b>${esc(c.ask || 'from ' + fmtDate(c.date))}</b>" as done.</div></div>` + contactFormHTML(c.physicianId || '', null, c.clinicId || '').replace(/<div><button class="btn primary lg" type="submit">[\s\S]*?<\/button><\/div>/, ''),
       submitLabel: 'Save this contact',
       onSubmit: async () => {
         const ok = await saveContactFromForm($('#modal-root form'));
@@ -2560,9 +2753,9 @@ const actions = {
   'fu-view': (el) => { ui.fu.view = el.dataset.view; rerender(); },
   'task-tab': (el) => { ui.fu.ttab = el.dataset.tab; rerender(); },
   'task-quick': (el) => { const inp = el.closest('form').querySelector('[name=dueDate]'); inp.value = addDays(todayISO(), +el.dataset.days); },
-  'task-add': (el) => openModal({ title: 'Assign a task', body: taskFormHTML(null, { physicianId: el.dataset.pid, referralId: el.dataset.rid }), submitLabel: 'Assign task', onSubmit: async () => {
+  'task-add': (el) => openModal({ title: 'Assign a task', body: taskFormHTML(null, { physicianId: el.dataset.pid, referralId: el.dataset.rid, clinicId: el.dataset.cid }), submitLabel: 'Assign task', onSubmit: async () => {
     const f = $('#task-form'); if (!f.reportValidity()) return false; const fd = new FormData(f);
-    const t = { id: uid(), title: String(fd.get('title')).trim(), details: String(fd.get('details') || '').trim(), assignedTo: fd.get('assignedTo'), assignedBy: session.name, dueDate: fd.get('dueDate') || '', physicianId: f.dataset.pid || '', referralId: f.dataset.rid || '', done: false, createdAt: nowISO() };
+    const t = { id: uid(), title: String(fd.get('title')).trim(), details: String(fd.get('details') || '').trim(), assignedTo: fd.get('assignedTo'), assignedBy: session.name, dueDate: fd.get('dueDate') || '', physicianId: f.dataset.pid || '', referralId: f.dataset.rid || '', clinicId: f.dataset.cid || '', done: false, createdAt: nowISO() };
     db.tasks.push(t); saveDB(); toast(`Task assigned to ${t.assignedTo}`); rerender();
     if (t.assignedTo !== session.name) { await pushOps(); notifyTask(t, 'assigned'); }
     return true;
@@ -2793,6 +2986,7 @@ document.addEventListener('input', (e) => {
   const k = e.target.dataset.input;
   if (k === 'phys-q') { ui.phys.q = e.target.value; updatePhysTable(); }
   if (k === 'act-q') { ui.act.q = e.target.value; updateActivityTable(); }
+  if (k === 'clin-q') { ui.clin.q = e.target.value; ui.clin.limit = 100; const y = window.scrollY; $('#view').innerHTML = viewClinics(); window.scrollTo(0, y); const s = $('#clinic-search'); s.focus(); s.setSelectionRange(s.value.length, s.value.length); }
   if (k === 'ref-q') { ui.ref.q = e.target.value; const y = window.scrollY; $('#view').innerHTML = viewReferrals(); window.scrollTo(0, y); const s = $('[data-input=ref-q]'); s.focus(); s.setSelectionRange(s.value.length, s.value.length); }
 });
 document.addEventListener('change', (e) => {
@@ -2812,6 +3006,11 @@ document.addEventListener('change', (e) => {
     case 'act-from': ui.act.from = t.value; updateActivityTable(); break;
     case 'act-to': ui.act.to = t.value; updateActivityTable(); break;
     case 'dash-year': ui.year = +t.value; rerender(); break;
+    case 'clin-city': ui.clin.city = t.value; rerender(); break;
+    case 'clin-type': ui.clin.type = t.value; rerender(); break;
+    case 'clin-has': ui.clin.has = t.value; rerender(); break;
+    case 'clin-sort': ui.clin.sort = t.value; rerender(); break;
+    case 'phys-clinic': ui.phys.clinic = t.value; updatePhysTable(); break;
     case 'ref-phys': ui.ref.phys = t.value; rerender(); break;
     case 'ref-dest': ui.ref.dest = t.value; rerender(); break;
     case 'ref-from': ui.ref.from = t.value; rerender(); break;

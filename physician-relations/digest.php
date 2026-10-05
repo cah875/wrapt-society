@@ -31,12 +31,20 @@ function digestData(): array {
   if ($d === null) {
     $all = store()->all();
     $settings = []; foreach ($all['settings'] as $s) if (($s['id'] ?? '') === 'main') $settings = $s;
-    $d = ['physicians' => $all['physicians'], 'contacts' => $all['contacts'], 'referrals' => $all['referrals'], 'tasks' => $all['tasks'] ?? [], 'users' => $all['users'], 'settings' => $settings, 'riskDays' => max(1, (int)($settings['riskDays'] ?? 14))];
+    $d = ['clinics' => $all['clinics'] ?? [], 'physicians' => $all['physicians'], 'contacts' => $all['contacts'], 'referrals' => $all['referrals'], 'tasks' => $all['tasks'] ?? [], 'users' => $all['users'], 'settings' => $settings, 'riskDays' => max(1, (int)($settings['riskDays'] ?? 14))];
   }
   return $d;
 }
 function dName(array $p): string { return trim('Dr. ' . ($p['firstName'] ?? '') . ' ' . ($p['lastName'] ?? '')) . (!empty($p['credentials']) ? ', ' . $p['credentials'] : ''); }
 function dPhys(string $id): ?array { foreach (digestData()['physicians'] as $p) if ($p['id'] === $id) return $p; return null; }
+function dClinic(string $id): ?array { foreach (digestData()['clinics'] ?? [] as $c) if ($c['id'] === $id) return $c; return null; }
+function dSubject(array $c, string $url): array {   // [label, link] for a contact about a physician or a clinic
+  $p = !empty($c['physicianId']) ? dPhys($c['physicianId']) : null;
+  if ($p) return [dName($p), "$url/#/physician/{$p['id']}"];
+  $k = !empty($c['clinicId']) ? dClinic($c['clinicId']) : null;
+  if ($k) return [$k['name'], "$url/#/clinic/{$k['id']}"];
+  return ['Unknown', "$url/#/activity"];
+}
 function dDays(string $a, string $b): int { return (int)round((strtotime($b . ' 00:00:00') - strtotime($a . ' 00:00:00')) / 86400); }
 function dFmt(string $iso): string { return $iso ? date('D, M j', strtotime($iso . ' 00:00:00')) : '—'; }
 function refLastDate(array $r): string {
@@ -66,17 +74,17 @@ function buildDigestFor(array $user, bool $isTest = false): ?array {
   $overdue = []; $soon = [];
   foreach ($d['contacts'] as $c) {
     if (empty($c['fuDate']) || !empty($c['fuDone']) || ($c['who'] ?? '') !== $name) continue;
-    $p = dPhys($c['physicianId'] ?? ''); $who = $p ? dName($p) : 'Unknown physician';
+    [$who, $link] = dSubject($c, $url);
     $ask = trim((string)($c['ask'] ?? '')) ?: trim(mb_substr((string)($c['comm'] ?? ''), 0, 80));
     $line = "• $who — $ask";
-    if ($c['fuDate'] < $today) { $n = dDays($c['fuDate'], $today); $overdue[] = [$c['fuDate'], "$line · was due " . dFmt($c['fuDate']) . " ($n day" . ($n === 1 ? '' : 's') . " ago)\n    $url/#/physician/{$c['physicianId']}"]; }
-    elseif ($c['fuDate'] <= $weekEnd) $soon[] = [$c['fuDate'], "$line · " . ($c['fuDate'] === $today ? 'today' : dFmt($c['fuDate'])) . "\n    $url/#/physician/{$c['physicianId']}"];
+    if ($c['fuDate'] < $today) { $n = dDays($c['fuDate'], $today); $overdue[] = [$c['fuDate'], "$line · was due " . dFmt($c['fuDate']) . " ($n day" . ($n === 1 ? '' : 's') . " ago)\n    $link"]; }
+    elseif ($c['fuDate'] <= $weekEnd) $soon[] = [$c['fuDate'], "$line · " . ($c['fuDate'] === $today ? 'today' : dFmt($c['fuDate'])) . "\n    $link"];
   }
   $tOver = []; $tSoon = [];
   foreach ($d['tasks'] as $t) {
     if (!empty($t['done']) || ($t['assignedTo'] ?? '') !== $name || empty($t['dueDate'])) continue;
     $line = "• {$t['title']} · from {$t['assignedBy']}";
-    $lnk = !empty($t['physicianId']) ? "$url/#/physician/{$t['physicianId']}" : (!empty($t['referralId']) ? "$url/#/referral/{$t['referralId']}" : "$url/#/followups");
+    $lnk = !empty($t['physicianId']) ? "$url/#/physician/{$t['physicianId']}" : (!empty($t['referralId']) ? "$url/#/referral/{$t['referralId']}" : (!empty($t['clinicId']) ? "$url/#/clinic/{$t['clinicId']}" : "$url/#/followups"));
     if ($t['dueDate'] < $today) { $n = dDays($t['dueDate'], $today); $tOver[] = [$t['dueDate'], "$line · was due " . dFmt($t['dueDate']) . " ($n day" . ($n === 1 ? '' : 's') . " ago)\n    $lnk"]; }
     elseif ($t['dueDate'] <= $weekEnd) $tSoon[] = [$t['dueDate'], "$line · " . ($t['dueDate'] === $today ? 'today' : dFmt($t['dueDate'])) . "\n    $lnk"];
   }

@@ -198,6 +198,7 @@ try {
       $link = $url . '/#/followups';
       if (!empty($task['physicianId'])) $link = $url . '/#/physician/' . $task['physicianId'];
       elseif (!empty($task['referralId'])) $link = $url . '/#/referral/' . $task['referralId'];
+      elseif (!empty($task['clinicId'])) $link = $url . '/#/clinic/' . $task['clinicId'];
       if ($event === 'assigned') {
         $subject = $me['name'] . ' assigned you a task: ' . $task['title'];
         $text = "Hello $first,\n\n{$me['name']} assigned you a task in Physician Relations:\n\n  {$task['title']}\n  Due: $due" . (!empty($task['details']) ? "\n\n  {$task['details']}" : '') . "\n\nOpen it: $link\n\nMark it done in the app when it is finished and {$me['name']} will be told automatically.";
