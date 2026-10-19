@@ -479,7 +479,8 @@ const ico = (name, cls = '') => `<svg class="i ${cls}" aria-hidden="true"><use h
 const uid = () => Date.now().toString(36) + Math.random().toString(36).slice(2, 9);
 const num = (v) => { const n = parseFloat(v); return Number.isFinite(n) ? n : 0; };
 const nowISO = () => new Date().toISOString();
-function todayISO() { const d = new Date(); return new Date(d.getTime() - d.getTimezoneOffset() * 60000).toISOString().slice(0, 10); }
+let _today = { v: '', t: 0 };
+function todayISO() { const now = Date.now(); if (now - _today.t > 60000) { const d = new Date(now); _today = { v: new Date(d.getTime() - d.getTimezoneOffset() * 60000).toISOString().slice(0, 10), t: now }; } return _today.v; }
 function addDays(iso, n) { const d = new Date(iso + 'T00:00:00'); d.setDate(d.getDate() + n); return new Date(d.getTime() - d.getTimezoneOffset() * 60000).toISOString().slice(0, 10); }
 function daysBetween(a, b) { return Math.round((new Date(b + 'T00:00:00') - new Date(a + 'T00:00:00')) / 86400000); }
 function fmtDate(iso) { if (!iso) return '—'; const d = new Date(iso.length === 10 ? iso + 'T00:00:00' : iso); return isNaN(d) ? esc(iso) : d.toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric' }); }
@@ -692,6 +693,7 @@ function setSaveState(state) {
 }
 
 function saveDB() {
+  refGen++;
   db.meta.updatedAt = nowISO();
   if (MODE === 'server') {
     const ops = diffOps(db);
@@ -994,11 +996,25 @@ const getRef = (id) => db.referrals.find((r) => r.id === id);
 function legStage(l) { return l.lost ? 'lost' : l.resultedDate ? 'resulted' : l.completedDate ? 'completed' : l.scheduledDate ? 'scheduled' : 'sent'; }
 function legLastDate(l) { return [l.sentDate, l.scheduledDate, l.completedDate, l.resultedDate, l.lostDate, l.meditech && l.meditech.statusDate].filter(Boolean).sort().pop() || todayISO(); }
 function currentLeg(r) { return r.legs[r.legs.length - 1]; }
-function refWaiting(r) { const l = currentLeg(r); return l ? Math.max(0, daysBetween(legLastDate(l), todayISO())) : 0; }
+/* Status, waiting time and age are asked for many times per screen. They are worked out once per
+   referral per render; refGen moves on whenever the records change or the screen is redrawn. */
+let refGen = 0; const refMemo = new WeakMap();
+function refCalc(r) { let c = refMemo.get(r); if (!c || c.gen !== refGen) { c = { gen: refGen }; refMemo.set(r, c); } return c; }
+function refWaiting(r) { const c = refCalc(r); if (c.waiting === undefined) { const l = currentLeg(r); c.waiting = l ? Math.max(0, daysBetween(legLastDate(l), todayISO())) : 0; } return c.waiting; }
+let _byPhys = null, _byPhysGen = -1;
+function refsByPhysician() {
+  if (_byPhys && _byPhysGen === refGen) return _byPhys;
+  const m = new Map();
+  db.referrals.forEach((r) => { const ids = new Set(); r.legs.forEach((l) => { if (l.from && l.from.physicianId) ids.add(l.from.physicianId); if (l.to && l.to.physicianId) ids.add(l.to.physicianId); }); ids.forEach((id) => { if (!m.has(id)) m.set(id, []); m.get(id).push(r); }); });
+  _byPhys = m; _byPhysGen = refGen; return m;
+}
 /* A Meditech line whose only news is "No Auth Needed" / "Approved" with no order status is an authorization
    record for a booked case, not a referral waiting on somebody; it is not flagged until its date passes. */
 function legIsAuthOnly(l) { return !!(l.meditech && !l.meditech.orderStatus && /^(no auth needed|approved)$/i.test(l.meditech.authStatus || '') && legStage(l) === 'sent'); }
 function refRiskReason(r) {
+  const c = refCalc(r); if (c.risk === undefined) c.risk = refRiskReasonCalc(r); return c.risk;
+}
+function refRiskReasonCalc(r) {
   if (r.status !== 'active') return '';
   const l = currentLeg(r); if (!l) return '';
   if (l.scheduledDate && !l.completedDate && daysBetween(l.scheduledDate, todayISO()) > 2) return `Appointment on ${fmtDate(l.scheduledDate)} was not marked as seen`;
@@ -1007,7 +1023,7 @@ function refRiskReason(r) {
   if (legStage(l) !== 'resulted' && w >= db.settings.riskDays) return `No movement for ${w} days`;
   return '';
 }
-function refStatus(r) { return r.status === 'lost' ? 'lost' : r.status === 'complete' ? 'complete' : refRiskReason(r) ? 'risk' : 'active'; }
+function refStatus(r) { const c = refCalc(r); if (c.status === undefined) c.status = r.status === 'lost' ? 'lost' : r.status === 'complete' ? 'complete' : refRiskReason(r) ? 'risk' : 'active'; return c.status; }
 function refBadge(r) {
   const s = refStatus(r);
   return s === 'lost' ? '<span class="badge b-over">Dropped out</span>' : s === 'complete' ? '<span class="badge b-done">Complete</span>'
@@ -1025,10 +1041,10 @@ function legStatusText(l) {
 function legNextCheckpoint(l) { return l.lost ? null : CHECKPOINTS.slice(1).find((c) => !l[c.key]) || null; }
 function refFirstDate(r) { return r.legs.length ? r.legs[0].sentDate : r.createdAt.slice(0, 10); }
 function refLastDate(r) { const l = currentLeg(r); return r.closedAt ? r.closedAt.slice(0, 10) : l ? legLastDate(l) : todayISO(); }
-function refDays(r) { return Math.max(0, daysBetween(refFirstDate(r), refStatus(r) === 'active' || refStatus(r) === 'risk' ? todayISO() : refLastDate(r))); }
+function refDays(r) { const c = refCalc(r); if (c.days === undefined) { const st = refStatus(r); c.days = Math.max(0, daysBetween(refFirstDate(r), st === 'active' || st === 'risk' ? todayISO() : refLastDate(r))); } return c.days; }
 function avg(list) { return list.length ? Math.round((list.reduce((a, b) => a + b, 0) / list.length) * 10) / 10 : null; }
 function legInvolves(l, physicianId) { return (l.from && l.from.physicianId === physicianId) || (l.to && l.to.physicianId === physicianId); }
-function refsForPhysician(pid) { return db.referrals.filter((r) => r.legs.some((l) => legInvolves(l, pid))); }
+function refsForPhysician(pid) { return refsByPhysician().get(pid) || []; }
 function partyPickerHTML(name, current) {
   const deps = db.settings.departments, phys = db.physicians.slice().sort((a, b) => physSortName(a).localeCompare(physSortName(b)));
   let val = '';
@@ -1099,7 +1115,7 @@ function route() {
   }
   window.scrollTo(0, 0);
 }
-function rerender() { const y = window.scrollY; route(); window.scrollTo(0, y); }
+function rerender() { refGen++; const y = window.scrollY; route(); window.scrollTo(0, y); }
 function updateNavCount() {
   const n = openFollowups().filter((c) => fuState(c) === 'over').length + db.tasks.filter((t) => taskState(t) === 'over').length;
   const el = $('#nav-fu-count');
@@ -2175,7 +2191,6 @@ async function importMeditech(file) {
 
 function viewReferrals() {
   const f = ui.ref, R = db.referrals;
-  const withStatus = R.map((r) => ({ r, s: refStatus(r) }));
   const head = `
     <div class="page-head">
       <div><h1>Referrals &amp; Orders</h1><p class="lead">Follow each patient hand-off from start to finish so nobody falls through the cracks.</p></div>
@@ -2187,10 +2202,8 @@ function viewReferrals() {
       </div>
     </div>`;
   if (f.view === 'reports') return head + viewReferralReports();
-  const tabs = [['active', 'In progress'], ['risk', 'At risk'], ['complete', 'Completed'], ['lost', 'Dropped out'], ['all', 'All']];
-  const counts = { active: withStatus.filter((x) => x.s === 'active' || x.s === 'risk').length, risk: withStatus.filter((x) => x.s === 'risk').length, complete: withStatus.filter((x) => x.s === 'complete').length, lost: withStatus.filter((x) => x.s === 'lost').length, all: R.length };
-  const rows = refListRows();
-  const physOpts = db.physicians.filter((p) => R.some((r) => refInvolves(r, p.id))).sort((a, b) => physSortName(a).localeCompare(physSortName(b)));
+  const involved = refsByPhysician();
+  const physOpts = db.physicians.filter((p) => involved.has(p.id)).sort((a, b) => physSortName(a).localeCompare(physSortName(b)));
   const destOpts = [...new Set(R.flatMap((r) => r.legs.map((l) => l.to && l.to.label)).filter(Boolean))].sort();
   const m = refMetrics(R, { from: addDays(todayISO(), -29), to: todayISO() });
   return head + `
@@ -2214,7 +2227,19 @@ function viewReferrals() {
         </select></div>
         ${f.phys || f.dest || f.from || f.to || f.q ? `<button class="btn" data-act="ref-clear">Clear filters</button>` : ''}
       </div>
-      <div class="tabs">${tabs.map(([k, l]) => `<button class="${f.tab === k ? 'on' : ''}" data-act="ref-tab" data-tab="${k}">${l} (${counts[k]})</button>`).join('')}</div>
+      <div id="ref-list">${refListHTML()}</div>
+    </section>`;
+}
+/* The tabs, table and count line: redrawn on their own when the search box or a tab changes. */
+function refListHTML() {
+  const f = ui.ref, R = db.referrals;
+  const tabs = [['active', 'In progress'], ['risk', 'At risk'], ['complete', 'Completed'], ['lost', 'Dropped out'], ['all', 'All']];
+  const withStatus = R.map((r) => ({ r, s: refStatus(r) }));
+  const counts = { active: withStatus.filter((x) => x.s === 'active' || x.s === 'risk').length, risk: withStatus.filter((x) => x.s === 'risk').length, complete: withStatus.filter((x) => x.s === 'complete').length, lost: withStatus.filter((x) => x.s === 'lost').length, all: R.length };
+  const all = refListRows();
+  const sig = [f.tab, f.q, f.phys, f.dest, f.from, f.to, f.sort].join('\u0001'); if (sig !== f.sig) { f.sig = sig; f.limit = 100; }
+  const rows = all.slice(0, f.limit || 100);
+  return `<div class="tabs">${tabs.map(([k, l]) => `<button class="${f.tab === k ? 'on' : ''}" data-act="ref-tab" data-tab="${k}">${l} (${counts[k]})</button>`).join('')}</div>
       ${rows.length ? `<div class="table-wrap"><table>
         <thead><tr><th>Patient</th><th>Current step</th><th>Where it stands</th><th>Ordered</th><th class="num">Age</th><th>Watched by</th><th></th></tr></thead>
         <tbody>${rows.map(({ r, s }) => { const l = currentLeg(r); const risk = refRiskReason(r); return `
@@ -2226,10 +2251,12 @@ function viewReferrals() {
             <td class="num nowrap"><b>${refDays(r)}</b><div class="sub">days${s === 'active' || s === 'risk' ? `<br>${refWaiting(r)} since last move` : ''}</div></td>
             <td class="nowrap">${esc(r.owner || 'Everyone')}</td>
             <td class="nowrap" style="text-align:right"><a class="btn sm" href="#/referral/${r.id}">Open ${ico('i-chevron', 'sm')}</a></td>
-          </tr>`; }).join('')}</tbody></table></div><p class="count-line">Showing ${rows.length} of ${R.length} referrals</p>`
-        : `<p class="empty">${R.length ? 'Nothing matches. Try another tab or clear the filters.' : 'No referrals are being tracked yet. Click <b>Start tracking a referral</b> when a patient is referred or an order is placed.'}</p>`}
-    </section>`;
+          </tr>`; }).join('')}</tbody></table></div>
+        <p class="count-line">Showing ${rows.length < all.length ? `the first ${rows.length} of ${all.length}` : all.length} referral${all.length === 1 ? '' : 's'}${all.length !== R.length ? ` (${R.length} in total)` : ''}
+          ${rows.length < all.length ? ` &nbsp; <button class="btn sm" data-act="ref-more">Show 100 more</button> <button class="btn sm link" data-act="ref-more" data-all="1">Show all ${all.length}</button>` : ''}</p>`
+        : `<p class="empty">${R.length ? 'Nothing matches. Try another tab or clear the filters.' : 'No referrals are being tracked yet. Click <b>Start tracking a referral</b> when a patient is referred or an order is placed.'}</p>`}`;
 }
+function updateRefList() { const el = $('#ref-list'); if (!el) { rerender(); return; } refGen++; el.innerHTML = refListHTML(); updateNavCount(); }
 
 function viewReferralReports() {
   const s = ui.rep, R = db.referrals, range = repRange(), cmp = compareRange(range);
@@ -2237,8 +2264,9 @@ function viewReferralReports() {
   const dl = (k, o) => (before ? deltaHTML(now[k], before[k], { label: cmp.label, ...o }) : '');
   const tile = (label, val, k, o = {}, unit = '') => `<div class="kpi"><div class="label">${label}</div><div class="value">${val ?? '—'}${val !== null && unit ? `<span class="small muted"> ${unit}</span>` : ''}</div>${dl(k, o)}</div>`;
   // by surgeon / physician
+  const byPhys = refsByPhysician();
   const physRows = db.physicians.map((p) => {
-    const mine = R.filter((r) => refInvolves(r, p.id)); if (!mine.length) return null;
+    const mine = byPhys.get(p.id); if (!mine || !mine.length) return null;
     const m = refMetrics(mine, range), b = before ? refMetrics(mine, cmp) : null;
     const recv = mine.flatMap((r) => r.legs).filter((l) => l.to && l.to.physicianId === p.id && inRange(l.sentDate, range));
     const sent = mine.flatMap((r) => r.legs).filter((l) => l.from && l.from.physicianId === p.id && inRange(l.sentDate, range));
@@ -3048,7 +3076,8 @@ const actions = {
   'task-delete': (el) => { const t = getTask(el.dataset.id); confirmBox(`Delete the task "<b>${esc(t.title)}</b>"?`, () => { db.tasks = db.tasks.filter((x) => x.id !== t.id); saveDB(); toast('Task deleted'); rerender(); }, 'Delete', true); },
   /* --- referrals --- */
   'open-ref': (el, e) => { if (!e.target.closest('a, button, input')) location.hash = '#/referral/' + el.dataset.id; },
-  'ref-tab': (el) => { ui.ref.tab = el.dataset.tab; rerender(); },
+  'ref-tab': (el) => { ui.ref.tab = el.dataset.tab; updateRefList(); },
+  'ref-more': (el) => { ui.ref.limit = el.dataset.all ? 1e9 : (ui.ref.limit || 100) + 100; const y = window.scrollY; updateRefList(); window.scrollTo(0, y); },
   'ref-tab-link': (el) => { ui.ref.tab = el.dataset.tab; ui.ref.q = ''; ui.ref.view = 'list'; },
   'ref-view': (el) => { ui.ref.view = el.dataset.view; rerender(); },
   'ref-view-link': () => { ui.ref.view = 'reports'; },
@@ -3264,7 +3293,7 @@ document.addEventListener('input', (e) => {
   if (k === 'phys-q') { ui.phys.q = e.target.value; updatePhysTable(); }
   if (k === 'act-q') { ui.act.q = e.target.value; updateActivityTable(); }
   if (k === 'clin-q') { ui.clin.q = e.target.value; ui.clin.limit = 100; const y = window.scrollY; $('#view').innerHTML = viewClinics(); window.scrollTo(0, y); const s = $('#clinic-search'); s.focus(); s.setSelectionRange(s.value.length, s.value.length); }
-  if (k === 'ref-q') { ui.ref.q = e.target.value; const y = window.scrollY; $('#view').innerHTML = viewReferrals(); window.scrollTo(0, y); const s = $('[data-input=ref-q]'); s.focus(); s.setSelectionRange(s.value.length, s.value.length); }
+  if (k === 'ref-q') { ui.ref.q = e.target.value; clearTimeout(ui.ref._t); ui.ref._t = setTimeout(() => { const y = window.scrollY; updateRefList(); window.scrollTo(0, y); }, 180); }
 });
 document.addEventListener('change', (e) => {
   const t = e.target, k = t.dataset.change;
