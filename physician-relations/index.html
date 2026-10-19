@@ -994,10 +994,14 @@ function legStage(l) { return l.lost ? 'lost' : l.resultedDate ? 'resulted' : l.
 function legLastDate(l) { return [l.sentDate, l.scheduledDate, l.completedDate, l.resultedDate, l.lostDate, l.meditech && l.meditech.statusDate].filter(Boolean).sort().pop() || todayISO(); }
 function currentLeg(r) { return r.legs[r.legs.length - 1]; }
 function refWaiting(r) { const l = currentLeg(r); return l ? Math.max(0, daysBetween(legLastDate(l), todayISO())) : 0; }
+/* A Meditech line whose only news is "No Auth Needed" / "Approved" with no order status is an authorization
+   record for a booked case, not a referral waiting on somebody; it is not flagged until its date passes. */
+function legIsAuthOnly(l) { return !!(l.meditech && !l.meditech.orderStatus && /^(no auth needed|approved)$/i.test(l.meditech.authStatus || '') && legStage(l) === 'sent'); }
 function refRiskReason(r) {
   if (r.status !== 'active') return '';
   const l = currentLeg(r); if (!l) return '';
   if (l.scheduledDate && !l.completedDate && daysBetween(l.scheduledDate, todayISO()) > 2) return `Appointment on ${fmtDate(l.scheduledDate)} was not marked as seen`;
+  if (legIsAuthOnly(l)) return '';
   const w = refWaiting(r);
   if (legStage(l) !== 'resulted' && w >= db.settings.riskDays) return `No movement for ${w} days`;
   return '';
@@ -1014,7 +1018,7 @@ function legStatusText(l) {
     case 'resulted': return `Results received ${fmtDate(l.resultedDate)}`;
     case 'completed': return `Seen / done ${fmtDate(l.completedDate)} — waiting for results`;
     case 'scheduled': return `Scheduled for ${fmtDate(l.scheduledDate)}`;
-    default: return `Sent ${fmtDate(l.sentDate)} — waiting to be scheduled`;
+    default: return legIsAuthOnly(l) ? `Authorization ${l.meditech.authStatus === 'Approved' ? 'approved' : 'not needed'} ${fmtDate(l.meditech.statusDate || l.sentDate)} — case booked in Meditech` : `Sent ${fmtDate(l.sentDate)} — waiting to be scheduled`;
   }
 }
 function legNextCheckpoint(l) { return l.lost ? null : CHECKPOINTS.slice(1).find((c) => !l[c.key]) || null; }
@@ -2036,12 +2040,16 @@ function meditechLeg(row, trackingDate) {
   const to = meditechParty(row.referredTo, row.referredToLocation || row.referredToGroup || (row.destination === 'Inside' ? 'NWSH ' + row.referralType : row.referralType || 'Not recorded'));
   const pri = row.priority && row.priority.toLowerCase() !== 'routine' ? row.priority.toUpperCase() + ' · ' : '';
   const loc = row.referredToLocation && !to.label.includes(row.referredToLocation) ? ` · ${row.referredToLocation}` : '';
-  const sent = row.orderStart || row.effDate || row.statusDate || todayISO();
+  const runDate = mtDate(trackingDate) || todayISO();
+  const future = !!row.orderStart && row.orderStart > runDate; // e.g. a yearly DEXA ordered for next February
+  const sent = (future ? (row.statusDate || row.effDate) : (row.orderStart || row.statusDate || row.effDate)) || runDate;
   const out = meditechOutcome(row);
   const l = { id: uid(), from, to, service: pri + (row.order || row.referralType) + loc, sentDate: sent, scheduledDate: '', completedDate: '', resultedDate: '', notes: '',
     meditech: { authStatus: row.authStatus, orderStatus: row.orderStatus, statusDate: row.statusDate, assignedUser: row.assignedUser, payer: row.payer, authNumber: row.authNumber, referralNumber: row.referralNumber, destination: row.destination, neededBy: row.neededBy, expDate: row.expDate, trackingDate },
     log: [{ date: sent, by: 'Meditech', text: `Sent to ${to.label}` }] };
   if (row.statusDate && row.authStatus) l.log.push({ date: row.statusDate, by: 'Meditech', text: `Meditech status: ${row.authStatus}${row.orderStatus ? ' · order ' + row.orderStatus : ''}` });
+  if (future) { l.scheduledDate = row.orderStart; l.log.push({ date: sent, by: 'Meditech', text: `Future-dated order: starts ${fmtDate(row.orderStart)}` }); }
+  else if (out.kind === 'scheduled' && row.neededBy && row.neededBy >= sent) l.scheduledDate = row.neededBy;
   if (out.kind === 'complete') l.completedDate = row.statusDate || sent;
   if (out.kind === 'lost') { l.lost = true; l.lostDate = row.statusDate || sent; l.lostReason = out.reason; }
   return l;
@@ -2050,13 +2058,23 @@ function planMeditechImport(parsed) {
   const plan = { news: [], updates: [], unchanged: 0, older: 0, matched: 0, mentions: 0, trackingDate: parsed.trackingDate, warnings: parsed.warnings || [] };
   // keys written by the first version of the importer carried the run's start date; read those too
   const legacy = (k) => (k || '').replace(/^mrn\|([^|]*)\|\d{4}-\d\d-\d\d\|/, 'mrn|$1|');
+  // the first importer could add the same referral once per monthly run; merge those, keeping any the team has worked on
+  const untouched = (r) => !r.owner && !r.notes && r.legs.length === 1 && (r.legs[0].log || []).every((e) => e.by === 'Meditech') && !db.tasks.some((t) => t.referralId === r.id);
+  const groups = {}; db.referrals.forEach((r) => { if (r.source === 'meditech' && r.meditechKey) { const k = legacy(r.meditechKey); (groups[k] = groups[k] || []).push(r); } });
+  plan.drop = new Set();
+  for (const g of Object.values(groups)) {
+    if (g.length < 2) continue;
+    g.sort((a, b) => ((b.legs[0].meditech || {}).statusDate || '').localeCompare((a.legs[0].meditech || {}).statusDate || '') || (b.createdAt || '').localeCompare(a.createdAt || ''));
+    const keep = g.find((r) => !untouched(r)) || g[0];
+    g.forEach((r) => { if (r !== keep && untouched(r)) plan.drop.add(r.id); });
+  }
   const seen = new Set();
   for (const row of parsed.rows) {
     row.key = meditechKey(row);
     if (seen.has(row.key)) continue; seen.add(row.key);
     const leg = meditechLeg(row, parsed.trackingDate);
     for (const party of [row.referredBy, row.referredTo]) if (party) { plan.mentions++; if ((party === row.referredBy ? leg.from : leg.to).physicianId) plan.matched++; }
-    const existing = db.referrals.find((r) => r.meditechKey === row.key || legacy(r.meditechKey) === row.key);
+    const existing = db.referrals.find((r) => !plan.drop.has(r.id) && (r.meditechKey === row.key || legacy(r.meditechKey) === row.key));
     if (!existing) { plan.news.push({ row, leg }); continue; }
     if (existing.meditechKey !== row.key) existing.meditechKey = row.key;
     const old = existing.legs[0] && existing.legs[0].meditech || {};
@@ -2068,6 +2086,7 @@ function planMeditechImport(parsed) {
 }
 function applyMeditechImport(plan) {
   const by = session.name + ' (Meditech import)';
+  if (plan.drop && plan.drop.size) db.referrals = db.referrals.filter((r) => !plan.drop.has(r.id));
   for (const { row, leg } of plan.news) {
     const out = meditechOutcome(row);
     const r = { id: uid(), mrn: row.mrn, initials: row.initials, owner: '', notes: '', status: out.kind === 'complete' ? 'complete' : out.kind === 'lost' ? 'lost' : 'active', source: 'meditech', meditechKey: row.key, payer: row.payer, createdAt: nowISO(), createdBy: by, legs: [leg] };
@@ -2108,7 +2127,7 @@ async function importMeditech(file) {
   } catch (e) { toast('That file could not be read: ' + (e && e.message ? e.message : e), 'err'); return; }
   if (!parsed.rows.length) { toast('No referral records were found in that file. Use the "Referrals - All" worklist printed from Meditech (ARM Tracking).', 'err'); return; }
   const plan = planMeditechImport(parsed);
-  const n = plan.news.length, u = plan.updates.length;
+  const n = plan.news.length, u = plan.updates.length, d = plan.drop.size;
   const kinds = {}; plan.news.forEach(({ row }) => { const k = meditechOutcome(row).kind; kinds[k] = (kinds[k] || 0) + 1; });
   const body = `
     <p>Worklist${plan.trackingDate ? ` run <b>${esc(plan.trackingDate)}</b>` : ''}: <b>${parsed.rows.length}</b> referral${parsed.rows.length === 1 ? '' : 's'} read${parsed.total && parsed.total !== parsed.rows.length ? ` from ${parsed.total} lines (one line per insurance)` : ''}.</p>
@@ -2117,13 +2136,15 @@ async function importMeditech(file) {
       <li><span>Already tracked, status changed in Meditech</span><b>${u}</b></li>
       <li><span>Already tracked, no change</span><b>${plan.unchanged}</b></li>
       ${plan.older ? `<li><span>Already tracked with newer information than this file</span><b>${plan.older}</b></li>` : ''}
+      ${d ? `<li><span>Duplicates from earlier imports to merge</span><b>${d}</b></li>` : ''}
       ${n ? `<li><span class="muted">Of the new ones: ${kinds.open || 0} open, ${kinds.scheduled || 0} scheduled, ${kinds.complete || 0} completed, ${kinds.lost || 0} cancelled / denied / expired</span><span></span></li>` : ''}
       <li><span>Providers matched to a physician record</span><b>${plan.matched} of ${plan.mentions}</b></li>
     </ul>
     ${plan.warnings.length ? `<div class="notice" style="margin-top:10px">${ico('i-alert')}<div>${plan.warnings.slice(0, 6).map(esc).join('<br>')}${plan.warnings.length > 6 ? `<br>…and ${plan.warnings.length - 6} more` : ''}</div></div>` : ''}
     <p class="help" style="margin-top:12px">Patients are stored by MRN and initials only. Dates and checkpoints you have entered by hand are never overwritten; Meditech only fills in what is blank and records status changes.</p>`;
-  if (!(n + u)) saveDB();
-  openModal({ title: 'Import from Meditech', body, narrow: true, submitLabel: n + u ? `Import ${n + u} referral${n + u === 1 ? '' : 's'}` : 'Nothing to import', onSubmit: n + u ? () => { applyMeditechImport(plan); saveDB(); toast(`${n} added, ${u} updated from Meditech`); rerender(); return true; } : null });
+  if (!(n + u + d)) saveDB();
+  const label = n + u ? `Import ${n + u} referral${n + u === 1 ? '' : 's'}${d ? ` and merge ${d}` : ''}` : d ? `Merge ${d} duplicate${d === 1 ? '' : 's'}` : 'Nothing to import';
+  openModal({ title: 'Import from Meditech', body, narrow: true, submitLabel: label, onSubmit: n + u + d ? () => { applyMeditechImport(plan); saveDB(); toast(`${n} added, ${u} updated${d ? `, ${d} duplicates merged` : ''}`); rerender(); return true; } : null });
 }
 
 function viewReferrals() {
