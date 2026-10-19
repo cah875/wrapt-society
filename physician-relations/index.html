@@ -1944,6 +1944,9 @@ const MT_TYPES = ['Surgery', 'CT', 'MRI', 'Ultrasound', 'DEXA', 'IPM', 'Mammogra
   'NW Pediatrics Referral', 'ENT Referral', 'NW Urgent Care PF Referral', 'NW Urgent Care Athol Referral', 'Internal Medicine Referral', 'General & Breast Referral', "NW Women's Care Referral"];
 const MT_LABELS = ['Auth/Ref Order', 'Auth Status', 'Referred By Prov', 'Destination', 'Referred to Location', 'Referred To Prov', 'Referred to Prov Group', 'Insurance', 'Status Date', 'Needed by Date', 'Exp Date', 'Order Start Date', 'Order Status', 'Assigned User', 'Referred by Provider', 'Referred by Location', 'Referred by Provider Group', 'Referred to Provider', 'Referred to Location', 'Referred To Provider Group', 'Authorization Number', 'Referral Number', 'Assigned User', 'Needed by Date', 'Order Diagnosis', 'Order Status', 'Birthdate'];
 function mtDate(s) { const m = /^(\d\d)\/(\d\d)\/(\d\d)(?:\d\d)?/.exec((s || '').trim()); if (!m) return ''; const y = m[3].length === 2 ? '20' + m[3] : m[3]; return `${y}-${m[1]}-${m[2]}`; }
+/* What makes two worklist lines the same referral. The Eff Date is left out on purpose: it is the start
+   date the worklist was run with, so it changes from run to run. */
+function meditechKey(row) { return row.referralNumber ? 'ref:' + row.referralNumber : ['mrn', row.mrn, row.referralType, row.order, row.referredTo || row.referredToLocation].join('|'); }
 function mtName(s) { /* "Last,First M" -> { last, first } */ const m = /^([^,]+),\s*(\S+)/.exec((s || '').trim()); return m ? { last: m[1].trim(), first: m[2].trim() } : null; }
 function parseMeditechWorklist(raw) {
   let text = String(raw || '');
@@ -1996,7 +1999,7 @@ function parseMeditechWorklist(raw) {
     };
     // a value that is really a label (layout glitch around a page break) is treated as blank
     for (const k of Object.keys(row)) if (typeof row[k] === 'string' && (MT_LABELS.includes(row[k]) || row[k] === 'Group' || row[k].length > 120)) row[k] = '';
-    row.key = row.referralNumber ? 'ref:' + row.referralNumber : ['mrn', row.mrn, row.effDate, row.referralType, row.order, row.referredTo || row.referredToLocation].join('|');
+    row.key = meditechKey(row);
     // Meditech lists one line per insurance; consecutive identical records are the same referral
     const prev = rows[rows.length - 1];
     if (prev && prev.key === row.key && prev.authStatus === row.authStatus) { if (row.payer && !prev.payer.includes(row.payer)) prev.payer += ' / ' + row.payer; continue; }
@@ -2044,14 +2047,21 @@ function meditechLeg(row, trackingDate) {
   return l;
 }
 function planMeditechImport(parsed) {
-  const plan = { news: [], updates: [], unchanged: 0, matched: 0, mentions: 0, trackingDate: parsed.trackingDate, warnings: parsed.warnings || [] };
+  const plan = { news: [], updates: [], unchanged: 0, older: 0, matched: 0, mentions: 0, trackingDate: parsed.trackingDate, warnings: parsed.warnings || [] };
+  // keys written by the first version of the importer carried the run's start date; read those too
+  const legacy = (k) => (k || '').replace(/^mrn\|([^|]*)\|\d{4}-\d\d-\d\d\|/, 'mrn|$1|');
+  const seen = new Set();
   for (const row of parsed.rows) {
+    row.key = meditechKey(row);
+    if (seen.has(row.key)) continue; seen.add(row.key);
     const leg = meditechLeg(row, parsed.trackingDate);
     for (const party of [row.referredBy, row.referredTo]) if (party) { plan.mentions++; if ((party === row.referredBy ? leg.from : leg.to).physicianId) plan.matched++; }
-    const existing = db.referrals.find((r) => r.meditechKey === row.key);
+    const existing = db.referrals.find((r) => r.meditechKey === row.key || legacy(r.meditechKey) === row.key);
     if (!existing) { plan.news.push({ row, leg }); continue; }
+    if (existing.meditechKey !== row.key) existing.meditechKey = row.key;
     const old = existing.legs[0] && existing.legs[0].meditech || {};
     if (old.authStatus === row.authStatus && old.orderStatus === row.orderStatus && old.statusDate === row.statusDate) { plan.unchanged++; continue; }
+    if (old.statusDate && row.statusDate && row.statusDate < old.statusDate) { plan.older++; continue; } // an older run must not undo newer information
     plan.updates.push({ row, leg, existing });
   }
   return plan;
@@ -2106,11 +2116,13 @@ async function importMeditech(file) {
       <li><span>New referrals to add</span><b>${n}</b></li>
       <li><span>Already tracked, status changed in Meditech</span><b>${u}</b></li>
       <li><span>Already tracked, no change</span><b>${plan.unchanged}</b></li>
+      ${plan.older ? `<li><span>Already tracked with newer information than this file</span><b>${plan.older}</b></li>` : ''}
       ${n ? `<li><span class="muted">Of the new ones: ${kinds.open || 0} open, ${kinds.scheduled || 0} scheduled, ${kinds.complete || 0} completed, ${kinds.lost || 0} cancelled / denied / expired</span><span></span></li>` : ''}
       <li><span>Providers matched to a physician record</span><b>${plan.matched} of ${plan.mentions}</b></li>
     </ul>
     ${plan.warnings.length ? `<div class="notice" style="margin-top:10px">${ico('i-alert')}<div>${plan.warnings.slice(0, 6).map(esc).join('<br>')}${plan.warnings.length > 6 ? `<br>…and ${plan.warnings.length - 6} more` : ''}</div></div>` : ''}
     <p class="help" style="margin-top:12px">Patients are stored by MRN and initials only. Dates and checkpoints you have entered by hand are never overwritten; Meditech only fills in what is blank and records status changes.</p>`;
+  if (!(n + u)) saveDB();
   openModal({ title: 'Import from Meditech', body, narrow: true, submitLabel: n + u ? `Import ${n + u} referral${n + u === 1 ? '' : 's'}` : 'Nothing to import', onSubmit: n + u ? () => { applyMeditechImport(plan); saveDB(); toast(`${n} added, ${u} updated from Meditech`); rerender(); return true; } : null });
 }
 
