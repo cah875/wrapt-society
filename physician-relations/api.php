@@ -103,12 +103,24 @@ if ($method === 'POST') {
   else $body = $_POST;
 }
 $validId = fn($id) => is_string($id) && preg_match('/^[A-Za-z0-9_-]{1,64}$/', $id) === 1;
+/* The hosting's own PHP limits (upload_max_filesize / post_max_size) cap attachments regardless of
+   config.php. .user.ini next to this file raises them; this reports whichever limit is lowest. */
+function iniBytes(string $v): int {
+  $v = trim($v); if ($v === '' || $v === '-1' || $v === '0') return PHP_INT_MAX;
+  $n = (float)$v; $u = strtolower(substr($v, -1));
+  return (int)($u === 'g' ? $n * 1073741824 : ($u === 'm' ? $n * 1048576 : ($u === 'k' ? $n * 1024 : $n)));
+}
+function effectiveMaxFileMB(): int {
+  global $CFG;
+  $bytes = min((int)$CFG['max_file_mb'] * 1048576, iniBytes((string)ini_get('upload_max_filesize')), iniBytes((string)ini_get('post_max_size')) - 65536);
+  return max(1, (int)floor($bytes / 1048576));
+}
 
 try {
   switch ($action) {
 
     case 'ping':
-      out(['ok' => true, 'app' => APP_ID, 'mode' => 'server', 'loggedIn' => currentUser() !== null, 'appName' => $CFG['app_name'], 'idleMinutes' => $CFG['idle_minutes'], 'maxFileMB' => $CFG['max_file_mb']]);
+      out(['ok' => true, 'app' => APP_ID, 'mode' => 'server', 'loggedIn' => currentUser() !== null, 'appName' => $CFG['app_name'], 'idleMinutes' => $CFG['idle_minutes'], 'maxFileMB' => effectiveMaxFileMB()]);
 
     case 'login':
       if ($method !== 'POST') fail('Bad request.');
@@ -334,8 +346,15 @@ try {
       requireUser();
       if ($method !== 'POST') fail('Bad request.');
       $id = $_POST['id'] ?? '';
-      if (!$validId($id) || empty($_FILES['file']) || $_FILES['file']['error'] !== UPLOAD_ERR_OK) fail('The file could not be uploaded.');
-      if ($_FILES['file']['size'] > $CFG['max_file_mb'] * 1048576) fail('That file is larger than ' . $CFG['max_file_mb'] . ' MB.');
+      $limit = effectiveMaxFileMB();
+      // PHP drops the whole form (fields and file) when a post exceeds post_max_size.
+      if (empty($_FILES['file']) && empty($_POST) && (int)($_SERVER['CONTENT_LENGTH'] ?? 0) > 0) fail("The file was too large for the web server to accept. Attachments can be up to $limit MB on this hosting.");
+      if (!$validId($id) || empty($_FILES['file'])) fail('The file could not be uploaded.');
+      $err = (int)$_FILES['file']['error'];
+      if ($err === UPLOAD_ERR_INI_SIZE || $err === UPLOAD_ERR_FORM_SIZE) fail("That file is larger than the web server allows ($limit MB).");
+      if ($err === UPLOAD_ERR_PARTIAL) fail('The upload was interrupted before the whole file arrived. Please try again.');
+      if ($err !== UPLOAD_ERR_OK) fail('The web server could not accept the file (upload error ' . $err . '). Check that the data folder is writable.', 500);
+      if ($_FILES['file']['size'] > $limit * 1048576) fail("That file is larger than $limit MB.");
       $name = preg_replace('/[^\w .()\-]+/u', '_', (string)$_FILES['file']['name']) ?: 'file';
       if (!move_uploaded_file($_FILES['file']['tmp_name'], "$DATA/files/$id.bin")) fail('The file could not be saved on the server.', 500);
       file_put_contents("$DATA/files/$id.json", json_encode(['name' => $name, 'type' => (string)($_FILES['file']['type'] ?: 'application/octet-stream'), 'size' => (int)$_FILES['file']['size']]));

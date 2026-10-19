@@ -13,7 +13,7 @@ DirectoryIndex index.html
   RewriteRule ^data(/|$) - [F,L]
 </IfModule>
 
-<FilesMatch "^(config\.php|README\.md)$">
+<FilesMatch "^(config\.php|README\.md|\.user\.ini|lib\.php)$">
   Require all denied
 </FilesMatch>
 
