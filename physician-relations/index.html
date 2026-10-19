@@ -804,6 +804,7 @@ function showApp() {
   $('#login').hidden = true;
   $('#app').hidden = false;
   $('#user-name').textContent = session.name;
+  try { repairMeditechData(); } catch (e) { console.error('repair', e); }
   if (!location.hash || location.hash === '#' || location.hash === '#/') location.hash = '#/home';
   else route();
 }
@@ -2054,20 +2055,45 @@ function meditechLeg(row, trackingDate) {
   if (out.kind === 'lost') { l.lost = true; l.lostDate = row.statusDate || sent; l.lostReason = out.reason; }
   return l;
 }
-function planMeditechImport(parsed) {
-  const plan = { news: [], updates: [], unchanged: 0, older: 0, matched: 0, mentions: 0, trackingDate: parsed.trackingDate, warnings: parsed.warnings || [] };
-  // keys written by the first version of the importer carried the run's start date; read those too
-  const legacy = (k) => (k || '').replace(/^mrn\|([^|]*)\|\d{4}-\d\d-\d\d\|/, 'mrn|$1|');
-  // the first importer could add the same referral once per monthly run; merge those, keeping any the team has worked on
+// keys written by the first version of the importer carried the run's start date; read those too
+const legacyKey = (k) => (k || '').replace(/^mrn\|([^|]*)\|\d{4}-\d\d-\d\d\|/, 'mrn|$1|');
+/* The first importer could add the same referral once per monthly run. Finds the copies to remove,
+   keeping whichever one the team has worked on (or the newest). */
+function meditechDuplicateIds() {
   const untouched = (r) => !r.owner && !r.notes && r.legs.length === 1 && (r.legs[0].log || []).every((e) => e.by === 'Meditech') && !db.tasks.some((t) => t.referralId === r.id);
-  const groups = {}; db.referrals.forEach((r) => { if (r.source === 'meditech' && r.meditechKey) { const k = legacy(r.meditechKey); (groups[k] = groups[k] || []).push(r); } });
-  plan.drop = new Set();
+  const groups = {}; db.referrals.forEach((r) => { if (r.source === 'meditech' && r.meditechKey) { const k = legacyKey(r.meditechKey); (groups[k] = groups[k] || []).push(r); } });
+  const drop = new Set();
   for (const g of Object.values(groups)) {
     if (g.length < 2) continue;
     g.sort((a, b) => ((b.legs[0].meditech || {}).statusDate || '').localeCompare((a.legs[0].meditech || {}).statusDate || '') || (b.createdAt || '').localeCompare(a.createdAt || ''));
     const keep = g.find((r) => !untouched(r)) || g[0];
-    g.forEach((r) => { if (r !== keep && untouched(r)) plan.drop.add(r.id); });
+    g.forEach((r) => { if (r !== keep && untouched(r)) drop.add(r.id); });
   }
+  return drop;
+}
+/* Runs whenever the records load: merges duplicates, moves old keys to the current format and fixes
+   future-dated orders that an earlier build recorded as sent in the future. Nothing typed by hand is touched. */
+function repairMeditechData() {
+  if (!session) return;
+  const drop = meditechDuplicateIds(); let fixed = 0;
+  if (drop.size) db.referrals = db.referrals.filter((r) => !drop.has(r.id));
+  const today = todayISO();
+  db.referrals.forEach((r) => {
+    if (r.meditechKey && legacyKey(r.meditechKey) !== r.meditechKey) { r.meditechKey = legacyKey(r.meditechKey); fixed++; }
+    r.legs.forEach((l) => {
+      if (!l.meditech || !(l.sentDate > today) || l.scheduledDate) return;
+      const start = l.sentDate; l.scheduledDate = start;
+      l.sentDate = l.meditech.statusDate && l.meditech.statusDate < start ? l.meditech.statusDate : today;
+      (l.log = l.log || []).forEach((e) => { if (e.by === 'Meditech' && e.date > today) e.date = l.sentDate; });
+      l.log.push({ date: l.sentDate, by: 'Meditech', text: `Future-dated order: starts ${fmtDate(start)}` }); fixed++;
+    });
+  });
+  if (drop.size || fixed) { saveDB(); if (drop.size) toast(`${drop.size} duplicate Meditech referral${drop.size === 1 ? '' : 's'} merged`); }
+}
+function planMeditechImport(parsed) {
+  const plan = { news: [], updates: [], unchanged: 0, older: 0, matched: 0, mentions: 0, trackingDate: parsed.trackingDate, warnings: parsed.warnings || [] };
+  const legacy = legacyKey;
+  plan.drop = meditechDuplicateIds();
   const seen = new Set();
   for (const row of parsed.rows) {
     row.key = meditechKey(row);
