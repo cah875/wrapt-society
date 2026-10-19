@@ -191,6 +191,37 @@
   td .primary-text { font-weight: 700; font-size: 16px; }
   td .sub { color: var(--muted); font-size: 14px; }
   .count-line { color: var(--muted); font-size: 14px; margin: 10px 0 0; }
+  .chips { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; margin: 0 0 14px; }
+  .chips-label { font-size: 13px; color: var(--muted); font-weight: 600; margin-right: 2px; }
+  .chip { display: inline-flex; align-items: center; gap: 6px; border: 1px solid var(--border); background: var(--surface); border-radius: 999px; padding: 6px 13px; font: inherit; font-size: 14px; font-weight: 600; cursor: pointer; color: var(--text); line-height: 1.2; }
+  .chip:hover { border-color: var(--green); }
+  .chip.on { background: var(--green); color: #fff; border-color: var(--green); }
+  .chip.filter { background: var(--surface-2); font-weight: 500; }
+  .chip.filter.clear { background: transparent; color: var(--teal); border-style: dashed; }
+  .chip .x { font-weight: 700; opacity: .7; }
+  .chips.filters-on { margin: 0 0 12px; }
+  th.sortable { cursor: pointer; user-select: none; white-space: nowrap; }
+  th.sortable:hover { color: var(--text); text-decoration: underline; }
+  th.sortable .arrow { color: var(--green-dark); }
+  td.chk, th.chk { width: 26px; padding-right: 0; }
+  td.chk input, th.chk input { width: 18px; height: 18px; cursor: pointer; }
+  tr.selected td { background: var(--green-soft); }
+  .bulk-bar { display: flex; gap: 10px; align-items: center; flex-wrap: wrap; background: var(--surface-2); border: 1px solid var(--border); border-radius: 10px; padding: 8px 12px; margin: 0 0 12px; font-size: 14px; }
+  .bulk-bar select { width: auto; min-width: 170px; }
+  table.breakdown { margin-bottom: 4px; }
+  table.breakdown td, table.breakdown th { padding: 7px 10px; }
+  table.breakdown tr.clickable:hover td { background: var(--surface-2); }
+  td.red { color: var(--red); font-weight: 700; }
+  .filters.more { padding: 10px 12px 2px; background: var(--surface-2); border-radius: 10px; }
+  .filters .field { max-width: 100%; min-width: 0; }
+  .filters .pair { display: flex; gap: 6px; flex-wrap: wrap; max-width: 100%; }
+  .filters .pair select { min-width: 0; max-width: 100%; }
+  .filters .pair select:last-child { flex: 1 1 180px; width: auto; max-width: min(100%, 360px); }
+  @media (max-width: 640px) { .filters .pair { flex-direction: column; } .filters .pair select { width: 100%; } .filters .field { flex: 1 1 100%; } .filters .field select, .filters .field input { width: 100%; } }
+  .btn.on { border-color: var(--green); color: var(--green-dark); }
+  .lookup { display: flex; gap: 10px; align-items: center; flex-wrap: wrap; margin: -6px 0 18px; }
+  .lookup .search { flex: 0 1 320px; }
+  table.mini td, table.mini th { padding: 7px 10px; font-size: 14px; }
 
   /* ---------- Progress ---------- */
   .bar { height: 10px; background: #e6e9e4; border-radius: 999px; overflow: hidden; }
@@ -1067,10 +1098,10 @@ function readParty(fd, name) {
 
 /* ===================== UI state ===================== */
 const ui = {
-  phys: { q: '', stage: '', type: '', spec: '', clinic: '', rel: '', sort: 'name' },
+  phys: { q: '', stage: '', type: '', spec: '', clinic: '', rel: '', sort: 'name', dir: 0, refs: '', group: '' },
   clin: { q: '', city: '', type: '', has: '', sort: 'name', limit: 100 },
   fu: { tab: 'over', mine: false },
-  ref: { tab: 'active', q: '', view: 'list', sort: 'attention', phys: '', dest: '', from: '', to: '' },
+  ref: { tab: 'active', q: '', view: 'list', sort: 'attention', dir: 0, phys: '', role: 'any', dest: '', sender: '', from: '', to: '', cat: '', pri: '', payer: '', mstat: '', inout: '', owner: '', source: '', group: '', more: false, limit: 100, sel: new Set(), bulkOwner: '' },
   rep: { preset: '12m', from: '', to: '', compare: 'prev', sort: 'ordered', dir: -1 },
   act: { q: '', who: '', method: '', from: '', to: '' },
   year: new Date().getFullYear(),
@@ -1104,6 +1135,7 @@ function route() {
       break;
     }
     case 'referrals': main.innerHTML = viewReferrals(); break;
+    case 'patient': main.innerHTML = viewPatient(decodeURIComponent(parts.slice(1).join('/'))); break;
     case 'referral': {
       const r = getRef(parts[1]);
       main.innerHTML = r ? viewReferral(r) : `<div class="card empty">That referral could not be found. <a href="#/referrals">Back to all referrals</a></div>`;
@@ -1125,6 +1157,7 @@ function updateNavCount() {
   el2.hidden = !m; el2.textContent = m;
 }
 window.addEventListener('hashchange', route);
+document.addEventListener('keydown', (e) => { if (e.key === 'Enter' && e.target && e.target.id === 'patient-mrn') { e.preventDefault(); actions['patient-go'](e.target, e); } });
 
 /* ===================== View: Home ===================== */
 function viewHome() {
@@ -1136,7 +1169,8 @@ function viewHome() {
         <button class="btn primary lg" data-act="add-physician">${ico('i-plus')}Add a Physician</button>
         <a class="btn lg" href="#/physicians" data-act="go-search">${ico('i-search')}Find a Physician</a>
       </div>
-    </div>`;
+    </div>
+    ${db.referrals.length ? `<div class="lookup no-print"><span class="field-label">Look up a patient</span><div class="search"><svg class="i"><use href="#i-search"/></svg><input id="patient-mrn" type="search" placeholder="Type an MRN and press Enter" aria-label="Patient MRN"></div><button class="btn" data-act="patient-go">Open patient</button></div>` : ''}`;
   if (!P.length) {
     return head + `
       <div class="card" style="padding:40px 24px;text-align:center">
@@ -1285,8 +1319,21 @@ function viewPhysicians() {
         <div class="field"><span class="field-label">Specialty</span><select data-change="phys-spec" aria-label="Specialty">
           <option value="">All specialties</option>${specs.map((s) => `<option ${f.spec === s ? 'selected' : ''}>${esc(s)}</option>`).join('')}
         </select></div>
+        <div class="field"><span class="field-label">Referrals</span><select data-change="phys-refs" aria-label="Referrals">
+          <option value="">Any</option>
+          <option value="open" ${f.refs === 'open' ? 'selected' : ''}>With referrals in progress</option>
+          <option value="risk" ${f.refs === 'risk' ? 'selected' : ''}>With referrals at risk</option>
+          <option value="any" ${f.refs === 'any' ? 'selected' : ''}>With any tracked referral</option>
+          <option value="none" ${f.refs === 'none' ? 'selected' : ''}>No tracked referrals</option>
+        </select></div>
+        <div class="field"><span class="field-label">Break down by</span><select data-change="phys-group" aria-label="Break down by">
+          <option value="">No breakdown</option>
+          ${[['spec', 'Specialty'], ['rel', 'Relationship with NWSH'], ['stage', 'Status step'], ['clinic', 'Clinic / practice'], ['city', 'City']].map(([k, l]) => `<option value="${k}" ${f.group === k ? 'selected' : ''}>${l}</option>`).join('')}
+        </select></div>
         <div class="field"><span class="field-label">Sort by</span><select data-change="phys-sort" aria-label="Sort by">
           <option value="name" ${f.sort === 'name' ? 'selected' : ''}>Last name</option>
+          <option value="refs" ${f.sort === 'refs' ? 'selected' : ''}>Most referrals in progress</option>
+          <option value="risk" ${f.sort === 'risk' ? 'selected' : ''}>Most referrals at risk</option>
           <option value="next" ${f.sort === 'next' ? 'selected' : ''}>Next follow-up</option>
           <option value="last" ${f.sort === 'last' ? 'selected' : ''}>Most recently contacted</option>
           <option value="stale" ${f.sort === 'stale' ? 'selected' : ''}>Longest since contact</option>
@@ -1301,11 +1348,29 @@ function viewPhysicians() {
       <div class="table-wrap" id="phys-table"></div>
     </section>`;
 }
+const PHYS_SORT_DESC = ['last', 'enc', 'proc', 'enc25', 'refs', 'risk', 'total'];
+function physBreakdownHTML(rows) {
+  const g = ui.phys.group, groups = new Map();
+  const keyOf = (p) => { switch (g) { case 'spec': return [p.specialty || 'No specialty', p.specialty || '']; case 'rel': { const k = p.nwshRelation || 'none'; return [NWSH_REL[k][0], k]; } case 'stage': { const k = p.stage || 'a'; return [stageLabelFor(k, p.relType), k]; } case 'clinic': { const c = p.clinicId ? getClinic(p.clinicId) : null; return [c ? c.name : (p.practice || 'No clinic on file'), c ? c.id : '']; } case 'city': return [p.city || (p.clinicId && getClinic(p.clinicId) ? getClinic(p.clinicId).city : '') || 'No city on file', '']; } return ['—', '']; };
+  rows.forEach(({ p, ri }) => { const [k, id] = keyOf(p); let b = groups.get(k); if (!b) { b = { k, id, n: 0, staff: 0, referring: 0, open: 0, risk: 0 }; groups.set(k, b); } b.n++; if ((p.stage || 'a') === 'd') b.staff++; if (p.nwshRelation === 'referring') b.referring++; b.open += ri.open; b.risk += ri.risk; });
+  const list = [...groups.values()].sort((a, b) => b.n - a.n).slice(0, 60);
+  const title = { spec: 'Specialty', rel: 'Relationship with NWSH', stage: 'Status step', clinic: 'Clinic / practice', city: 'City' }[g];
+  return `<div class="table-wrap"><table class="breakdown">
+    <thead><tr><th>${title}</th><th class="num">Physicians</th><th class="num">On-boarded</th><th class="num">Referring to NWSH (2026)</th><th class="num">Referrals in progress</th><th class="num">At risk</th></tr></thead>
+    <tbody>${list.map((b) => `<tr class="clickable" data-act="phys-group-row" data-g="${g}" data-k="${esc(b.k)}" data-id="${esc(b.id)}" title="Show only these physicians"><td><b>${esc(b.k)}</b></td><td class="num">${b.n}</td><td class="num">${b.staff}</td><td class="num">${b.referring}</td><td class="num">${b.open}</td><td class="num ${b.risk ? 'red' : ''}">${b.risk}</td></tr>`).join('')}</tbody>
+  </table></div><p class="help" style="margin:6px 0 14px">Click a row to show only those physicians.${groups.size > 60 ? ` Showing the 60 largest of ${groups.size} groups.` : ''}</p>`;
+}
 function updatePhysTable() {
   const el = $('#phys-table'); if (!el) return;
   const f = ui.phys;
   const q = f.q.trim().toLowerCase();
-  let rows = db.physicians.map((p) => ({ p, lc: lastContact(p.id), nf: nextFU(p.id) })).filter(({ p }) => {
+  const byP = refsByPhysician();
+  const refInfo = (p) => { const rs = byP.get(p.id) || []; let open = 0, risk = 0; rs.forEach((r) => { const s = refStatus(r); if (s === 'risk') { risk++; open++; } else if (s === 'active') open++; }); return { total: rs.length, open, risk }; };
+  let rows = db.physicians.map((p) => ({ p, lc: lastContact(p.id), nf: nextFU(p.id), ri: refInfo(p) })).filter(({ p, ri }) => {
+    if (f.refs === 'open' && !ri.open) return false;
+    if (f.refs === 'risk' && !ri.risk) return false;
+    if (f.refs === 'any' && !ri.total) return false;
+    if (f.refs === 'none' && ri.total) return false;
     if (f.stage && (p.stage || 'a') !== f.stage) return false;
     if (f.type && (p.relType || 'prospect') !== f.type) return false;
     if (f.spec && p.specialty !== f.spec) return false;
@@ -1329,20 +1394,25 @@ function updatePhysTable() {
     proc: (r) => (r.p.nwsh ? r.p.nwsh.procedures2026 : -1),
     enc25: (r) => (r.p.nwsh ? r.p.nwsh.encounters2025 : -1),
     seen: (r) => (r.p.nwsh && r.p.nwsh.lastSeen ? r.p.nwsh.lastSeen : '9999'),
+    refs: (r) => r.ri.open, risk: (r) => r.ri.risk, total: (r) => r.ri.total,
+    rel: (r) => ['staff', 'referring', 'lapsed', 'none'].indexOf(r.p.nwshRelation || 'none'),
   };
   const key = keys[f.sort] || keys.name;
-  const dir = ['last', 'enc', 'proc', 'enc25'].includes(f.sort) ? -1 : 1;
+  const dir = f.dir || (PHYS_SORT_DESC.includes(f.sort) ? -1 : 1);
   rows.sort((a, b) => { const x = key(a), z = key(b); return (x > z ? 1 : x < z ? -1 : 0) * dir || physSortName(a.p).localeCompare(physSortName(b.p)); });
-  el.innerHTML = rows.length ? `
+  const arrow = (k) => (f.sort === k ? `<span class="arrow">${dir < 0 ? '▾' : '▴'}</span>` : '');
+  const th = (k, label, cls = '') => `<th class="sortable ${cls}" data-act="phys-sort-col" data-key="${k}" title="Sort by ${label}">${label} ${arrow(k)}</th>`;
+  el.innerHTML = (f.group ? physBreakdownHTML(rows) : '') + (rows.length ? `
     <table>
-      <thead><tr><th>Physician</th><th>Status</th><th>With NWSH</th><th class="num">2026 cases / encounters</th><th>Last contact</th><th>Next follow-up</th><th></th></tr></thead>
-      <tbody>${rows.map(({ p, lc, nf }) => `
+      <thead><tr>${th('name', 'Physician')}${th('status', 'Status')}${th('rel', 'With NWSH')}${th('enc', '2026 cases / encounters', 'num')}${th('refs', 'Referrals', 'num')}${th('last', 'Last contact')}${th('next', 'Next follow-up')}<th></th></tr></thead>
+      <tbody>${rows.map(({ p, lc, nf, ri }) => `
         <tr class="clickable" data-act="open-phys" data-id="${p.id}">
           <td><div class="primary-text"><a href="#/physician/${p.id}">${esc(physSortName(p))}${p.credentials ? `, ${esc(p.credentials)}` : ''}</a></div>
               <div class="sub">${[p.specialty, p.practice].filter(Boolean).map(esc).join(' · ') || '&nbsp;'}</div></td>
           <td>${stageBadge(p)}</td>
           <td>${nwshBadge(p)}</td>
           <td class="num nowrap">${p.nwsh ? `<b>${fmtNum(p.nwsh.procedures2026)}</b> / ${fmtNum(p.nwsh.encounters2026)}<div class="sub">${p.nwsh.lastSeen ? 'seen ' + fmtDate(p.nwsh.lastSeen) : p.nwsh.encounters2025 ? fmtNum(p.nwsh.encounters2025) + ' in 2025' : ''}</div>` : '<span class="muted">—</span>'}</td>
+          <td class="num nowrap">${ri.total ? `<b>${ri.open}</b> open${ri.risk ? ` · <span style="color:var(--red)">${ri.risk} at risk</span>` : ''}<div class="sub">${ri.total} tracked</div>` : '<span class="muted">—</span>'}</td>
           <td class="nowrap">${lc ? `${fmtDate(lc.date)}<div class="sub">${esc(lc.method)} · ${esc(lc.who)}</div>` : '<span class="muted">Never</span>'}</td>
           <td class="nowrap">${nf ? `${fmtDate(nf.fuDate)}<div>${fuBadge(nf)}</div>` : '<span class="muted">None scheduled</span>'}</td>
           <td class="nowrap" style="text-align:right"><a class="btn sm" href="#/physician/${p.id}">Open ${ico('i-chevron', 'sm')}</a></td>
@@ -1350,7 +1420,7 @@ function updatePhysTable() {
       </tbody>
     </table>
     <p class="count-line">Showing ${rows.length} of ${db.physicians.length} physicians</p>`
-    : `<div class="empty">${db.physicians.length ? 'No physicians match. Try a different search or choose "All physicians" above.' : 'No physicians yet. Click <b>Add a Physician</b> to enter the first one.'}</div>`;
+    : `<div class="empty">${db.physicians.length ? 'No physicians match. Try a different search or choose "All physicians" above.' : 'No physicians yet. Click <b>Add a Physician</b> to enter the first one.'}</div>`);
 }
 
 /* ===================== View: Clinics & accounts ===================== */
@@ -1603,6 +1673,11 @@ function viewPhysician(p) {
               <div class="kpi"><div class="label">Dropped, 12 mo</div><div class="value">${m.dropped}</div></div>
               <div class="kpi"><div class="label">Days to see pt.</div><div class="value">${seen ?? '—'}</div></div>
             </div>
+            ${(() => { const open = rs.filter((r) => ['active', 'risk'].includes(refStatus(r))).sort((a, b) => ((refStatus(a) === 'risk' ? 0 : 1) - (refStatus(b) === 'risk' ? 0 : 1)) || refWaiting(b) - refWaiting(a)).slice(0, 8); return open.length ? `
+            <div class="table-wrap" style="margin-top:12px"><table class="mini">
+              <thead><tr><th>Patient</th><th>Referred from → to</th><th>Where it stands</th><th class="num">Waiting</th></tr></thead>
+              <tbody>${open.map((r) => { const l = currentLeg(r); return `<tr class="clickable" data-act="open-ref" data-id="${r.id}"><td><a href="#/patient/${encodeURIComponent(r.mrn)}">${esc(r.mrn)}</a><div class="sub">${esc(r.initials || '')}</div></td><td><b>${esc(l.from.label)}</b> ${ico('i-arrow-right', 'sm')} <b>${esc(l.to.label)}</b><div class="sub">${esc(l.service || '')}</div></td><td>${refBadge(r)}<div class="sub">${esc(legStatusShort(l))}</div></td><td class="num nowrap">${refWaiting(r)} d</td></tr>`; }).join('')}</tbody>
+            </table></div>${rs.length > open.length ? `<p class="help" style="margin:6px 0 0">Showing the ${open.length} most pressing open referrals.</p>` : ''}` : ''; })()}
             <p class="help" style="margin:10px 0 0"><a href="#/referrals" data-act="ref-phys-link" data-id="${p.id}">See this physician's referrals</a> · <a href="#/referrals" data-act="ref-view-link">Open the reports</a></p>`;
           })()}
         </section>
@@ -1928,33 +2003,75 @@ function trendChartHTML(series) {
 }
 
 /* ===================== View: Referrals & orders ===================== */
-function refListRows() {
-  const f = ui.ref, q = f.q.trim().toLowerCase();
-  const tabs = {
-    active: (s) => s === 'active' || s === 'risk', risk: (s) => s === 'risk', complete: (s) => s === 'complete', lost: (s) => s === 'lost', all: () => true,
-  };
-  const tabFn = tabs[f.tab] || tabs.active;
+const REF_CATS = ['Clinic referral', 'Imaging', 'Surgery & procedures', 'Other'];
+function refMed(r) { const l = r.legs[0]; return (l && l.meditech) || null; }
+/* What kind of hand-off this is, from the Meditech referral type when there is one, else from the wording. */
+function refCategory(r) {
+  const c = refCalc(r); if (c.cat) return c.cat;
+  const l = r.legs[0] || {}, m = l.meditech || {};
+  const t = (m.referralType || '').toLowerCase(), s = ((l.service || '') + ' ' + (l.to ? l.to.label : '')).toLowerCase();
+  let cat = 'Other';
+  if (t) {
+    if (/referral$|clearance$/.test(t)) cat = 'Clinic referral';
+    else if (/^(ct|mri|ultrasound|dexa|mammography|xray|x-ray|pet|nuclear medicine|lab)$/.test(t)) cat = 'Imaging';
+    else if (/^(surgery|outpatient|ipm)$/.test(t)) cat = 'Surgery & procedures';
+  } else if (/\b(ct|mri|mr|us|ultrasound|dexa|mammo\w*|x-?ray|pet|nuclear|imaging|echo|scan)\b/.test(s)) cat = 'Imaging';
+  else if (/surg|procedure|injection|rfa|mbnb|epidural|tpi|arthro|block/.test(s)) cat = 'Surgery & procedures';
+  else if (/referral|consult|clinic|therapy|clearance/.test(s)) cat = 'Clinic referral';
+  c.cat = cat; return cat;
+}
+function refPriority(r) { const l = r.legs[0] || {}; const p = (l.meditech && l.meditech.priority) || ((/^(stat|urgent)\b/i.exec(l.service || '') || [])[0]) || ''; return /stat/i.test(p) ? 'Stat' : /urgent/i.test(p) ? 'Urgent' : ''; }
+function refStatusLabel(s) { return { active: 'In progress', risk: 'At risk', complete: 'Complete', lost: 'Dropped out' }[s] || s; }
+function shortText(t, n) { t = String(t || ''); return t.length > n ? t.slice(0, n - 1) + '…' : t; }
+function fmtMonth(ym) { const d = new Date(ym + '-01T00:00:00'); return isNaN(d) ? ym : d.toLocaleDateString(undefined, { month: 'short', year: 'numeric' }); }
+function legStatusShort(l) {
+  if (!l) return '';
+  switch (legStage(l)) {
+    case 'lost': return 'Dropped out';
+    case 'resulted': return `Results back ${fmtDate(l.resultedDate)}`;
+    case 'completed': return `Seen / done ${fmtDate(l.completedDate)}`;
+    case 'scheduled': return `Scheduled for ${fmtDate(l.scheduledDate)}`;
+    default: return legIsAuthOnly(l) ? 'Authorization cleared, case booked' : `Sent ${fmtDate(l.sentDate)}, not yet scheduled`;
+  }
+}
+const REF_SORT_DEFAULT_DIR = { attention: 1, patient: 1, cat: 1, step: 1, status: 1, ordered: -1, age: -1, waiting: -1, completed: -1, owner: 1, dest: 1 };
+const REF_FILTER_KEYS = ['q', 'phys', 'role', 'dest', 'sender', 'from', 'to', 'cat', 'pri', 'payer', 'mstat', 'inout', 'owner', 'source'];
+function refFilterSig() { const f = ui.ref; return ['tab', 'sort', 'dir', ...REF_FILTER_KEYS].map((k) => f[k] || '').join('\u0001'); }
+function refClearFilters() { REF_FILTER_KEYS.forEach((k) => { ui.ref[k] = ''; }); ui.ref.role = 'any'; }
+function refListRows(opts = {}) {
+  const f = ui.ref, q = (f.q || '').trim().toLowerCase();
+  const tabs = { active: (s) => s === 'active' || s === 'risk', risk: (s) => s === 'risk', complete: (s) => s === 'complete', lost: (s) => s === 'lost', all: () => true };
+  const tabFn = opts.ignoreTab ? tabs.all : (tabs[f.tab] || tabs.active);
+  const role = f.role === 'from' || f.role === 'to' ? f.role : undefined;
   let rows = db.referrals.map((r) => ({ r, s: refStatus(r) })).filter(({ r, s }) => {
     if (!tabFn(s)) return false;
-    if (f.phys && !refInvolves(r, f.phys)) return false;
+    if (f.phys && !refInvolves(r, f.phys, role)) return false;
     if (f.dest && !r.legs.some((l) => l.to && l.to.label === f.dest)) return false;
+    if (f.sender && !r.legs.some((l) => l.from && l.from.label === f.sender)) return false;
     if (f.from && refFirstDate(r) < f.from) return false;
     if (f.to && refFirstDate(r) > f.to) return false;
-    if (q) { const hay = [r.mrn, r.initials, r.notes, r.owner, ...r.legs.flatMap((l) => [l.from && l.from.label, l.to && l.to.label, l.service])].join(' ').toLowerCase(); if (!hay.includes(q)) return false; }
+    if (f.cat && refCategory(r) !== f.cat) return false;
+    if (f.pri) { const p = refPriority(r); if (f.pri === 'any' ? !p : f.pri === 'routine' ? !!p : p !== f.pri) return false; }
+    if (f.payer && (r.payer || '') !== f.payer) return false;
+    if (f.inout) { const m = refMed(r); if (((m && m.destination) || 'Not stated') !== f.inout) return false; }
+    if (f.mstat) { const m = refMed(r); if (f.mstat === '__manual' ? !!m : (!m || (m.authStatus || '') !== f.mstat)) return false; }
+    if (f.owner && (f.owner === '__none' ? !!r.owner : r.owner !== f.owner)) return false;
+    if (f.source && (r.source || 'manual') !== f.source) return false;
+    if (q) { const m = refMed(r); const hay = [r.mrn, r.initials, r.notes, r.owner, r.payer, m && m.authStatus, m && m.assignedUser, m && m.authNumber, m && m.referralNumber, ...r.legs.flatMap((l) => [l.from && l.from.label, l.to && l.to.label, l.service])].join(' ').toLowerCase(); if (!hay.includes(q)) return false; }
     return true;
   });
+  if (opts.noSort) return rows;
   const order = { risk: 0, active: 1, complete: 2, lost: 3 };
-  const sorters = {
-    attention: (a, b) => order[a.s] - order[b.s] || refWaiting(b.r) - refWaiting(a.r),
-    newest: (a, b) => refFirstDate(b.r).localeCompare(refFirstDate(a.r)),
-    oldest: (a, b) => refFirstDate(a.r).localeCompare(refFirstDate(b.r)),
-    aging: (a, b) => refDays(b.r) - refDays(a.r),
-    waiting: (a, b) => refWaiting(b.r) - refWaiting(a.r),
-    completed: (a, b) => (b.r.closedAt || '').localeCompare(a.r.closedAt || ''),
-    status: (a, b) => order[a.s] - order[b.s] || refFirstDate(b.r).localeCompare(refFirstDate(a.r)),
-    patient: (a, b) => String(a.r.mrn).localeCompare(String(b.r.mrn)),
+  const keys = {
+    patient: (x) => String(x.r.mrn || ''), cat: (x) => refCategory(x.r), step: (x) => { const l = currentLeg(x.r); return l ? (l.from.label + ' ' + l.to.label).toLowerCase() : ''; },
+    status: (x) => order[x.s], ordered: (x) => refFirstDate(x.r), age: (x) => refDays(x.r), waiting: (x) => refWaiting(x.r), completed: (x) => x.r.closedAt || '',
+    owner: (x) => (x.r.owner || '').toLowerCase(), dest: (x) => { const l = currentLeg(x.r); return l ? l.to.label.toLowerCase() : ''; },
   };
-  return rows.sort(sorters[f.sort] || sorters.attention);
+  const dir = f.dir || REF_SORT_DEFAULT_DIR[f.sort] || 1;
+  const cmp = (a, b) => (a > b ? 1 : a < b ? -1 : 0);
+  if (f.sort === 'attention' || !keys[f.sort]) rows.sort((a, b) => ((order[a.s] - order[b.s]) || (refWaiting(b.r) - refWaiting(a.r))) * dir);
+  else { const k = keys[f.sort]; rows.sort((a, b) => cmp(k(a), k(b)) * dir || (order[a.s] - order[b.s]) || (refWaiting(b.r) - refWaiting(a.r))); }
+  return rows;
 }
 /* ---------- Meditech ARM referral worklist reader ----------
    Reads the text of the "Referrals - All" worklist (ARM Tracking) printed from Meditech Expanse and turns
@@ -2062,7 +2179,7 @@ function meditechLeg(row, trackingDate) {
   const sent = (future ? (row.statusDate || row.effDate) : (row.orderStart || row.statusDate || row.effDate)) || runDate;
   const out = meditechOutcome(row);
   const l = { id: uid(), from, to, service: pri + (row.order || row.referralType) + loc, sentDate: sent, scheduledDate: '', completedDate: '', resultedDate: '', notes: '',
-    meditech: { authStatus: row.authStatus, orderStatus: row.orderStatus, statusDate: row.statusDate, assignedUser: row.assignedUser, payer: row.payer, authNumber: row.authNumber, referralNumber: row.referralNumber, destination: row.destination, neededBy: row.neededBy, expDate: row.expDate, trackingDate },
+    meditech: { referralType: row.referralType, priority: row.priority, authStatus: row.authStatus, orderStatus: row.orderStatus, statusDate: row.statusDate, assignedUser: row.assignedUser, payer: row.payer, authNumber: row.authNumber, referralNumber: row.referralNumber, destination: row.destination, neededBy: row.neededBy, expDate: row.expDate, trackingDate },
     log: [{ date: sent, by: 'Meditech', text: `Sent to ${to.label}` }] };
   if (row.statusDate && row.authStatus) l.log.push({ date: row.statusDate, by: 'Meditech', text: `Meditech status: ${row.authStatus}${row.orderStatus ? ' · order ' + row.orderStatus : ''}` });
   if (future) { l.scheduledDate = row.orderStart; l.log.push({ date: sent, by: 'Meditech', text: `Future-dated order: starts ${fmtDate(row.orderStart)}` }); }
@@ -2189,6 +2306,76 @@ async function importMeditech(file) {
   openModal({ title: 'Import from Meditech', body, narrow: true, submitLabel: label, onSubmit: n + u + d ? () => { applyMeditechImport(plan); saveDB(); toast(`${n} added, ${u} updated${d ? `, ${d} duplicates merged` : ''}`); rerender(); return true; } : null });
 }
 
+const REF_QUICK = {
+  attention: { label: 'Needs attention', set: { tab: 'risk' } },
+  mine: { label: 'Watched by me', set: { tab: 'active', owner: '__me' } },
+  unwatched: { label: 'Nobody watching', set: { tab: 'active', owner: '__none' } },
+  clinic: { label: 'Clinic referrals open', set: { tab: 'active', cat: 'Clinic referral' } },
+  imaging: { label: 'Imaging not done', set: { tab: 'active', cat: 'Imaging' } },
+  surgery: { label: 'Surgery & procedures', set: { tab: 'active', cat: 'Surgery & procedures' } },
+  urgent: { label: 'Stat / urgent', set: { tab: 'active', pri: 'any' } },
+  week: { label: 'Ordered this week', set: { tab: 'all', from: '__week' } },
+};
+function refQuickValue(v) { return v === '__me' ? session.name : v === '__week' ? addDays(todayISO(), -6) : v; }
+function refQuickActive(key) { const qv = REF_QUICK[key]; return Object.entries(qv.set).every(([k, v]) => (ui.ref[k] || (k === 'tab' ? 'active' : '')) === refQuickValue(v)) && REF_FILTER_KEYS.every((k) => k in qv.set || !ui.ref[k] || (k === 'role' && ui.ref.role === 'any')); }
+function refApplyQuick(key) { const qv = REF_QUICK[key]; if (!qv) return; refClearFilters(); Object.entries(qv.set).forEach(([k, v]) => { ui.ref[k] = refQuickValue(v); }); }
+function refActiveChips() {
+  const f = ui.ref, chips = [], phys = f.phys ? getPhys(f.phys) : null;
+  if (f.q) chips.push(['q', `Search: ${f.q}`]);
+  if (phys) chips.push(['phys', `${f.role === 'from' ? 'Sent by' : f.role === 'to' ? 'Received by' : 'Involves'} ${physName(phys)}`]);
+  if (f.dest) chips.push(['dest', `Sent to: ${f.dest}`]);
+  if (f.sender) chips.push(['sender', `Sent by: ${f.sender}`]);
+  if (f.cat) chips.push(['cat', `Type: ${f.cat}`]);
+  if (f.pri) chips.push(['pri', f.pri === 'any' ? 'Stat or urgent' : f.pri === 'routine' ? 'Routine only' : `Priority: ${f.pri}`]);
+  if (f.payer) chips.push(['payer', `Payer: ${f.payer}`]);
+  if (f.inout) chips.push(['inout', `Destination: ${f.inout}`]);
+  if (f.mstat) chips.push(['mstat', f.mstat === '__manual' ? 'Entered by hand' : `Meditech: ${f.mstat}`]);
+  if (f.owner) chips.push(['owner', f.owner === '__none' ? 'Nobody watching' : `Watched by ${f.owner}`]);
+  if (f.source) chips.push(['source', f.source === 'meditech' ? 'From Meditech' : 'Entered by hand']);
+  if (f.from || f.to) chips.push(['dates', `Ordered ${f.from ? 'from ' + fmtDate(f.from) : ''}${f.to ? ' to ' + fmtDate(f.to) : ''}`.trim()]);
+  return chips;
+}
+const REF_GROUPS = { cat: 'Type', dest: 'Sent to', sender: 'Sent by', payer: 'Payer', mstat: 'Meditech status', inout: 'Inside / outside NWSH', owner: 'Watched by', month: 'Month ordered', pri: 'Priority' };
+function refGroupKey(r, g) {
+  const l = r.legs[0] || {}, cl = currentLeg(r) || l, m = refMed(r);
+  switch (g) {
+    case 'cat': return refCategory(r);
+    case 'dest': return cl.to ? cl.to.label : '—';
+    case 'sender': return l.from ? l.from.label : '—';
+    case 'payer': return r.payer || 'Not stated';
+    case 'mstat': return m ? (m.authStatus || '—') : 'Entered by hand';
+    case 'inout': return (m && m.destination) || 'Not stated';
+    case 'owner': return r.owner || 'Nobody';
+    case 'month': return refFirstDate(r).slice(0, 7);
+    case 'pri': return refPriority(r) || 'Routine';
+  }
+  return '—';
+}
+function refApplyGroup(g, k) {
+  const f = ui.ref;
+  switch (g) {
+    case 'cat': f.cat = k; break;
+    case 'dest': f.dest = k; break;
+    case 'sender': f.sender = k; break;
+    case 'payer': if (k === 'Not stated') { toast('Referrals with no payer on file cannot be filtered on their own.'); return; } f.payer = k; break;
+    case 'mstat': f.mstat = k === 'Entered by hand' ? '__manual' : k; break;
+    case 'inout': f.inout = k; break;
+    case 'owner': f.owner = k === 'Nobody' ? '__none' : k; break;
+    case 'pri': f.pri = k === 'Routine' ? 'routine' : k; break;
+    case 'month': { const d = new Date(k + '-01T00:00:00'); d.setMonth(d.getMonth() + 1); d.setDate(0); f.from = k + '-01'; f.to = `${k}-${String(d.getDate()).padStart(2, '0')}`; break; }
+  }
+  f.group = ''; f.tab = f.tab === 'all' ? 'all' : f.tab;
+}
+function refBreakdownHTML(base) {
+  const g = ui.ref.group, groups = new Map();
+  base.forEach((x) => { const k = refGroupKey(x.r, g); let b = groups.get(k); if (!b) { b = { k, n: 0, active: 0, risk: 0, complete: 0, lost: 0, ages: [] }; groups.set(k, b); } b.n++; b[x.s]++; if (x.s === 'active' || x.s === 'risk') b.ages.push(refDays(x.r)); });
+  const list = [...groups.values()].sort((a, b) => (g === 'month' ? b.k.localeCompare(a.k) : b.n - a.n)).slice(0, 60);
+  return `<div class="table-wrap"><table class="breakdown">
+    <thead><tr><th>${REF_GROUPS[g]}</th><th class="num">Total</th><th class="num">In progress</th><th class="num">At risk</th><th class="num">Completed</th><th class="num">Dropped</th><th class="num">Avg. age of open (days)</th></tr></thead>
+    <tbody>${list.map((b) => `<tr class="clickable" data-act="ref-group-row" data-g="${g}" data-k="${esc(b.k)}" title="Show only these referrals"><td><b>${esc(g === 'month' ? fmtMonth(b.k) : b.k)}</b></td><td class="num">${b.n}</td><td class="num">${b.active + b.risk}</td><td class="num ${b.risk ? 'red' : ''}">${b.risk}</td><td class="num">${b.complete}</td><td class="num">${b.lost}</td><td class="num">${avg(b.ages) ?? '—'}</td></tr>`).join('')}</tbody>
+  </table></div>
+  <p class="help" style="margin:6px 0 14px">Click a row to show only those referrals.${groups.size > 60 ? ` Showing the 60 largest of ${groups.size} groups.` : ''}</p>`;
+}
 function viewReferrals() {
   const f = ui.ref, R = db.referrals;
   const head = `
@@ -2196,8 +2383,8 @@ function viewReferrals() {
       <div><h1>Referrals &amp; Orders</h1><p class="lead">Follow each patient hand-off from start to finish so nobody falls through the cracks.</p></div>
       <div class="actions">
         <div class="toggle" role="group" aria-label="View"><button class="${f.view !== 'reports' ? 'on' : ''}" data-act="ref-view" data-view="list">Tracking list</button><button class="${f.view === 'reports' ? 'on' : ''}" data-act="ref-view" data-view="reports">Reports</button></div>
-        <button class="btn" data-act="${f.view === 'reports' ? 'export-rep-csv' : 'export-ref-csv'}">${ico('i-download')}Download spreadsheet</button>
         <button class="btn" data-act="import-meditech">${ico('i-upload')}Import from Meditech</button>
+        <button class="btn" data-act="${f.view === 'reports' ? 'export-rep-csv' : 'export-ref-csv'}">${ico('i-download')}Download spreadsheet</button>
         <button class="btn primary" data-act="add-referral">${ico('i-plus')}Start tracking a referral</button>
       </div>
     </div>`;
@@ -2205,9 +2392,16 @@ function viewReferrals() {
   const involved = refsByPhysician();
   const physOpts = db.physicians.filter((p) => involved.has(p.id)).sort((a, b) => physSortName(a).localeCompare(physSortName(b)));
   const destOpts = [...new Set(R.flatMap((r) => r.legs.map((l) => l.to && l.to.label)).filter(Boolean))].sort();
+  const payers = [...new Set(R.map((r) => r.payer).filter(Boolean))].sort();
+  const mstats = [...new Set(R.map((r) => { const m = refMed(r); return m && m.authStatus; }).filter(Boolean))].sort();
+  const owners = [...new Set([...db.settings.team, ...R.map((r) => r.owner)].filter(Boolean))].sort();
   const m = refMetrics(R, { from: addDays(todayISO(), -29), to: todayISO() });
+  const sortOpts = [['attention:1', 'Needs attention first'], ['ordered:-1', 'Most recently ordered'], ['ordered:1', 'Oldest ordered'], ['age:-1', 'Longest in process (aging)'], ['waiting:-1', 'Longest since last movement'], ['completed:-1', 'Most recently completed'], ['status:1', 'Status'], ['patient:1', 'Patient MRN'], ['cat:1', 'Type'], ['dest:1', 'Sent to (A–Z)'], ['owner:1', 'Watched by']];
+  const sortVal = `${f.sort}:${f.dir || REF_SORT_DEFAULT_DIR[f.sort] || 1}`;
+  const sel = (name, label, val, opts, blank, extra = '') => `<div class="field"><span class="field-label">${label}</span><select data-change="${name}" aria-label="${label}">${blank === null ? '' : `<option value="">${blank}</option>`}${extra}${opts.map(([v, l]) => `<option value="${esc(v)}" ${val === v ? 'selected' : ''}>${esc(l)}</option>`).join('')}</select></div>`;
+  const activeFilters = REF_FILTER_KEYS.filter((k) => ui.ref[k] && !(k === 'role')).length;
   return head + `
-    <div class="kpis" style="margin-bottom:18px">
+    <div class="kpis" style="margin-bottom:14px">
       <a class="kpi" href="#/referrals" data-act="ref-tab-link" data-tab="active"><div class="label">In progress now</div><div class="value">${m.inProcess}</div></a>
       <a class="kpi ${m.stale ? 'red' : ''}" href="#/referrals" data-act="ref-tab-link" data-tab="risk"><div class="label">Stale / at risk</div><div class="value">${m.stale}</div></a>
       <div class="kpi"><div class="label">Avg. age of open referrals</div><div class="value">${m.avgAging ?? '—'}<span class="small muted"> days</span></div></div>
@@ -2215,48 +2409,136 @@ function viewReferrals() {
       <a class="kpi" href="#/referrals" data-act="ref-tab-link" data-tab="lost"><div class="label">Dropped out, last 30 days</div><div class="value">${m.dropped}</div></a>
       <div class="kpi"><div class="label">Avg. days until seen, last 30</div><div class="value">${m.avgSeen ?? '—'}</div></div>
     </div>
+    <div class="chips quick" aria-label="Quick views"><span class="chips-label">Quick views:</span>${Object.entries(REF_QUICK).map(([k, v]) => `<button class="chip ${refQuickActive(k) ? 'on' : ''}" data-act="ref-quick" data-key="${k}">${v.label}</button>`).join('')}</div>
     <section class="card">
       <div class="filters">
-        <div class="search"><svg class="i"><use href="#i-search"/></svg><input type="search" placeholder="Search by MRN, initials, doctor, department or service" value="${esc(f.q)}" data-input="ref-q" aria-label="Search referrals"></div>
-        <div class="field"><span class="field-label">Physician / surgeon</span><select data-change="ref-phys"><option value="">All</option>${physOpts.map((p) => `<option value="${p.id}" ${f.phys === p.id ? 'selected' : ''}>${esc(physName(p))}</option>`).join('')}</select></div>
-        <div class="field"><span class="field-label">Sent to</span><select data-change="ref-dest"><option value="">All</option>${destOpts.map((d) => `<option ${f.dest === d ? 'selected' : ''}>${esc(d)}</option>`).join('')}</select></div>
+        <div class="search"><svg class="i"><use href="#i-search"/></svg><input type="search" placeholder="Search MRN, initials, doctor, department, payer or service" value="${esc(f.q)}" data-input="ref-q" aria-label="Search referrals"></div>
+        <div class="field"><span class="field-label">Physician / surgeon</span><div class="pair"><select data-change="ref-role" aria-label="Role" style="min-width:110px"><option value="any" ${f.role !== 'from' && f.role !== 'to' ? 'selected' : ''}>Involves</option><option value="from" ${f.role === 'from' ? 'selected' : ''}>Sent by</option><option value="to" ${f.role === 'to' ? 'selected' : ''}>Received by</option></select><select data-change="ref-phys" aria-label="Physician"><option value="">Anyone</option>${physOpts.map((p) => `<option value="${p.id}" ${f.phys === p.id ? 'selected' : ''}>${esc(physName(p))}</option>`).join('')}</select></div></div>
+        ${sel('ref-dest', 'Sent to', f.dest, destOpts.map((d) => [d, d]), 'Anywhere')}
+        ${sel('ref-sort', 'Sort by', sortVal, sortOpts, null)}
+        <div class="field"><span class="field-label">&nbsp;</span><button class="btn ${f.more ? 'on' : ''}" data-act="ref-more-filters">${f.more ? 'Fewer filters' : 'More filters'}${activeFilters ? ` (${activeFilters} on)` : ''}</button></div>
+      </div>
+      ${f.more ? `<div class="filters more">
+        ${sel('ref-cat', 'Type', f.cat, REF_CATS.map((c) => [c, c]), 'All types')}
+        ${sel('ref-pri', 'Priority', f.pri, [['any', 'Stat or urgent'], ['Stat', 'Stat only'], ['Urgent', 'Urgent only'], ['routine', 'Routine only']], 'Any priority')}
+        ${sel('ref-inout', 'Destination', f.inout, [['Inside', 'Inside NWSH'], ['Outside', 'Outside NWSH'], ['Not stated', 'Not stated']], 'Inside or outside')}
+        ${sel('ref-mstat', 'Meditech status', f.mstat, mstats.map((x) => [x, x]), 'Any status', `<option value="__manual" ${f.mstat === '__manual' ? 'selected' : ''}>Entered by hand (not from Meditech)</option>`)}
+        ${sel('ref-payer', 'Payer', f.payer, payers.map((x) => [x, x]), 'Any payer')}
+        ${sel('ref-owner', 'Watched by', f.owner, owners.map((x) => [x, x]), 'Anyone or nobody', `<option value="__none" ${f.owner === '__none' ? 'selected' : ''}>Nobody yet</option>`)}
         <div class="field"><span class="field-label">Ordered from</span><input type="date" value="${esc(f.from)}" data-change="ref-from"></div>
         <div class="field"><span class="field-label">to</span><input type="date" value="${esc(f.to)}" data-change="ref-to"></div>
-        <div class="field"><span class="field-label">Sort by</span><select data-change="ref-sort">
-          ${[['attention', 'Needs attention first'], ['aging', 'Longest in process (aging)'], ['waiting', 'Longest since last movement'], ['newest', 'Most recently ordered'], ['oldest', 'Oldest ordered'], ['completed', 'Most recently completed'], ['status', 'Status'], ['patient', 'Patient MRN']].map(([k, l]) => `<option value="${k}" ${f.sort === k ? 'selected' : ''}>${l}</option>`).join('')}
-        </select></div>
-        ${f.phys || f.dest || f.from || f.to || f.q ? `<button class="btn" data-act="ref-clear">Clear filters</button>` : ''}
-      </div>
+        ${sel('ref-group', 'Break down by', f.group, Object.entries(REF_GROUPS), 'No breakdown')}
+      </div>` : ''}
       <div id="ref-list">${refListHTML()}</div>
     </section>`;
 }
-/* The tabs, table and count line: redrawn on their own when the search box or a tab changes. */
+/* The chips, breakdown, tabs, bulk bar, table and count line: redrawn on their own when the search box, a tab or a selection changes. */
 function refListHTML() {
   const f = ui.ref, R = db.referrals;
-  const tabs = [['active', 'In progress'], ['risk', 'At risk'], ['complete', 'Completed'], ['lost', 'Dropped out'], ['all', 'All']];
-  const withStatus = R.map((r) => ({ r, s: refStatus(r) }));
-  const counts = { active: withStatus.filter((x) => x.s === 'active' || x.s === 'risk').length, risk: withStatus.filter((x) => x.s === 'risk').length, complete: withStatus.filter((x) => x.s === 'complete').length, lost: withStatus.filter((x) => x.s === 'lost').length, all: R.length };
+  const sig = refFilterSig(); if (sig !== f.sig) { f.sig = sig; f.limit = 100; }
+  const base = refListRows({ ignoreTab: true, noSort: true });
+  const counts = { active: 0, risk: 0, complete: 0, lost: 0, all: base.length };
+  base.forEach((x) => { counts[x.s]++; if (x.s === 'risk') counts.active++; });
   const all = refListRows();
-  const sig = [f.tab, f.q, f.phys, f.dest, f.from, f.to, f.sort].join('\u0001'); if (sig !== f.sig) { f.sig = sig; f.limit = 100; }
   const rows = all.slice(0, f.limit || 100);
-  return `<div class="tabs">${tabs.map(([k, l]) => `<button class="${f.tab === k ? 'on' : ''}" data-act="ref-tab" data-tab="${k}">${l} (${counts[k]})</button>`).join('')}</div>
-      ${rows.length ? `<div class="table-wrap"><table>
-        <thead><tr><th>Patient</th><th>Current step</th><th>Where it stands</th><th>Ordered</th><th class="num">Age</th><th>Watched by</th><th></th></tr></thead>
-        <tbody>${rows.map(({ r, s }) => { const l = currentLeg(r); const risk = refRiskReason(r); return `
-          <tr class="clickable" data-act="open-ref" data-id="${r.id}">
-            <td><div class="primary-text"><a href="#/referral/${r.id}">${esc(r.mrn)}</a></div><div class="sub">${esc(r.initials || '')}</div></td>
-            <td>${l ? `<div><b>${esc(l.from.label)}</b> ${ico('i-arrow-right', 'sm')} <b>${esc(l.to.label)}</b></div><div class="sub">${esc(l.service || '')}${r.legs.length > 1 ? ` · step ${r.legs.length}` : ''}</div>` : '<span class="muted">No steps yet</span>'}</td>
-            <td>${refBadge(r)}<div class="sub">${l ? esc(legStatusText(l)) : ''}${risk ? `<br><span style="color:var(--red)">${esc(risk)}</span>` : ''}</div></td>
-            <td class="nowrap">${fmtDate(refFirstDate(r))}${s === 'complete' || s === 'lost' ? `<div class="sub">${s === 'complete' ? 'Completed' : 'Dropped'} ${fmtDate(r.closedAt)}</div>` : ''}</td>
-            <td class="num nowrap"><b>${refDays(r)}</b><div class="sub">days${s === 'active' || s === 'risk' ? `<br>${refWaiting(r)} since last move` : ''}</div></td>
-            <td class="nowrap">${esc(r.owner || 'Everyone')}</td>
-            <td class="nowrap" style="text-align:right"><a class="btn sm" href="#/referral/${r.id}">Open ${ico('i-chevron', 'sm')}</a></td>
-          </tr>`; }).join('')}</tbody></table></div>
+  const chips = refActiveChips();
+  const tabs = [['active', 'In progress'], ['risk', 'At risk'], ['complete', 'Completed'], ['lost', 'Dropped out'], ['all', 'All']];
+  const arrow = (key) => (f.sort === key ? `<span class="arrow">${(f.dir || REF_SORT_DEFAULT_DIR[key] || 1) < 0 ? '▾' : '▴'}</span>` : '');
+  const th = (key, label, cls = '') => `<th class="sortable ${cls}" data-act="ref-sort-col" data-key="${key}" title="Sort by ${label}">${label} ${arrow(key)}</th>`;
+  const selAll = rows.length > 0 && rows.every((x) => f.sel.has(x.r.id));
+  const owners = [...new Set([...db.settings.team, ...R.map((r) => r.owner)].filter(Boolean))].sort();
+  return `
+    ${chips.length ? `<div class="chips filters-on"><span class="chips-label">Showing:</span>${chips.map(([k, l]) => `<button class="chip filter" data-act="ref-chip-x" data-k="${k}" title="Remove this filter">${esc(l)} <span class="x">×</span></button>`).join('')}<button class="chip filter clear" data-act="ref-clear">Clear all</button></div>` : ''}
+    ${f.group ? refBreakdownHTML(base) : ''}
+    <div class="tabs">${tabs.map(([k, l]) => `<button class="${f.tab === k ? 'on' : ''}" data-act="ref-tab" data-tab="${k}">${l} (${counts[k]})</button>`).join('')}</div>
+    ${f.sel.size ? `<div class="bulk-bar"><b>${f.sel.size} selected</b><span>Watched by:</span><select data-change="ref-bulk-owner" aria-label="Assign watcher"><option value="">Nobody</option>${owners.map((o) => `<option ${f.bulkOwner === o ? 'selected' : ''}>${esc(o)}</option>`).join('')}</select><button class="btn sm primary" data-act="ref-bulk-apply">Assign</button><button class="btn sm" data-act="ref-bulk-clear">Clear selection</button><span class="help">Tick the boxes to pick referrals, then assign who follows up.</span></div>` : ''}
+    ${rows.length ? `<div class="table-wrap"><table class="ref-table">
+      <thead><tr><th class="chk"><input type="checkbox" data-change="ref-sel-all" ${selAll ? 'checked' : ''} aria-label="Select everything shown"></th>${th('patient', 'Patient')}${th('cat', 'Type')}${th('step', 'Referred from → to')}${th('status', 'Where it stands')}${th('ordered', 'Ordered')}${th('age', 'Age', 'num')}${th('owner', 'Watched by')}<th></th></tr></thead>
+      <tbody>${rows.map(({ r, s }) => { const l = currentLeg(r), md = refMed(r), risk = refRiskReason(r), pri = refPriority(r), open = s === 'active' || s === 'risk'; return `
+        <tr class="clickable ${f.sel.has(r.id) ? 'selected' : ''}" data-act="open-ref" data-id="${r.id}">
+          <td class="chk"><input type="checkbox" data-change="ref-sel" data-id="${r.id}" ${f.sel.has(r.id) ? 'checked' : ''} aria-label="Select"></td>
+          <td><div class="primary-text"><a href="#/patient/${encodeURIComponent(r.mrn)}" title="All referrals for this patient">${esc(r.mrn)}</a></div><div class="sub">${esc(r.initials || '')}${r.payer ? ` · ${esc(shortText(r.payer, 24))}` : ''}</div></td>
+          <td><span class="tag">${esc(refCategory(r))}</span>${pri ? ` <span class="badge b-over">${pri}</span>` : ''}</td>
+          <td>${l ? `<div><b>${esc(l.from.label)}</b> ${ico('i-arrow-right', 'sm')} <b>${esc(l.to.label)}</b></div><div class="sub">${esc(l.service || '')}${r.legs.length > 1 ? ` · step ${r.legs.length}` : ''}</div>` : '<span class="muted">No steps yet</span>'}</td>
+          <td>${refBadge(r)}<div class="sub">${esc(risk && /Appointment/.test(risk) ? risk : legStatusShort(l))}${md && md.authStatus ? `<br>Meditech: ${esc(md.authStatus)}${md.statusDate ? ` · ${fmtDate(md.statusDate)}` : ''}` : ''}</div></td>
+          <td class="nowrap">${fmtDate(refFirstDate(r))}${!open ? `<div class="sub">${s === 'complete' ? 'Completed' : 'Dropped'} ${fmtDate(r.closedAt)}</div>` : ''}</td>
+          <td class="num nowrap"><b>${refDays(r)}</b><div class="sub">days${open ? `<br>${refWaiting(r)} since move` : ''}</div></td>
+          <td class="nowrap">${r.owner ? esc(r.owner) : '<span class="muted">—</span>'}</td>
+          <td class="nowrap" style="text-align:right"><a class="btn sm" href="#/referral/${r.id}">Open ${ico('i-chevron', 'sm')}</a></td>
+        </tr>`; }).join('')}</tbody></table></div>
         <p class="count-line">Showing ${rows.length < all.length ? `the first ${rows.length} of ${all.length}` : all.length} referral${all.length === 1 ? '' : 's'}${all.length !== R.length ? ` (${R.length} in total)` : ''}
           ${rows.length < all.length ? ` &nbsp; <button class="btn sm" data-act="ref-more">Show 100 more</button> <button class="btn sm link" data-act="ref-more" data-all="1">Show all ${all.length}</button>` : ''}</p>`
-        : `<p class="empty">${R.length ? 'Nothing matches. Try another tab or clear the filters.' : 'No referrals are being tracked yet. Click <b>Start tracking a referral</b> when a patient is referred or an order is placed.'}</p>`}`;
+      : `<p class="empty">${R.length ? 'Nothing matches. Try another tab or clear the filters.' : 'No referrals are being tracked yet. Click <b>Start tracking a referral</b> when a patient is referred or an order is placed.'}</p>`}`;
 }
 function updateRefList() { const el = $('#ref-list'); if (!el) { rerender(); return; } refGen++; el.innerHTML = refListHTML(); updateNavCount(); }
+function openAddReferral(pre) {
+  openModal({ title: 'Start tracking a referral or order', body: referralFormHTML(pre || null), submitLabel: 'Start tracking', onSubmit: () => {
+    const f = $('#ref-form'); if (!f.reportValidity()) return false;
+    const fd = new FormData(f); const from = readParty(fd, 'from'), to = readParty(fd, 'to');
+    if (!from || !to) { toast('Please choose who sent it and who receives it.', 'err'); return false; }
+    const r = { id: uid(), mrn: String(fd.get('mrn')).trim(), initials: String(fd.get('initials') || '').trim(), owner: String(fd.get('owner') || ''), notes: String(fd.get('notes') || '').trim(), status: 'active', createdAt: nowISO(), createdBy: session.name,
+      legs: [{ id: uid(), from, to, service: String(fd.get('service')).trim(), sentDate: fd.get('sentDate'), log: [{ date: todayISO(), by: session.name, text: `Sent to ${to.label}` }] }] };
+    db.referrals.push(r); saveDB(); toast('Now tracking this referral'); location.hash = '#/referral/' + r.id; return true;
+  } });
+}
+
+/* ===================== View: one patient, every referral ===================== */
+function viewPatient(mrn) {
+  const refs = db.referrals.filter((r) => String(r.mrn).toLowerCase() === String(mrn).toLowerCase()).sort((a, b) => refFirstDate(b).localeCompare(refFirstDate(a)));
+  if (!refs.length) return `<a class="back no-print" href="#/referrals">${ico('i-arrow-left')}All referrals</a>
+    <div class="card empty">No referrals are tracked for patient <b>${esc(mrn)}</b>.<br><br><button class="btn primary" data-act="add-referral-for" data-mrn="${esc(mrn)}">${ico('i-plus')}Start tracking one</button></div>`;
+  const initials = refs.map((r) => r.initials).find(Boolean) || '';
+  const payers = [...new Set(refs.map((r) => r.payer).filter(Boolean))];
+  const st = refs.map((r) => refStatus(r)); const n = (k) => st.filter((x) => x === k).length;
+  const events = [];
+  refs.forEach((r) => r.legs.forEach((l) => {
+    CHECKPOINTS.forEach((c) => { if (l[c.key]) events.push({ date: l[c.key], text: `${c.label}: ${l.from.label} → ${l.to.label}${l.service ? ` (${l.service})` : ''}`, r }); });
+    if (l.lost) events.push({ date: l.lostDate || '', text: `Dropped out${l.lostReason ? ' — ' + l.lostReason : ''}: ${l.from.label} → ${l.to.label}`, r });
+    (l.log || []).forEach((e) => { if (!/^Sent to /.test(e.text)) events.push({ date: e.date, text: e.text, by: e.by, r }); });
+  }));
+  events.sort((a, b) => (b.date || '').localeCompare(a.date || ''));
+  const tasks = db.tasks.filter((t) => !t.done && refs.some((r) => r.id === t.referralId));
+  const first = refs[refs.length - 1];
+  return `<a class="back no-print" href="#/referrals">${ico('i-arrow-left')}All referrals</a>
+    <section class="card">
+      <div class="phys-head">
+        <div class="avatar" aria-hidden="true">${esc((initials || mrn).slice(0, 2).toUpperCase())}</div>
+        <div class="info"><h1>Patient ${esc(refs[0].mrn)}${initials ? ` <span class="muted" style="font-weight:400">(${esc(initials)})</span>` : ''}</h1>
+          <div class="sub">${refs.length} referral${refs.length === 1 ? '' : 's'} tracked since ${fmtDate(refFirstDate(first))}${payers.length ? ` · ${esc(payers.join(' / '))}` : ''}</div></div>
+        <div class="actions no-print" style="display:flex;gap:10px;flex-wrap:wrap">
+          <button class="btn primary" data-act="add-referral-for" data-mrn="${esc(refs[0].mrn)}" data-initials="${esc(initials)}">${ico('i-plus')}Track a new referral</button>
+          <a class="btn" href="#/referrals" data-act="ref-search" data-q="${esc(refs[0].mrn)}">Show in the list</a>
+        </div>
+      </div>
+      <div class="kpis" style="margin-top:16px;grid-template-columns:repeat(auto-fit,minmax(120px,1fr))">
+        <div class="kpi"><div class="label">In progress</div><div class="value">${n('active') + n('risk')}</div></div>
+        <div class="kpi ${n('risk') ? 'red' : ''}"><div class="label">At risk</div><div class="value">${n('risk')}</div></div>
+        <div class="kpi green"><div class="label">Completed</div><div class="value">${n('complete')}</div></div>
+        <div class="kpi"><div class="label">Dropped out</div><div class="value">${n('lost')}</div></div>
+      </div>
+    </section>
+    ${tasks.length ? `<section class="card"><div class="card-head"><h2>Open tasks</h2></div><ul class="list">${tasks.map(taskRowHTML).join('')}</ul></section>` : ''}
+    <section class="card">
+      <div class="card-head"><h2>Referrals &amp; orders</h2><span class="hint">Newest first</span></div>
+      <div class="table-wrap"><table>
+        <thead><tr><th>Ordered</th><th>Type</th><th>Referred from → to</th><th>Where it stands</th><th class="num">Age</th><th>Watched by</th><th></th></tr></thead>
+        <tbody>${refs.map((r) => { const l = currentLeg(r), s = refStatus(r), md = refMed(r), pri = refPriority(r), open = s === 'active' || s === 'risk'; return `
+          <tr class="clickable" data-act="open-ref" data-id="${r.id}">
+            <td class="nowrap">${fmtDate(refFirstDate(r))}${!open ? `<div class="sub">${s === 'complete' ? 'Completed' : 'Dropped'} ${fmtDate(r.closedAt)}</div>` : ''}</td>
+            <td><span class="tag">${esc(refCategory(r))}</span>${pri ? ` <span class="badge b-over">${pri}</span>` : ''}</td>
+            <td>${l ? `<div><b>${esc(l.from.label)}</b> ${ico('i-arrow-right', 'sm')} <b>${esc(l.to.label)}</b></div><div class="sub">${esc(l.service || '')}${r.legs.length > 1 ? ` · ${r.legs.length} steps` : ''}</div>` : ''}</td>
+            <td>${refBadge(r)}<div class="sub">${esc(legStatusShort(l))}${md && md.authStatus ? `<br>Meditech: ${esc(md.authStatus)}${md.statusDate ? ` · ${fmtDate(md.statusDate)}` : ''}` : ''}</div></td>
+            <td class="num nowrap"><b>${refDays(r)}</b><div class="sub">days</div></td>
+            <td class="nowrap">${r.owner ? esc(r.owner) : '<span class="muted">—</span>'}</td>
+            <td class="nowrap" style="text-align:right"><a class="btn sm" href="#/referral/${r.id}">Open ${ico('i-chevron', 'sm')}</a></td>
+          </tr>`; }).join('')}</tbody>
+      </table></div>
+    </section>
+    <section class="card">
+      <div class="card-head"><h2>Timeline</h2><span class="hint">Every step and note across all referrals, newest first</span></div>
+      ${events.length ? `<ul class="list small">${events.slice(0, 300).map((e) => `<li><span>${esc(e.text)} <a href="#/referral/${e.r.id}" class="muted">open</a></span><span class="muted nowrap">${fmtDate(e.date)}${e.by ? ` · ${esc(e.by)}` : ''}</span></li>`).join('')}</ul>` : '<p class="empty">Nothing recorded yet.</p>'}
+    </section>`;
+}
 
 function viewReferralReports() {
   const s = ui.rep, R = db.referrals, range = repRange(), cmp = compareRange(range);
@@ -2368,8 +2650,8 @@ function viewReferral(r) {
       <div class="phys-head">
         <div class="avatar" aria-hidden="true">${esc((r.initials || r.mrn || '?').slice(0, 2).toUpperCase())}</div>
         <div class="info">
-          <h1>Patient ${esc(r.mrn)}${r.initials ? ` <span class="muted" style="font-weight:400">(${esc(r.initials)})</span>` : ''}</h1>
-          <div class="sub">Started ${fmtDate(refFirstDate(r))} · ${refDays(r)} days ${active ? 'so far' : 'total'} · ${r.legs.length} step${r.legs.length === 1 ? '' : 's'} · watched by <b>${esc(r.owner || 'everyone')}</b>${r.source === 'meditech' ? ' · from the Meditech worklist' : ''}</div>
+          <h1><a href="#/patient/${encodeURIComponent(r.mrn)}" title="Every referral for this patient">Patient ${esc(r.mrn)}</a>${r.initials ? ` <span class="muted" style="font-weight:400">(${esc(r.initials)})</span>` : ''}</h1>
+          <div class="sub">Started ${fmtDate(refFirstDate(r))} · ${refDays(r)} days ${active ? 'so far' : 'total'} · ${r.legs.length} step${r.legs.length === 1 ? '' : 's'} · watched by <b>${esc(r.owner || 'everyone')}</b>${r.payer ? ` · ${esc(r.payer)}` : ''}${r.source === 'meditech' ? ' · from the Meditech worklist' : ''}${(() => { const o = db.referrals.filter((x) => x !== r && String(x.mrn).toLowerCase() === String(r.mrn).toLowerCase()).length; return o ? ` · <a href="#/patient/${encodeURIComponent(r.mrn)}">${o} other referral${o === 1 ? '' : 's'} for this patient</a>` : ''; })()}</div>
         </div>
         <div>${refBadge(r)}</div>
         <div class="actions no-print" style="display:flex;gap:10px;flex-wrap:wrap">
@@ -2411,7 +2693,7 @@ function legCardHTML(r, l, i, active) {
       </div>`).join('')}
     </div>
     <p style="margin:0 0 10px"><b>${l.lost ? '<span style="color:var(--red)">Dropped out</span>' : esc(legStatusText(l))}</b>${l.lost && l.lostReason ? ` — ${esc(l.lostReason)}` : ''}</p>
-    ${l.meditech ? `<p class="help" style="margin:-4px 0 10px">Meditech: <b>${esc(l.meditech.authStatus || '—')}</b>${l.meditech.orderStatus ? ` · order ${esc(l.meditech.orderStatus)}` : ''}${l.meditech.statusDate ? ` as of ${fmtDate(l.meditech.statusDate)}` : ''}${l.meditech.destination ? ` · ${esc(l.meditech.destination)}` : ''}${l.meditech.payer ? ` · ${esc(l.meditech.payer)}` : ''}${l.meditech.assignedUser ? ` · assigned to ${esc(l.meditech.assignedUser)}` : ''}${l.meditech.authNumber ? ` · auth # ${esc(l.meditech.authNumber)}` : ''}${l.meditech.neededBy ? ` · needed by ${fmtDate(l.meditech.neededBy)}` : ''}</p>` : ''}
+    ${l.meditech ? `<p class="help" style="margin:-4px 0 10px">Meditech: <b>${esc(l.meditech.authStatus || '—')}</b>${l.meditech.referralType ? ` · ${esc(l.meditech.referralType)}` : ''}${l.meditech.priority && !/routine/i.test(l.meditech.priority) ? ` · <b>${esc(l.meditech.priority)}</b>` : ''}${l.meditech.orderStatus ? ` · order ${esc(l.meditech.orderStatus)}` : ''}${l.meditech.statusDate ? ` as of ${fmtDate(l.meditech.statusDate)}` : ''}${l.meditech.destination ? ` · ${esc(l.meditech.destination)}` : ''}${l.meditech.payer ? ` · ${esc(l.meditech.payer)}` : ''}${l.meditech.assignedUser ? ` · assigned to ${esc(l.meditech.assignedUser)}` : ''}${l.meditech.authNumber ? ` · auth # ${esc(l.meditech.authNumber)}` : ''}${l.meditech.neededBy ? ` · needed by ${fmtDate(l.meditech.neededBy)}` : ''}</p>` : ''}
     <div class="status-actions no-print">
       ${canEdit && next ? `<button class="btn primary" data-act="leg-check" data-id="${r.id}" data-leg="${l.id}" data-key="${next.key}">${ico('i-check')}${esc(next.verb)}…</button>` : ''}
       ${canEdit && !l.lost ? `<button class="btn" data-act="leg-lost" data-id="${r.id}" data-leg="${l.id}">Patient didn't follow through…</button>` : ''}
@@ -2909,11 +3191,15 @@ function exportContactsCSV() {
 }
 
 function exportReferralsCSV() {
-  const rows = [['Patient MRN', 'Initials', 'Status', 'Started', 'Days in process', 'Step', 'Referred by', 'Sent to', 'What for', 'Sent', 'Scheduled', 'Seen / done', 'Results back', 'Days to seen', 'Days to results', 'Dropped out', 'Reason', 'Notes']];
-  db.referrals.forEach((r) => r.legs.forEach((l, i) => rows.push([r.mrn, r.initials, { active: 'In progress', risk: 'At risk', complete: 'Complete', lost: 'Dropped out' }[refStatus(r)], refFirstDate(r), refDays(r), i + 1,
+  const onList = location.hash.startsWith('#/referrals') && ui.ref.view !== 'reports';
+  const list = onList ? refListRows().map((x) => x.r) : db.referrals;
+  const rows = [['Patient MRN', 'Initials', 'Status', 'Type', 'Priority', 'Payer', 'Watched by', 'Started', 'Days in process', 'Step', 'Referred by', 'Sent to', 'What for', 'Sent', 'Scheduled', 'Seen / done', 'Results back', 'Days to seen', 'Days to results', 'Dropped out', 'Reason', 'Meditech auth status', 'Meditech order status', 'Meditech status date', 'Destination', 'Assigned in Meditech', 'Auth #', 'Referral #', 'Notes']];
+  list.forEach((r) => r.legs.forEach((l, i) => { const m = l.meditech || {}; rows.push([r.mrn, r.initials, refStatusLabel(refStatus(r)), refCategory(r), refPriority(r), r.payer || '', r.owner || '', refFirstDate(r), refDays(r), i + 1,
     l.from.label, l.to.label, l.service, l.sentDate, l.scheduledDate, l.completedDate, l.resultedDate,
-    l.completedDate && l.sentDate ? daysBetween(l.sentDate, l.completedDate) : '', l.resultedDate && l.completedDate ? daysBetween(l.completedDate, l.resultedDate) : '', l.lost ? 'Yes' : '', l.lostReason || '', l.notes || ''])));
+    l.completedDate && l.sentDate ? daysBetween(l.sentDate, l.completedDate) : '', l.resultedDate && l.completedDate ? daysBetween(l.completedDate, l.resultedDate) : '', l.lost ? 'Yes' : '', l.lostReason || '',
+    m.authStatus || '', m.orderStatus || '', m.statusDate || '', m.destination || '', m.assignedUser || '', m.authNumber || '', m.referralNumber || '', l.notes || '']); }));
   download(`referrals-${todayISO()}.csv`, '﻿' + toCSV(rows), 'text/csv');
+  if (onList && list.length !== db.referrals.length) toast(`Downloaded the ${list.length} referrals currently shown`);
 }
 
 function loadSample() {
@@ -3081,18 +3367,31 @@ const actions = {
   'ref-tab-link': (el) => { ui.ref.tab = el.dataset.tab; ui.ref.q = ''; ui.ref.view = 'list'; },
   'ref-view': (el) => { ui.ref.view = el.dataset.view; rerender(); },
   'ref-view-link': () => { ui.ref.view = 'reports'; },
-  'ref-clear': () => { Object.assign(ui.ref, { q: '', phys: '', dest: '', from: '', to: '' }); rerender(); },
-  'ref-phys-link': (el) => { Object.assign(ui.ref, { view: 'list', tab: 'all', phys: el.dataset.id, q: '', dest: '' }); rerender(); },
+  'ref-clear': () => { refClearFilters(); rerender(); },
+  'ref-phys-link': (el) => { refClearFilters(); Object.assign(ui.ref, { view: 'list', tab: 'all', phys: el.dataset.id }); rerender(); },
   'rep-sort': (el) => { const k = el.dataset.key; ui.rep.dir = ui.rep.sort === k ? -ui.rep.dir : -1; ui.rep.sort = k; rerender(); },
   'export-rep-csv': () => exportReportCSV(),
-  'add-referral': () => openModal({ title: 'Start tracking a referral or order', body: referralFormHTML(null), submitLabel: 'Start tracking', onSubmit: () => {
-    const f = $('#ref-form'); if (!f.reportValidity()) return false;
-    const fd = new FormData(f); const from = readParty(fd, 'from'), to = readParty(fd, 'to');
-    if (!from || !to) { toast('Please choose who sent it and who receives it.', 'err'); return false; }
-    const r = { id: uid(), mrn: String(fd.get('mrn')).trim(), initials: String(fd.get('initials') || '').trim(), owner: String(fd.get('owner') || ''), notes: String(fd.get('notes') || '').trim(), status: 'active', createdAt: nowISO(), createdBy: session.name,
-      legs: [{ id: uid(), from, to, service: String(fd.get('service')).trim(), sentDate: fd.get('sentDate'), log: [{ date: todayISO(), by: session.name, text: `Sent to ${to.label}` }] }] };
-    db.referrals.push(r); saveDB(); toast('Now tracking this referral'); location.hash = '#/referral/' + r.id; return true;
-  } }),
+  'add-referral': () => openAddReferral(null),
+  'add-referral-for': (el) => openAddReferral({ mrn: el.dataset.mrn || '', initials: el.dataset.initials || '' }),
+  'patient-go': () => {
+    const v = (($('#patient-mrn') || {}).value || '').trim(); if (!v) return;
+    const hit = db.referrals.find((r) => String(r.mrn).toLowerCase() === v.toLowerCase());
+    if (hit) location.hash = '#/patient/' + encodeURIComponent(hit.mrn);
+    else { ui.ref.q = v; ui.ref.tab = 'all'; toast('No patient with exactly that MRN — showing anything that matches'); if (location.hash === '#/referrals') rerender(); else location.hash = '#/referrals'; }
+  },
+  'ref-sort-col': (el) => { const k = el.dataset.key; if (ui.ref.sort === k) ui.ref.dir = -(ui.ref.dir || REF_SORT_DEFAULT_DIR[k] || 1); else { ui.ref.sort = k; ui.ref.dir = REF_SORT_DEFAULT_DIR[k] || 1; } const sel = $('[data-change=ref-sort]'); if (sel) { const v = `${k}:${ui.ref.dir}`; sel.value = [...sel.options].some((o) => o.value === v) ? v : ''; } updateRefList(); },
+  'ref-quick': (el) => { if (refQuickActive(el.dataset.key)) { refClearFilters(); ui.ref.tab = 'active'; } else refApplyQuick(el.dataset.key); ui.ref.view = 'list'; rerender(); },
+  'ref-chip-x': (el) => { const k = el.dataset.k; if (k === 'dates') { ui.ref.from = ''; ui.ref.to = ''; } else if (k === 'phys') { ui.ref.phys = ''; ui.ref.role = 'any'; } else ui.ref[k] = ''; rerender(); },
+  'ref-more-filters': () => { ui.ref.more = !ui.ref.more; rerender(); },
+  'ref-group-row': (el) => { refApplyGroup(el.dataset.g, el.dataset.k); ui.ref.more = true; rerender(); },
+  'ref-bulk-apply': () => {
+    const ids = [...ui.ref.sel]; if (!ids.length) return; const who = ui.ref.bulkOwner || '';
+    let n = 0; db.referrals.forEach((r) => { if (ids.includes(r.id) && (r.owner || '') !== who) { r.owner = who; r.updatedAt = nowISO(); r.updatedBy = session.name; n++; } });
+    ui.ref.sel.clear(); saveDB(); toast(`${n} referral${n === 1 ? '' : 's'} now watched by ${who || 'nobody'}`); updateRefList();
+  },
+  'ref-bulk-clear': () => { ui.ref.sel.clear(); updateRefList(); },
+  'phys-sort-col': (el) => { const k = el.dataset.key; const def = PHYS_SORT_DESC.includes(k) ? -1 : 1; if (ui.phys.sort === k) ui.phys.dir = -(ui.phys.dir || def); else { ui.phys.sort = k; ui.phys.dir = def; } const sel = $('[data-change=phys-sort]'); if (sel) sel.value = k; updatePhysTable(); },
+  'phys-group-row': (el) => { const g = el.dataset.g, k = el.dataset.k; const f = ui.phys; if (g === 'spec') f.spec = k; else if (g === 'rel') f.rel = el.dataset.id; else if (g === 'stage') f.stage = el.dataset.id; else if (g === 'clinic') f.clinic = el.dataset.id; else if (g === 'city') f.q = k; f.group = ''; rerender(); },
   'edit-referral': (el) => { const r = getRef(el.dataset.id); openModal({ title: 'Edit patient details', body: referralFormHTML(r), submitLabel: 'Save changes', narrow: true, onSubmit: () => {
     const f = $('#ref-form'); if (!f.reportValidity()) return false; const fd = new FormData(f);
     Object.assign(r, { mrn: String(fd.get('mrn')).trim(), initials: String(fd.get('initials') || '').trim(), owner: String(fd.get('owner') || ''), notes: String(fd.get('notes') || '').trim(), updatedAt: nowISO(), updatedBy: session.name });
@@ -3306,7 +3605,7 @@ document.addEventListener('change', (e) => {
       updatePhysTable(); break;
     }
     case 'phys-spec': ui.phys.spec = t.value; updatePhysTable(); break;
-    case 'phys-sort': ui.phys.sort = t.value; updatePhysTable(); break;
+    case 'phys-sort': ui.phys.sort = t.value; ui.phys.dir = 0; updatePhysTable(); break;
     case 'act-who': ui.act.who = t.value; updateActivityTable(); break;
     case 'act-method': ui.act.method = t.value; updateActivityTable(); break;
     case 'act-from': ui.act.from = t.value; updateActivityTable(); break;
@@ -3322,7 +3621,21 @@ document.addEventListener('change', (e) => {
     case 'ref-dest': ui.ref.dest = t.value; rerender(); break;
     case 'ref-from': ui.ref.from = t.value; rerender(); break;
     case 'ref-to': ui.ref.to = t.value; rerender(); break;
-    case 'ref-sort': ui.ref.sort = t.value; rerender(); break;
+    case 'ref-sort': { const [k, d] = t.value.split(':'); ui.ref.sort = k; ui.ref.dir = +d || 0; updateRefList(); break; }
+    case 'ref-role': ui.ref.role = t.value; rerender(); break;
+    case 'ref-cat': ui.ref.cat = t.value; rerender(); break;
+    case 'ref-pri': ui.ref.pri = t.value; rerender(); break;
+    case 'ref-payer': ui.ref.payer = t.value; rerender(); break;
+    case 'ref-mstat': ui.ref.mstat = t.value; rerender(); break;
+    case 'ref-inout': ui.ref.inout = t.value; rerender(); break;
+    case 'ref-owner': ui.ref.owner = t.value; rerender(); break;
+    case 'ref-source': ui.ref.source = t.value; rerender(); break;
+    case 'ref-group': ui.ref.group = t.value; updateRefList(); break;
+    case 'ref-sel': { if (t.checked) ui.ref.sel.add(t.dataset.id); else ui.ref.sel.delete(t.dataset.id); updateRefList(); break; }
+    case 'ref-sel-all': { const ids = refListRows().slice(0, ui.ref.limit || 100).map((x) => x.r.id); ids.forEach((id) => (t.checked ? ui.ref.sel.add(id) : ui.ref.sel.delete(id))); updateRefList(); break; }
+    case 'ref-bulk-owner': ui.ref.bulkOwner = t.value; break;
+    case 'phys-refs': ui.phys.refs = t.value; updatePhysTable(); break;
+    case 'phys-group': ui.phys.group = t.value; updatePhysTable(); break;
     case 'rep-preset': ui.rep.preset = t.value; rerender(); break;
     case 'rep-from': ui.rep.from = t.value; rerender(); break;
     case 'rep-to': ui.rep.to = t.value; rerender(); break;
