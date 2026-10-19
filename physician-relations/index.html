@@ -403,6 +403,7 @@
 <div id="modal-root"></div>
 <div id="toast" role="status" aria-live="polite"></div>
 <input type="file" id="import-input" accept="application/json,.json" hidden>
+<input type="file" id="meditech-input" accept=".pdf,.json,.txt,application/pdf,application/json,text/plain" hidden>
 <input type="file" id="csv-input" accept=".csv,text/csv" hidden>
 
 <script>
@@ -990,7 +991,7 @@ async function notifyTask(t, event) {
 /* ---------- Referrals & orders ---------- */
 const getRef = (id) => db.referrals.find((r) => r.id === id);
 function legStage(l) { return l.lost ? 'lost' : l.resultedDate ? 'resulted' : l.completedDate ? 'completed' : l.scheduledDate ? 'scheduled' : 'sent'; }
-function legLastDate(l) { return [l.sentDate, l.scheduledDate, l.completedDate, l.resultedDate, l.lostDate].filter(Boolean).sort().pop() || todayISO(); }
+function legLastDate(l) { return [l.sentDate, l.scheduledDate, l.completedDate, l.resultedDate, l.lostDate, l.meditech && l.meditech.statusDate].filter(Boolean).sort().pop() || todayISO(); }
 function currentLeg(r) { return r.legs[r.legs.length - 1]; }
 function refWaiting(r) { const l = currentLeg(r); return l ? Math.max(0, daysBetween(legLastDate(l), todayISO())) : 0; }
 function refRiskReason(r) {
@@ -1934,6 +1935,185 @@ function refListRows() {
   };
   return rows.sort(sorters[f.sort] || sorters.attention);
 }
+/* ---------- Meditech ARM referral worklist reader ----------
+   Reads the text of the "Referrals - All" worklist (ARM Tracking) printed from Meditech Expanse and turns
+   each record into a plain row. Works on the text pdf.js extracts from the PDF. Patient names and birth
+   dates are reduced to initials on the spot; only the MRN and initials leave this function. */
+const MT_TYPES = ['Surgery', 'CT', 'MRI', 'Ultrasound', 'DEXA', 'IPM', 'Mammography', 'Outpatient', 'XRAY', 'X-Ray', 'Nuclear Medicine', 'PET', 'Lab', 'Hand to Shoulder Clearance',
+  'Axis Spine Center Referral', 'Axis Spine - Inbound Referral', 'Family Med Dalton Referral', 'Family Med PF Referral', 'Family Med Athol Referral', 'Family Med St Maries Referral',
+  'NW Pediatrics Referral', 'ENT Referral', 'NW Urgent Care PF Referral', 'NW Urgent Care Athol Referral', 'Internal Medicine Referral', 'General & Breast Referral', "NW Women's Care Referral"];
+const MT_LABELS = ['Auth/Ref Order', 'Auth Status', 'Referred By Prov', 'Destination', 'Referred to Location', 'Referred To Prov', 'Referred to Prov Group', 'Insurance', 'Status Date', 'Needed by Date', 'Exp Date', 'Order Start Date', 'Order Status', 'Assigned User', 'Referred by Provider', 'Referred by Location', 'Referred by Provider Group', 'Referred to Provider', 'Referred to Location', 'Referred To Provider Group', 'Authorization Number', 'Referral Number', 'Assigned User', 'Needed by Date', 'Order Diagnosis', 'Order Status', 'Birthdate'];
+function mtDate(s) { const m = /^(\d\d)\/(\d\d)\/(\d\d)(?:\d\d)?/.exec((s || '').trim()); if (!m) return ''; const y = m[3].length === 2 ? '20' + m[3] : m[3]; return `${y}-${m[1]}-${m[2]}`; }
+function mtName(s) { /* "Last,First M" -> { last, first } */ const m = /^([^,]+),\s*(\S+)/.exec((s || '').trim()); return m ? { last: m[1].trim(), first: m[2].trim() } : null; }
+function parseMeditechWorklist(raw) {
+  let text = String(raw || '');
+  const run = /ARM Tracking Date:\s*([\d/]+ [\d:]+)/.exec(text); const trackingDate = run ? run[1] : '';
+  text = text.replace(/\s+/g, ' ').replace(/Northwest Specialty Hospital Referrals(?: - \w+)? Page:\s*\d+ ARM Tracking Date:\s*[\d/]+ [\d:]+ \S+,\S+ /g, ' § ');
+  // a page break can split the "... Provider Group" label, leaving a stray "Group" on the next page
+  text = text.replace(/(Referred by Provider|Referred To Provider) (Referred to Provider )?§ ?Group /g, '$1 Group $2').replace(/ § /g, ' ').replace(/\s+/g, ' ');
+  const rows = [], warnings = [];
+  const re = /Eff Date Order Freq Name Referral Type (.*?) Medical Record Number ([A-Za-z]*\d+)/g;
+  let m, n = 0;
+  while ((m = re.exec(text))) {
+    n++;
+    const body = m[1], mrn = m[2];
+    const cut = body.indexOf(' Auth/Ref Order ');
+    if (cut < 0) { warnings.push(`Record ${n} (MRN ${mrn}) is missing its detail section and was skipped.`); continue; }
+    const head = body.slice(0, cut), rest = body.slice(cut + 1);
+    const hm = /^(\d\d\/\d\d\/\d\d(?:\d\d)?) (?:(Routine|Urgent|Stat|STAT|ASAP) )?(.*)$/.exec(head);
+    if (!hm) { warnings.push(`Record ${n} (MRN ${mrn}) has an unreadable first line and was skipped.`); continue; }
+    // split "Last,First M [extras] <Referral Type>"
+    let nameType = hm[3], referralType = '', nameStr = '';
+    const words = nameType.split(' ');
+    for (let i = 1; i < words.length && !referralType; i++) { const suffix = words.slice(i).join(' '); if (MT_TYPES.includes(suffix)) { referralType = suffix; nameStr = words.slice(0, i).join(' '); } }
+    if (!referralType) {
+      // unknown type: drop the name token, middle initials, suffixes and nicknames, keep the rest
+      const w = words.slice(); nameStr = w.shift() || '';
+      while (w.length > 1 && /^([A-Z]\.?|[A-Z]{2}|Jr\.?|Sr\.?|II|III|IV|2nd|3rd|'.*'|".*")$/.test(w[0])) w.shift();
+      referralType = w.join(' ');
+      warnings.push(`Record ${n} (MRN ${mrn}): referral type "${referralType}" is new to the reader; please check it.`);
+    }
+    const nm = mtName(nameStr);
+    const initials = nm ? ((nm.first[0] || '') + (nm.last[0] || '')).toUpperCase() : '';
+    // walk the labels in order; each value runs until the next label
+    const v = {}; let pos = 0; const seen = {};
+    for (let i = 0; i < MT_LABELS.length; i++) {
+      const lab = MT_LABELS[i], j = rest.indexOf(lab, pos);
+      if (j < 0) continue;
+      let k = rest.length;
+      for (let q = i + 1; q < MT_LABELS.length; q++) { const t = rest.indexOf(MT_LABELS[q], j + lab.length); if (t >= 0) { k = Math.min(k, t); if (t === j + lab.length + 1 || MT_LABELS[q] === MT_LABELS[i + 1]) break; } }
+      const key = lab + (seen[lab] ? '2' : ''); seen[lab] = (seen[lab] || 0) + 1;
+      v[key] = rest.slice(j + lab.length, k).trim(); pos = k;
+    }
+    const pick = (a, b) => (v[b] && v[b].length >= (v[a] || '').length ? v[b] : v[a] || '');
+    const row = {
+      mrn, initials, effDate: mtDate(hm[1]), priority: hm[2] || '', referralType,
+      order: v['Auth/Ref Order'] || '', authStatus: v['Auth Status'] || '', orderStatus: v['Order Status'] || '',
+      statusDate: mtDate(v['Status Date']), orderStart: mtDate(v['Order Start Date']), neededBy: mtDate(v['Needed by Date'] || v['Needed by Date2']), expDate: mtDate(v['Exp Date']),
+      referredBy: pick('Referred By Prov', 'Referred by Provider'), referredByLocation: v['Referred by Location'] || '', referredByGroup: v['Referred by Provider Group'] || '',
+      destination: v['Destination'] || '', referredTo: pick('Referred To Prov', 'Referred to Provider'), referredToLocation: pick('Referred to Location', 'Referred to Location2'), referredToGroup: pick('Referred to Prov Group', 'Referred To Provider Group'),
+      payer: v['Insurance'] || '', assignedUser: pick('Assigned User', 'Assigned User2'), authNumber: v['Authorization Number'] || '', referralNumber: v['Referral Number'] || '',
+    };
+    // a value that is really a label (layout glitch around a page break) is treated as blank
+    for (const k of Object.keys(row)) if (typeof row[k] === 'string' && (MT_LABELS.includes(row[k]) || row[k] === 'Group' || row[k].length > 120)) row[k] = '';
+    row.key = row.referralNumber ? 'ref:' + row.referralNumber : ['mrn', row.mrn, row.effDate, row.referralType, row.order, row.referredTo || row.referredToLocation].join('|');
+    // Meditech lists one line per insurance; consecutive identical records are the same referral
+    const prev = rows[rows.length - 1];
+    if (prev && prev.key === row.key && prev.authStatus === row.authStatus) { if (row.payer && !prev.payer.includes(row.payer)) prev.payer += ' / ' + row.payer; continue; }
+    rows.push(row);
+  }
+  const tail = /Eff Date Order Freq Name Referral Type [^]*$/.exec(text.slice(text.lastIndexOf('Medical Record Number') + 1));
+  if (tail) warnings.push('The last record in the file is cut off and was skipped.');
+  return { trackingDate, rows, warnings, total: n };
+}
+/* Groups what Meditech says into what the tracker shows. */
+function meditechOutcome(row) {
+  const a = (row.authStatus || '').toLowerCase(), o = (row.orderStatus || '').toLowerCase();
+  if (o === 'cancelled' || a === 'cancelled') return { kind: 'lost', reason: 'Cancelled in Meditech' };
+  if (a === 'denied') return { kind: 'lost', reason: 'Authorization denied' };
+  if (a === 'expired') return { kind: 'lost', reason: 'Referral expired' };
+  if (o === 'completed' || a === 'complete' || a === 'closed') return { kind: 'complete' };
+  if (a.startsWith('scheduled')) return { kind: 'scheduled' };
+  return { kind: 'open' };
+}
+
+/* ---------- Import a Meditech worklist into the tracker ---------- */
+function meditechParty(nameStr, fallbackLabel) {
+  const nm = mtName(nameStr);
+  if (nm) {
+    const last = nm.last.toLowerCase(), first = nm.first.toLowerCase();
+    const p = db.physicians.find((x) => (x.lastName || '').toLowerCase() === last && (x.firstName || '').toLowerCase().split(' ')[0] === first);
+    return p ? { label: physName(p), physicianId: p.id } : { label: `Dr. ${nm.first} ${nm.last}` };
+  }
+  return { label: fallbackLabel };
+}
+function meditechLeg(row, trackingDate) {
+  const clinic = / Referral$/.test(row.referralType) ? row.referralType.replace(/ Referral$/, '') : '';
+  const from = meditechParty(row.referredBy, row.referredByLocation || clinic || 'Not listed in Meditech');
+  const to = meditechParty(row.referredTo, row.referredToLocation || row.referredToGroup || (row.destination === 'Inside' ? 'NWSH ' + row.referralType : row.referralType || 'Not recorded'));
+  const pri = row.priority && row.priority.toLowerCase() !== 'routine' ? row.priority.toUpperCase() + ' · ' : '';
+  const loc = row.referredToLocation && !to.label.includes(row.referredToLocation) ? ` · ${row.referredToLocation}` : '';
+  const sent = row.orderStart || row.effDate || row.statusDate || todayISO();
+  const out = meditechOutcome(row);
+  const l = { id: uid(), from, to, service: pri + (row.order || row.referralType) + loc, sentDate: sent, scheduledDate: '', completedDate: '', resultedDate: '', notes: '',
+    meditech: { authStatus: row.authStatus, orderStatus: row.orderStatus, statusDate: row.statusDate, assignedUser: row.assignedUser, payer: row.payer, authNumber: row.authNumber, referralNumber: row.referralNumber, destination: row.destination, neededBy: row.neededBy, expDate: row.expDate, trackingDate },
+    log: [{ date: sent, by: 'Meditech', text: `Sent to ${to.label}` }] };
+  if (row.statusDate && row.authStatus) l.log.push({ date: row.statusDate, by: 'Meditech', text: `Meditech status: ${row.authStatus}${row.orderStatus ? ' · order ' + row.orderStatus : ''}` });
+  if (out.kind === 'complete') l.completedDate = row.statusDate || sent;
+  if (out.kind === 'lost') { l.lost = true; l.lostDate = row.statusDate || sent; l.lostReason = out.reason; }
+  return l;
+}
+function planMeditechImport(parsed) {
+  const plan = { news: [], updates: [], unchanged: 0, matched: 0, mentions: 0, trackingDate: parsed.trackingDate, warnings: parsed.warnings || [] };
+  for (const row of parsed.rows) {
+    const leg = meditechLeg(row, parsed.trackingDate);
+    for (const party of [row.referredBy, row.referredTo]) if (party) { plan.mentions++; if ((party === row.referredBy ? leg.from : leg.to).physicianId) plan.matched++; }
+    const existing = db.referrals.find((r) => r.meditechKey === row.key);
+    if (!existing) { plan.news.push({ row, leg }); continue; }
+    const old = existing.legs[0] && existing.legs[0].meditech || {};
+    if (old.authStatus === row.authStatus && old.orderStatus === row.orderStatus && old.statusDate === row.statusDate) { plan.unchanged++; continue; }
+    plan.updates.push({ row, leg, existing });
+  }
+  return plan;
+}
+function applyMeditechImport(plan) {
+  const by = session.name + ' (Meditech import)';
+  for (const { row, leg } of plan.news) {
+    const out = meditechOutcome(row);
+    const r = { id: uid(), mrn: row.mrn, initials: row.initials, owner: '', notes: '', status: out.kind === 'complete' ? 'complete' : out.kind === 'lost' ? 'lost' : 'active', source: 'meditech', meditechKey: row.key, payer: row.payer, createdAt: nowISO(), createdBy: by, legs: [leg] };
+    if (r.status !== 'active') { r.closedAt = (row.statusDate || leg.sentDate) + 'T12:00:00.000Z'; r.closedBy = 'Meditech'; if (r.status === 'lost') r.lostReason = out.reason; }
+    db.referrals.push(r);
+  }
+  for (const { row, leg, existing } of plan.updates) {
+    const out = meditechOutcome(row), l = existing.legs[0];
+    l.meditech = leg.meditech; (l.log = l.log || []).push({ date: row.statusDate || todayISO(), by: 'Meditech', text: `Meditech status: ${row.authStatus}${row.orderStatus ? ' · order ' + row.orderStatus : ''}` });
+    if (existing.status === 'active' && existing.legs.length === 1) {
+      if (out.kind === 'complete') { if (!l.completedDate) l.completedDate = row.statusDate || todayISO(); existing.status = 'complete'; existing.closedAt = (row.statusDate || todayISO()) + 'T12:00:00.000Z'; existing.closedBy = 'Meditech'; }
+      if (out.kind === 'lost') { Object.assign(l, { lost: true, lostDate: row.statusDate || todayISO(), lostReason: out.reason }); existing.status = 'lost'; existing.closedAt = (row.statusDate || todayISO()) + 'T12:00:00.000Z'; existing.closedBy = 'Meditech'; existing.lostReason = out.reason; }
+    }
+    existing.updatedAt = nowISO(); existing.updatedBy = by;
+  }
+}
+let pdfBase = '';
+function loadScript(src) { return new Promise((res, rej) => { const s = document.createElement('script'); s.src = src; s.onload = res; s.onerror = () => rej(new Error('could not load ' + src)); document.head.appendChild(s); }); }
+async function pdfText(file) {
+  if (!window.pdfjsLib) {
+    try { await loadScript('lib/pdf.min.js'); pdfBase = 'lib/'; }
+    catch { await loadScript('https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js'); pdfBase = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/'; }
+  }
+  if (!window.pdfjsLib) throw new Error('the PDF reader could not be loaded');
+  pdfjsLib.GlobalWorkerOptions.workerSrc = pdfBase + 'pdf.worker.min.js';
+  const doc = await pdfjsLib.getDocument({ data: await file.arrayBuffer() }).promise;
+  let out = '';
+  for (let i = 1; i <= doc.numPages; i++) { const page = await doc.getPage(i); const tc = await page.getTextContent(); out += tc.items.map((it) => it.str + (it.hasEOL ? '\n' : ' ')).join('') + '\n'; }
+  return out;
+}
+async function importMeditech(file) {
+  let parsed;
+  try {
+    const name = (file.name || '').toLowerCase();
+    if (name.endsWith('.json')) { const d = JSON.parse(await file.text()); const rows = Array.isArray(d) ? d : d.rows; if (!Array.isArray(rows)) throw new Error('this is not a worklist file'); parsed = { rows, warnings: d.warnings || [], trackingDate: d.trackingDate || '', total: rows.length }; }
+    else if (name.endsWith('.pdf')) { toast('Reading the PDF…'); parsed = parseMeditechWorklist(await pdfText(file)); }
+    else parsed = parseMeditechWorklist(await file.text());
+  } catch (e) { toast('That file could not be read: ' + (e && e.message ? e.message : e), 'err'); return; }
+  if (!parsed.rows.length) { toast('No referral records were found in that file. Use the "Referrals - All" worklist printed from Meditech (ARM Tracking).', 'err'); return; }
+  const plan = planMeditechImport(parsed);
+  const n = plan.news.length, u = plan.updates.length;
+  const kinds = {}; plan.news.forEach(({ row }) => { const k = meditechOutcome(row).kind; kinds[k] = (kinds[k] || 0) + 1; });
+  const body = `
+    <p>Worklist${plan.trackingDate ? ` run <b>${esc(plan.trackingDate)}</b>` : ''}: <b>${parsed.rows.length}</b> referral${parsed.rows.length === 1 ? '' : 's'} read${parsed.total && parsed.total !== parsed.rows.length ? ` from ${parsed.total} lines (one line per insurance)` : ''}.</p>
+    <ul class="list small" style="margin:10px 0">
+      <li><span>New referrals to add</span><b>${n}</b></li>
+      <li><span>Already tracked, status changed in Meditech</span><b>${u}</b></li>
+      <li><span>Already tracked, no change</span><b>${plan.unchanged}</b></li>
+      ${n ? `<li><span class="muted">Of the new ones: ${kinds.open || 0} open, ${kinds.scheduled || 0} scheduled, ${kinds.complete || 0} completed, ${kinds.lost || 0} cancelled / denied / expired</span><span></span></li>` : ''}
+      <li><span>Providers matched to a physician record</span><b>${plan.matched} of ${plan.mentions}</b></li>
+    </ul>
+    ${plan.warnings.length ? `<div class="notice" style="margin-top:10px">${ico('i-alert')}<div>${plan.warnings.slice(0, 6).map(esc).join('<br>')}${plan.warnings.length > 6 ? `<br>…and ${plan.warnings.length - 6} more` : ''}</div></div>` : ''}
+    <p class="help" style="margin-top:12px">Patients are stored by MRN and initials only. Dates and checkpoints you have entered by hand are never overwritten; Meditech only fills in what is blank and records status changes.</p>`;
+  openModal({ title: 'Import from Meditech', body, narrow: true, submitLabel: n + u ? `Import ${n + u} referral${n + u === 1 ? '' : 's'}` : 'Nothing to import', onSubmit: n + u ? () => { applyMeditechImport(plan); saveDB(); toast(`${n} added, ${u} updated from Meditech`); rerender(); return true; } : null });
+}
+
 function viewReferrals() {
   const f = ui.ref, R = db.referrals;
   const withStatus = R.map((r) => ({ r, s: refStatus(r) }));
@@ -1943,6 +2123,7 @@ function viewReferrals() {
       <div class="actions">
         <div class="toggle" role="group" aria-label="View"><button class="${f.view !== 'reports' ? 'on' : ''}" data-act="ref-view" data-view="list">Tracking list</button><button class="${f.view === 'reports' ? 'on' : ''}" data-act="ref-view" data-view="reports">Reports</button></div>
         <button class="btn" data-act="${f.view === 'reports' ? 'export-rep-csv' : 'export-ref-csv'}">${ico('i-download')}Download spreadsheet</button>
+        <button class="btn" data-act="import-meditech">${ico('i-upload')}Import from Meditech</button>
         <button class="btn primary" data-act="add-referral">${ico('i-plus')}Start tracking a referral</button>
       </div>
     </div>`;
@@ -2101,7 +2282,7 @@ function viewReferral(r) {
         <div class="avatar" aria-hidden="true">${esc((r.initials || r.mrn || '?').slice(0, 2).toUpperCase())}</div>
         <div class="info">
           <h1>Patient ${esc(r.mrn)}${r.initials ? ` <span class="muted" style="font-weight:400">(${esc(r.initials)})</span>` : ''}</h1>
-          <div class="sub">Started ${fmtDate(refFirstDate(r))} · ${refDays(r)} days ${active ? 'so far' : 'total'} · ${r.legs.length} step${r.legs.length === 1 ? '' : 's'} · watched by <b>${esc(r.owner || 'everyone')}</b></div>
+          <div class="sub">Started ${fmtDate(refFirstDate(r))} · ${refDays(r)} days ${active ? 'so far' : 'total'} · ${r.legs.length} step${r.legs.length === 1 ? '' : 's'} · watched by <b>${esc(r.owner || 'everyone')}</b>${r.source === 'meditech' ? ' · from the Meditech worklist' : ''}</div>
         </div>
         <div>${refBadge(r)}</div>
         <div class="actions no-print" style="display:flex;gap:10px;flex-wrap:wrap">
@@ -2143,6 +2324,7 @@ function legCardHTML(r, l, i, active) {
       </div>`).join('')}
     </div>
     <p style="margin:0 0 10px"><b>${l.lost ? '<span style="color:var(--red)">Dropped out</span>' : esc(legStatusText(l))}</b>${l.lost && l.lostReason ? ` — ${esc(l.lostReason)}` : ''}</p>
+    ${l.meditech ? `<p class="help" style="margin:-4px 0 10px">Meditech: <b>${esc(l.meditech.authStatus || '—')}</b>${l.meditech.orderStatus ? ` · order ${esc(l.meditech.orderStatus)}` : ''}${l.meditech.statusDate ? ` as of ${fmtDate(l.meditech.statusDate)}` : ''}${l.meditech.destination ? ` · ${esc(l.meditech.destination)}` : ''}${l.meditech.payer ? ` · ${esc(l.meditech.payer)}` : ''}${l.meditech.assignedUser ? ` · assigned to ${esc(l.meditech.assignedUser)}` : ''}${l.meditech.authNumber ? ` · auth # ${esc(l.meditech.authNumber)}` : ''}${l.meditech.neededBy ? ` · needed by ${fmtDate(l.meditech.neededBy)}` : ''}</p>` : ''}
     <div class="status-actions no-print">
       ${canEdit && next ? `<button class="btn primary" data-act="leg-check" data-id="${r.id}" data-leg="${l.id}" data-key="${next.key}">${ico('i-check')}${esc(next.verb)}…</button>` : ''}
       ${canEdit && !l.lost ? `<button class="btn" data-act="leg-lost" data-id="${r.id}" data-leg="${l.id}">Patient didn't follow through…</button>` : ''}
@@ -2942,6 +3124,7 @@ const actions = {
   'load-sample': () => loadSample(),
   'export-json': () => exportBackup(),
   'import-json': () => $('#import-input').click(),
+  'import-meditech': () => $('#meditech-input').click(),
   'export-phys-csv': () => exportPhysCSV(),
   'import-phys-csv': () => $('#csv-input').click(),
   'export-contacts-csv': () => exportContactsCSV(),
@@ -3061,6 +3244,7 @@ document.addEventListener('change', (e) => {
   }
 });
 $('#import-input').addEventListener('change', (e) => { const f = e.target.files[0]; if (f) importBackup(f); e.target.value = ''; });
+$('#meditech-input').addEventListener('change', (e) => { const f = e.target.files[0]; if (f) importMeditech(f); e.target.value = ''; });
 $('#csv-input').addEventListener('change', (e) => { const f = e.target.files[0]; if (f) importPhysiciansCSV(f); e.target.value = ''; });
 
 // Keep multiple open tabs in sync

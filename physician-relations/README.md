@@ -8,6 +8,8 @@ physician-relations/
   api.php       the server side — talks to the database
   config.php    logins (edit this one)
   .htaccess     keeps the database private
+  .user.ini     raises the hosting's upload limit so attachments up to 15 MB work
+  lib/          pdf.js (Mozilla, Apache 2.0) — reads Meditech worklist PDFs in the browser
   data/         created automatically on first use: the SQLite database + attachments
 ```
 
@@ -47,6 +49,12 @@ follow-up date. Follow-ups roll into a queue (overdue / due this week / just min
 - Reports: in progress / at risk / completed / dropped out, average days until seen and until results, and a
   by-destination table (who receives referrals and how fast they move). Spreadsheet download of every step.
 - Each physician's page shows the referrals they sent or received.
+- **Import from Meditech**: in Meditech Expanse open ARM Tracking → the *Referrals - All* worklist, print it to
+  PDF, then on the Referrals page click *Import from Meditech* and pick the PDF. New referrals are added, ones
+  already tracked get their Meditech status updated, nothing entered by hand is overwritten. Patients are
+  stored by MRN and initials only; names and birth dates in the PDF are dropped on the spot. The same button
+  also accepts a `.json` worklist file prepared outside the app. Do not upload worklist files to the web
+  folder — they go through the browser only.
 
 ## Logins
 Edit `config.php`. Passwords are stored as bcrypt hashes, never in plain text. To change one: sign in as
