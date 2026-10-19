@@ -2457,7 +2457,7 @@ function refListHTML() {
       <tbody>${rows.map(({ r, s }) => { const l = currentLeg(r), md = refMed(r), risk = refRiskReason(r), pri = refPriority(r), open = s === 'active' || s === 'risk'; return `
         <tr class="clickable ${f.sel.has(r.id) ? 'selected' : ''}" data-act="open-ref" data-id="${r.id}">
           <td class="chk"><input type="checkbox" data-change="ref-sel" data-id="${r.id}" ${f.sel.has(r.id) ? 'checked' : ''} aria-label="Select"></td>
-          <td><div class="primary-text"><a href="#/patient/${encodeURIComponent(r.mrn)}" title="All referrals for this patient">${esc(r.mrn)}</a></div><div class="sub">${esc(r.initials || '')}${r.payer ? ` · ${esc(shortText(r.payer, 24))}` : ''}</div></td>
+          <td class="nowrap"><div class="primary-text"><a href="#/patient/${encodeURIComponent(r.mrn)}" title="All referrals for this patient">${esc(r.mrn)}</a></div><div class="sub">${esc(r.initials || '')}${r.payer ? ` · ${esc(shortText(r.payer, 24))}` : ''}</div></td>
           <td><span class="tag">${esc(refCategory(r))}</span>${pri ? ` <span class="badge b-over">${pri}</span>` : ''}</td>
           <td>${l ? `<div><b>${esc(l.from.label)}</b> ${ico('i-arrow-right', 'sm')} <b>${esc(l.to.label)}</b></div><div class="sub">${esc(l.service || '')}${r.legs.length > 1 ? ` · step ${r.legs.length}` : ''}</div>` : '<span class="muted">No steps yet</span>'}</td>
           <td>${refBadge(r)}<div class="sub">${esc(risk && /Appointment/.test(risk) ? risk : legStatusShort(l))}${md && md.authStatus ? `<br>Meditech: ${esc(md.authStatus)}${md.statusDate ? ` · ${fmtDate(md.statusDate)}` : ''}` : ''}</div></td>
