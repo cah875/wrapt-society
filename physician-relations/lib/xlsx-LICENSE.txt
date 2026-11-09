@@ -1,0 +1,3 @@
+SheetJS Community Edition (xlsx.full.min.js) — Copyright (C) 2012-present SheetJS LLC
+Licensed under the Apache License, Version 2.0: http://www.apache.org/licenses/LICENSE-2.0
+Used by the "Upload surgeon scorecard" button to read .xlsx exports in the browser. Loaded only when needed.

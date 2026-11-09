@@ -10,6 +10,8 @@ physician-relations/
   .htaccess     keeps the database private
   .user.ini     raises the hosting's upload limit so attachments up to 15 MB work
   lib/          pdf.js (Mozilla, Apache 2.0) — reads Meditech worklist PDFs in the browser
+                xlsx.full.min.js (SheetJS, Apache 2.0) — reads PowerBI .xlsx exports for the scorecard
+  imports/      scorecard data files to upload through the app (not for the web folder)
   data/         created automatically on first use: the SQLite database + attachments
 ```
 
@@ -55,6 +57,17 @@ follow-up date. Follow-ups roll into a queue (overdue / due this week / just min
   stored by MRN and initials only; names and birth dates in the PDF are dropped on the spot. The same button
   also accepts a `.json` worklist file prepared outside the app. Do not upload worklist files to the web
   folder — they go through the browser only.
+
+**Scorecard** — procedure cases and gross charges by surgeon, by week and by month, for every year loaded.
+Pick a surgeon (or all surgeons), switch between case volume and gross charges, smooth the weekly line with a
+4-week average, and turn room types on and off (OR 1–10, Surgery Center 11–12, MPR, Endo / Axis / IR). The
+summary compares the latest year with the same weeks of earlier years; the table shows every month, quarter,
+same-weeks total and full year. Each matched physician's page gets a "Surgical volume & charges" card.
+- **Upload surgeon scorecard** (administrator, on the Scorecard page or in Settings) reads the PowerBI case
+  export (.xlsx or .csv) or a scorecard data file (.json) in the browser, shows what will change, and saves
+  surgeon-level totals only. The years in the file replace what is stored for those years; other years stay.
+- **Download data file** writes the stored totals back out as a .json that can be uploaded again or kept as a
+  backup. The starting file is in `imports/`.
 
 ## Logins
 Edit `config.php`. Passwords are stored as bcrypt hashes, never in plain text. To change one: sign in as

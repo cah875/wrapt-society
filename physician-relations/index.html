@@ -67,6 +67,7 @@
   .nav .count { background: var(--red); color: #fff; font-size: 12px; font-weight: 700; border-radius: 10px; padding: 1px 7px; }
   .userbox { display: flex; align-items: center; gap: 6px; white-space: nowrap; }
   .userbox .who { color: var(--muted); font-size: 14px; margin-right: 6px; }
+  @media (max-width: 1400px) { .nav a { padding: 0 8px; font-size: 15px; } }
   @media (max-width: 1180px) {
     .topbar-inner { flex-wrap: wrap; height: auto; padding: 10px 16px 0; gap: 8px 12px; }
     .brand { flex: 1; } .brand img { height: 40px; }
@@ -263,6 +264,7 @@
   .chart .bar:hover rect:first-of-type { opacity: .8; }
   .chart-legend { display: flex; gap: 18px; flex-wrap: wrap; font-size: 14px; margin-bottom: 8px; }
   .chart-legend i { display: inline-block; width: 12px; height: 12px; border-radius: 3px; margin-right: 6px; vertical-align: -1px; }
+  .vol-up { color: var(--green-dark); } .vol-down { color: var(--red); }
   .leg .steps { margin-bottom: 12px; }
   .leg .step .d .tag { font-size: 11px; padding: 0 6px; }
 
@@ -365,6 +367,7 @@
   <symbol id="i-list" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 6h12M9 12h12M9 18h12M4 6h0M4 12h0M4 18h0"/></symbol>
   <symbol id="i-x" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><path d="M6 6l12 12M18 6 6 18"/></symbol>
   <symbol id="i-chevron" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="m9 6 6 6-6 6"/></symbol>
+  <symbol id="i-chart" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 20V10"/><path d="M10 20V4"/><path d="M16 20v-7"/><path d="M22 20H2"/></symbol>
   <symbol id="i-route" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="5" cy="6" r="2.5"/><circle cx="19" cy="18" r="2.5"/><path d="M7.5 6H15a3 3 0 0 1 0 6H9a3 3 0 0 0 0 6h7.5"/></symbol>
 </svg>
 
@@ -415,6 +418,7 @@
         <a href="#/home" data-nav="home"><svg class="i"><use href="#i-home"/></svg>Home</a>
         <a href="#/physicians" data-nav="physicians"><svg class="i"><use href="#i-people"/></svg>Physicians</a>
         <a href="#/referrals" data-nav="referrals"><svg class="i"><use href="#i-route"/></svg>Referrals<span class="count" id="nav-ref-count" hidden></span></a>
+        <a href="#/scorecard" data-nav="scorecard"><svg class="i"><use href="#i-chart"/></svg>Scorecard</a>
         <a href="#/followups" data-nav="followups"><svg class="i"><use href="#i-flag"/></svg>To-Do<span class="count" id="nav-fu-count" hidden></span></a>
         <a href="#/activity" data-nav="activity"><svg class="i"><use href="#i-list"/></svg>Activity</a>
       </nav>
@@ -436,6 +440,7 @@
 <input type="file" id="import-input" accept="application/json,.json" hidden>
 <input type="file" id="meditech-input" accept=".pdf,.json,.txt,application/pdf,application/json,text/plain" hidden>
 <input type="file" id="csv-input" accept=".csv,text/csv" hidden>
+<input type="file" id="volumes-input" accept=".xlsx,.xls,.csv,.json,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet,text/csv,application/json" hidden>
 
 <script>
 'use strict';
@@ -643,6 +648,7 @@ function emptyDB() {
     contacts: [],
     referrals: [],
     tasks: [],
+    volumes: [],
     meta: { createdAt: nowISO(), updatedAt: nowISO() },
   };
 }
@@ -654,6 +660,7 @@ function normalizeDB(d) {
   d.contacts = d.contacts || [];
   d.referrals = d.referrals || [];
   d.tasks = d.tasks || [];
+  d.volumes = d.volumes || [];
   d.clinics = d.clinics || [];
   d.meta = d.meta || base.meta;
   return d;
@@ -673,7 +680,7 @@ function dbFromServer(res) {
   const settingsRow = (d.settings || []).find((s) => s.id === 'main') || {};
   const out = normalizeDB({
     settings: Object.assign({ team: (res.defaults && res.defaults.team) || [] }, settingsRow),
-    clinics: d.clinics || [], physicians: d.physicians || [], contacts: d.contacts || [], referrals: d.referrals || [], tasks: d.tasks || [],
+    clinics: d.clinics || [], physicians: d.physicians || [], contacts: d.contacts || [], referrals: d.referrals || [], tasks: d.tasks || [], volumes: d.volumes || [],
     meta: { updatedAt: settingsRow.updatedAt || nowISO() },
   });
   delete out.settings.id;
@@ -683,7 +690,7 @@ function dbFromServer(res) {
 }
 function takeSnapshot(d) {
   const s = {};
-  ['clinics', 'physicians', 'contacts', 'referrals', 'tasks'].forEach((c) => d[c].forEach((r) => { s[c + '/' + r.id] = JSON.stringify(r); }));
+  ['clinics', 'physicians', 'contacts', 'referrals', 'tasks', 'volumes'].forEach((c) => (d[c] || []).forEach((r) => { s[c + '/' + r.id] = JSON.stringify(r); }));
   s['settings/main'] = JSON.stringify({ id: 'main', ...d.settings });
   return s;
 }
@@ -1104,6 +1111,7 @@ const ui = {
   ref: { tab: 'active', q: '', view: 'list', sort: 'attention', dir: 0, phys: '', role: 'any', dest: '', sender: '', from: '', to: '', cat: '', pri: '', payer: '', mstat: '', inout: '', owner: '', source: '', group: '', more: false, limit: 100, sel: new Set(), bulkOwner: '' },
   rep: { preset: '12m', from: '', to: '', compare: 'prev', sort: 'ordered', dir: -1 },
   act: { q: '', who: '', method: '', from: '', to: '' },
+  sx: { vol: '', metric: 'cases', smooth: 4, rooms: { OR: true, SC: true, MPR: true, OTH: true } },
   year: new Date().getFullYear(),
 };
 
@@ -1142,6 +1150,7 @@ function route() {
       break;
     }
     case 'activity': main.innerHTML = viewActivity(); updateActivityTable(); break;
+    case 'scorecard': main.innerHTML = viewScorecard(parts[1] || ''); break;
     case 'settings': main.innerHTML = viewSettings(); loadDigestStatus(); break;
     default: main.innerHTML = viewHome();
   }
@@ -1649,6 +1658,7 @@ function viewPhysician(p) {
           </dl>
           <p class="help" style="margin:10px 0 0">Source: ${esc(p.nwsh.source)}. Encounters minus procedure cases are loaded as the "ancillary actual" below.</p>
         </section>` : ''}
+        ${physicianVolumeCardHTML(p)}
         <section class="card">
           <div class="card-head"><h2>Goals &amp; actuals</h2><button class="btn sm no-print" data-act="add-goal" data-id="${p.id}">${ico('i-plus', 'sm')}Add a year</button></div>
           ${goalsTableHTML(p)}
@@ -2797,6 +2807,7 @@ function viewSettings() {
         <div style="display:flex;gap:10px;flex-wrap:wrap">
           <button class="btn primary" data-act="export-json">${ico('i-download')}Export a backup</button>
           ${isAdmin() ? `<button class="btn" data-act="import-json">${ico('i-upload')}Restore from a backup…</button>` : ''}
+          ${isAdmin() ? `<button class="btn" data-act="import-volumes">${ico('i-upload')}Upload surgeon scorecard</button>` : ''}
           <button class="btn" data-act="export-phys-csv">Physicians spreadsheet</button>
           <button class="btn" data-act="export-contacts-csv">Activity spreadsheet</button>
         </div>
@@ -3088,7 +3099,7 @@ async function importBackup(file) {
     const d = normalizeDB(data.db);
     if (MODE === 'server') {
       try {
-        const r = await api('replace', { data: { clinics: d.clinics, physicians: d.physicians, contacts: d.contacts, referrals: d.referrals, tasks: d.tasks, settings: [{ id: 'main', ...d.settings }] } });
+        const r = await api('replace', { data: { clinics: d.clinics, physicians: d.physicians, contacts: d.contacts, referrals: d.referrals, tasks: d.tasks, volumes: d.volumes, settings: [{ id: 'main', ...d.settings }] } });
         serverVersion = r.version; db = d; snapshot = takeSnapshot(db);
       } catch (e) { toast('The backup could not be restored: ' + e.message, 'err'); return; }
     } else {
@@ -3262,6 +3273,324 @@ function loadSample() {
     { id: uid(), title: 'Ask Dr. Chen\'s office which days work for a site tour', details: '', assignedTo: me, assignedBy: other, dueDate: addDays(t, 3), physicianId: P[1].id, referralId: '', done: false, createdAt: nowISO() },
   );
   saveDB(); toast('Sample records loaded'); rerender();
+}
+
+/* ===================== Surgeon scorecard: procedure cases & gross charges =====================
+   Collection "volumes": one record per surgeon —
+     { id, physicianId, surgeon, specialty, series: [{ period, cases, charges, roomType }] }
+   period is "YYYY-Www" (week 1 begins Jan 1, seven-day blocks) or "YYYY-MM". roomType is OR, SC, MPR or OTH.
+   One extra record with id "meta" keeps the as-of date and where each year's numbers came from.
+   Surgeon-level totals only — nothing about individual patients is stored.                       */
+const VOL_ROOMS = [['OR', 'OR 1–10'], ['SC', 'Surgery Center 11–12'], ['MPR', 'MPR procedure rooms'], ['OTH', 'Endo / Axis / IR / imaging']];
+const VOL_MONTHS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+function volRoomType(room) {
+  const r = String(room || '').toUpperCase().replace(/\s+/g, '');
+  const m = r.match(/^OR\.?(\d{1,2})$/);
+  if (m) { const n = +m[1]; if (n >= 1 && n <= 10) return 'OR'; }
+  if (r.startsWith('SC')) return 'SC';
+  if (r.startsWith('ZMPR')) return 'MPR';
+  return 'OTH';
+}
+function volWeekOf(iso) { const d = new Date(iso + 'T00:00:00'); const jan1 = new Date(d.getFullYear(), 0, 1); return Math.floor((d - jan1) / 86400000 / 7) + 1; }
+function volRecords() { return (db.volumes || []).filter((r) => r.id !== 'meta' && Array.isArray(r.series)); }
+function volMeta() { return (db.volumes || []).find((r) => r.id === 'meta') || null; }
+function volNameParts(s) { const [l, f] = String(s || '').split(','); return { last: (l || '').trim(), first: (f || '').trim().split(/\s+/)[0] || '' }; }
+function volMatchPhysician(surgeon) {
+  const { last, first } = volNameParts(surgeon); if (!last) return null;
+  const L = last.toLowerCase(), F = first.toLowerCase();
+  const byBoth = db.physicians.find((x) => (x.lastName || '').toLowerCase() === L && (x.firstName || '').toLowerCase().split(/\s+/)[0] === F);
+  if (byBoth) return byBoth;
+  const byLast = db.physicians.filter((x) => (x.lastName || '').toLowerCase() === L);
+  return byLast.length === 1 && (!F || (byLast[0].firstName || '').toLowerCase()[0] === F[0]) ? byLast[0] : null;
+}
+function volPhysician(rec) { return (rec.physicianId && getPhys(rec.physicianId)) || volMatchPhysician(rec.surgeon) || null; }
+function volForPhysician(p) { return volRecords().find((r) => r.physicianId === p.id) || volRecords().find((r) => { const n = volNameParts(r.surgeon); return n.last.toLowerCase() === (p.lastName || '').toLowerCase() && n.first.toLowerCase() === (p.firstName || '').toLowerCase().split(/\s+/)[0]; }) || null; }
+function volTitle(s) { return String(s || '').split(' ').map((w) => w.replace(/[A-Za-z][A-Za-z']*/g, (x) => x[0].toUpperCase() + x.slice(1).toLowerCase())).join(' '); }
+function volDisplayName(rec) { const p = volPhysician(rec); return p ? physName(p) : volTitle(rec.surgeon); }
+function volYears() { const ys = new Set(); volRecords().forEach((r) => r.series.forEach((s) => ys.add(+s.period.slice(0, 4)))); return [...ys].filter(Boolean).sort(); }
+function volYearColor(y, years) { const i = years.length - 1 - years.indexOf(y); return ['#3E9D46', '#1E7FB0', '#9AA7B2', '#C9D1D8', '#E1E6EA'][Math.min(i, 4)]; }
+/* Totals by week and month for one surgeon record (or every record when rec is null), limited to the room types turned on. */
+function volAgg(rec, rooms) {
+  const years = volYears(), w = {}, m = {};
+  years.forEach((y) => { w[y] = Array.from({ length: 53 }, () => [0, 0]); m[y] = Array.from({ length: 12 }, () => [0, 0]); });
+  (rec ? [rec] : volRecords()).forEach((r) => r.series.forEach((s) => {
+    if (rooms && !rooms[s.roomType || 'OTH']) return;
+    const y = +s.period.slice(0, 4); if (!w[y]) return;
+    if (s.period[5] === 'W') { const k = +s.period.slice(6) - 1; if (k >= 0 && k < 53) { w[y][k][0] += num(s.cases); w[y][k][1] += num(s.charges); } }
+    else { const k = +s.period.slice(5, 7) - 1; if (k >= 0 && k < 12) { m[y][k][0] += num(s.cases); m[y][k][1] += num(s.charges); } }
+  }));
+  return { years, w, m };
+}
+/* The latest date the numbers run to, from the meta record or, failing that, the latest period in the data. */
+function volAsOf() {
+  const meta = volMeta();
+  if (meta && meta.asOf) return { date: meta.asOf, year: +meta.asOf.slice(0, 4), week: volWeekOf(meta.asOf), month: +meta.asOf.slice(5, 7) };
+  let best = '';
+  volRecords().forEach((r) => r.series.forEach((s) => { if (s.period[5] !== 'W' && s.period > best) best = s.period; }));
+  if (!best) return null;
+  const y = +best.slice(0, 4), mo = +best.slice(5, 7), end = new Date(y, mo, 0);
+  const iso = `${y}-${String(mo).padStart(2, '0')}-${String(end.getDate()).padStart(2, '0')}`;
+  return { date: iso, year: y, week: volWeekOf(iso), month: mo };
+}
+const volMoney = (n) => '$' + Math.round(n).toLocaleString();
+const volShort = (n) => Math.abs(n) >= 1e6 ? '$' + (n / 1e6).toFixed(2) + 'M' : Math.abs(n) >= 1e3 ? '$' + Math.round(n / 1e3) + 'K' : '$' + Math.round(n);
+const volInt = (n) => Math.round(n).toLocaleString();
+const volSigned = (n, f) => (n > 0 ? '+' : n < 0 ? '−' : '') + (f || volInt)(Math.abs(n));
+const volPct = (a, b) => (b ? Math.round((a / b - 1) * 1000) / 10 : null);
+const volPctText = (p) => (p === null ? 'n/a' : (p > 0 ? '+' : p < 0 ? '−' : '') + Math.abs(p).toFixed(1) + '%');
+const volCls = (n) => (n > 0 ? 'vol-up' : n < 0 ? 'vol-down' : '');
+function volSmooth(arr, k) { if (k <= 1) return arr; return arr.map((v, i) => { if (v === null) return null; const win = arr.slice(Math.max(0, i - k + 1), i + 1).filter((x) => x !== null); return win.length < Math.min(k, i + 1) ? null : win.reduce((s, x) => s + x, 0) / win.length; }); }
+function volTicks(max, steps) { if (max <= 0) return { tick: 1, top: steps }; const raw = max / steps, p = Math.pow(10, Math.floor(Math.log10(raw))); const tick = [1, 2, 2.5, 5, 10].map((x) => x * p).find((x) => x >= raw) || 10 * p; return { tick, top: tick * steps }; }
+/* Line chart of one value per week for each year. Points carry a <title> so hovering shows the number. */
+function volLineSVG(years, data, fmt, label) {
+  const W = 760, H = 250, padL = 52, padB = 30, padT = 12, padR = 10, n = 53;
+  const max = Math.max(0, ...years.flatMap((y) => data[y].filter((v) => v !== null)));
+  const { tick, top } = volTicks(max, 5);
+  const x = (i) => padL + (W - padL - padR) * (i / (n - 1)), y = (v) => padT + (H - padT - padB) * (1 - v / top);
+  const grid = Array.from({ length: 6 }, (_, i) => i * tick).map((v) => `<line x1="${padL}" x2="${W - padR}" y1="${y(v)}" y2="${y(v)}" class="grid"/><text x="${padL - 6}" y="${y(v) + 4}" class="ax" text-anchor="end">${fmt(v)}</text>`).join('');
+  const xl = [1, 5, 9, 13, 17, 21, 25, 29, 33, 37, 41, 45, 49, 53].map((k) => `<text x="${x(k - 1)}" y="${H - 10}" class="ax" text-anchor="middle">${k}</text>`).join('');
+  const lines = years.map((yr) => {
+    const c = volYearColor(yr, years), pts = data[yr]; let d = '', pen = false; const dots = [];
+    pts.forEach((v, i) => { if (v === null) { pen = false; return; } d += `${pen ? 'L' : 'M'}${x(i).toFixed(1)},${y(v).toFixed(1)} `; pen = true; dots.push(`<circle cx="${x(i).toFixed(1)}" cy="${y(v).toFixed(1)}" r="${yr === years[years.length - 1] ? 3 : 2.3}" fill="${c}"><title>${yr}, week ${i + 1}: ${fmt(v)}</title></circle>`); });
+    return `<path d="${d.trim()}" fill="none" stroke="${c}" stroke-width="${yr === years[years.length - 1] ? 2.6 : 1.8}" stroke-linejoin="round"/>${dots.join('')}`;
+  }).join('');
+  return `<svg class="chart" viewBox="0 0 ${W} ${H}" role="img" aria-label="${esc(label)}">${grid}<line x1="${padL}" x2="${W - padR}" y1="${y(0)}" y2="${y(0)}" class="axis"/>${xl}<text x="${(padL + W - padR) / 2}" y="${H - 0}" class="ax" text-anchor="middle" style="font-size:10px">week of year</text>${lines}</svg>`;
+}
+/* Grouped bars, one group per month, one bar per year. */
+function volBarSVG(years, data, fmt, label) {
+  const W = 760, H = 250, padL = 52, padB = 28, padT = 12, padR = 10;
+  const max = Math.max(0, ...years.flatMap((y) => data[y].filter((v) => v !== null)));
+  const { tick, top } = volTicks(max, 5);
+  const gw = (W - padL - padR) / 12, bw = Math.max(3, Math.min(16, (gw - 8) / years.length));
+  const y = (v) => padT + (H - padT - padB) * (1 - v / top);
+  const grid = Array.from({ length: 6 }, (_, i) => i * tick).map((v) => `<line x1="${padL}" x2="${W - padR}" y1="${y(v)}" y2="${y(v)}" class="grid"/><text x="${padL - 6}" y="${y(v) + 4}" class="ax" text-anchor="end">${fmt(v)}</text>`).join('');
+  const bars = VOL_MONTHS.map((mn, i) => {
+    const x0 = padL + i * gw + (gw - bw * years.length - 2 * (years.length - 1)) / 2;
+    return years.map((yr, j) => { const v = data[yr][i]; if (v === null) return ''; const xx = x0 + j * (bw + 2); return `<g class="bar"><title>${mn} ${yr}: ${fmt(v)}</title><rect x="${xx.toFixed(1)}" y="${y(v).toFixed(1)}" width="${bw.toFixed(1)}" height="${Math.max(0, y(0) - y(v)).toFixed(1)}" rx="2" fill="${volYearColor(yr, years)}"/></g>`; }).join('')
+      + `<text x="${padL + i * gw + gw / 2}" y="${H - 8}" class="ax" text-anchor="middle">${mn}</text>`;
+  }).join('');
+  return `<svg class="chart" viewBox="0 0 ${W} ${H}" role="img" aria-label="${esc(label)}">${grid}<line x1="${padL}" x2="${W - padR}" y1="${y(0)}" y2="${y(0)}" class="axis"/>${bars}</svg>`;
+}
+function volLegend(years) { return `<div class="chart-legend">${years.map((y) => `<span><i style="background:${volYearColor(y, years)}"></i>${y}</span>`).join('')}</div>`; }
+/* ---------- The scorecard page ---------- */
+function volRecById(id) { return volRecords().find((r) => r.id === id) || null; }
+function viewScorecard(volId) {
+  const recs = volRecords();
+  const head = `<div class="page-head">
+      <div><h1>Surgeon Scorecard</h1><p class="lead">Procedure cases and gross charges by surgeon, compared with the same weeks of earlier years.</p></div>
+      <div class="actions no-print">
+        ${recs.length ? `<button class="btn" data-act="export-volumes">${ico('i-download')}Download data file</button>` : ''}
+        ${isAdmin() ? `<button class="btn" data-act="import-volumes">${ico('i-upload')}Upload surgeon scorecard</button>` : ''}
+      </div>
+    </div>`;
+  if (!recs.length) return head + `<div class="card empty"><p style="margin:0 0 8px;font-size:17px"><b>No surgeon volumes have been loaded yet.</b></p>
+      <p class="muted" style="max-width:640px;margin:0 auto">${isAdmin() ? 'Click <b>Upload surgeon scorecard</b> and pick the PowerBI case export (.xlsx or .csv) or a scorecard data file (.json). You will see a summary of what will change before anything is saved.' : 'Ask the administrator to upload the PowerBI case export from Settings or this page.'}</p></div>`;
+  ui.sx.vol = volId && volRecById(volId) ? volId : '';
+  const rec = ui.sx.vol ? volRecById(ui.sx.vol) : null;
+  const f = ui.sx, rooms = f.rooms;
+  const { years, w, m } = volAgg(rec, rooms);
+  const asOf = volAsOf() || { date: '', year: years[years.length - 1], week: 53, month: 12 };
+  const latest = asOf.year, prior = years.filter((y) => y < latest).slice(-1)[0], prior2 = years.filter((y) => y < latest).slice(-2)[0];
+  const mi = f.metric === 'charges' ? 1 : 0, isCh = mi === 1, fmt = isCh ? volShort : volInt;
+  const AW = asOf.week, AM = asOf.month;
+  const ytd = (y, k) => (w[y] ? w[y].slice(0, AW).reduce((s, a) => s + a[k], 0) : 0);
+  const full = (y, k) => (m[y] ? m[y].reduce((s, a) => s + a[k], 0) : 0);
+  const cur = ytd(latest, mi), prev = prior ? ytd(prior, mi) : 0, prev2 = prior2 && prior2 !== prior ? ytd(prior2, mi) : null;
+  const curC = ytd(latest, 0), prevC = prior ? ytd(prior, 0) : 0, curCh = ytd(latest, 1), prevCh = prior ? ytd(prior, 1) : 0;
+  const apc = curC ? curCh / curC : 0, apcPrev = prevC ? prevCh / prevC : 0;
+  const active = m[latest] ? m[latest].slice(0, AM).filter((a) => a[0] > 0).length : 0;
+  const who = rec ? volDisplayName(rec) : 'All surgeons';
+  const unit = isCh ? 'in gross charges' : 'procedure cases';
+  const bySpec = {}; recs.forEach((r) => { (bySpec[r.specialty || 'Other'] = bySpec[r.specialty || 'Other'] || []).push(r); });
+  const options = `<option value="">All surgeons (combined)</option>` + Object.keys(bySpec).sort().map((sp) => `<optgroup label="${esc(sp)}">${bySpec[sp].sort((a, b) => volDisplayName(a).localeCompare(volDisplayName(b))).map((r) => `<option value="${r.id}" ${rec && rec.id === r.id ? 'selected' : ''}>${esc(volDisplayName(r))}</option>`).join('')}</optgroup>`).join('');
+  const p = rec ? volPhysician(rec) : null;
+  const sentence = `<b>${esc(who)}</b>${p ? ` <a href="#/physician/${p.id}" class="small">(open physician page)</a>` : ''}: <b>${fmt(cur)}</b> ${unit} in ${latest} through week ${AW}${asOf.date ? ` (${fmtDate(asOf.date)})` : ''}`
+    + (prior ? `, <b class="${volCls(cur - prev)}">${volSigned(cur - prev, fmt)} (${volPctText(volPct(cur, prev))})</b> compared with the same weeks of ${prior}` : '')
+    + (prev2 !== null ? ` and ${volPctText(volPct(cur, prev2))} compared with ${prior2}` : '') + '.'
+    + (curC ? ` The average gross charge per case is <b>${volMoney(apc)}</b>${apcPrev ? ` (${volMoney(apcPrev)} in ${prior}, ${volPctText(volPct(apc, apcPrev))})` : ''}.` : '');
+  const kpis = [
+    { l: `${latest} ${isCh ? 'charges' : 'cases'}, weeks 1–${AW}`, v: fmt(cur), c: prior ? `<span class="${volCls(cur - prev)}">${volSigned(cur - prev, fmt)} · ${volPctText(volPct(cur, prev))}</span> vs ${prior}` : '' },
+    prior ? { l: `${prior} same weeks`, v: fmt(prev), c: `full year ${fmt(full(prior, mi))}` } : null,
+    prior2 && prior2 !== prior ? { l: `${prior2} same weeks`, v: fmt(prev2), c: `full year ${fmt(full(prior2, mi))}` } : null,
+    { l: `${latest} run-rate`, v: fmt(AW ? (cur / AW) * 52 : 0), c: 'weekly average × 52' },
+    { l: `Average charge per case, ${latest}`, v: curC ? volMoney(apc) : '—', c: apcPrev ? `<span class="${volCls(apc - apcPrev)}">${volPctText(volPct(apc, apcPrev))}</span> vs ${prior}` : '' },
+    { l: `Cases per active month, ${latest}`, v: active ? volInt(curC / active) : '—', c: prior && m[prior] ? `${prior} average ${volInt(full(prior, 0) / Math.max(1, m[prior].filter((a) => a[0] > 0).length))}` : '' },
+  ].filter(Boolean);
+  const wk = Array.from({ length: 53 }, (_, i) => i + 1);
+  const lineData = {}; years.forEach((y) => { lineData[y] = volSmooth(wk.map((k) => (y === latest && k > AW ? null : w[y][k - 1][mi])), f.smooth); });
+  const barData = {}; years.forEach((y) => { barData[y] = m[y].map((a, i) => (y === latest && i + 1 > AM ? null : a[mi])); });
+  const axisFmt = (v) => (isCh ? volShort(v) : volInt(v));
+  const rowHTML = (lab, g) => {
+    const c = {}, ch = {}; years.forEach((y) => { c[y] = g(y, 0); ch[y] = g(y, 1); });
+    const d = prior && c[latest] !== null ? c[latest] - c[prior] : null, dch = prior && ch[latest] !== null ? ch[latest] - ch[prior] : null;
+    return `<tr><td><b>${lab}</b></td>${years.map((y) => `<td class="num">${c[y] === null ? '—' : volInt(c[y])}</td>`).join('')}<td class="num ${volCls(d)}">${d === null ? '—' : volSigned(d)}</td>${years.map((y) => `<td class="num">${ch[y] === null ? '—' : volShort(ch[y])}</td>`).join('')}<td class="num ${volCls(dch)}">${dch === null ? '—' : volSigned(dch, volShort)}</td><td class="num">${c[latest] ? volMoney(ch[latest] / c[latest]) : '—'}</td></tr>`;
+  };
+  let rows = '';
+  VOL_MONTHS.forEach((mn, i) => { rows += rowHTML(mn + (i + 1 === AM && asOf.date && asOf.date.slice(8) !== String(new Date(asOf.year, AM, 0).getDate()) ? ' (partial)' : ''), (y, k) => (y === latest && i + 1 > AM ? null : m[y][i][k])); });
+  [[0, 3, 'Q1'], [3, 6, 'Q2'], [6, 9, 'Q3'], [9, 12, 'Q4']].forEach(([a, b, q]) => { rows += rowHTML(q, (y, k) => (y === latest && a + 1 > AM ? null : m[y].slice(a, b).reduce((s, x) => s + x[k], 0))); });
+  rows += rowHTML(`Same weeks 1–${AW}`, (y, k) => ytd(y, k));
+  rows += rowHTML('Full year', (y, k) => (y === latest ? null : full(y, k)));
+  const meta = volMeta() || {};
+  const sources = meta.sources ? Object.entries(meta.sources).sort().map(([y, s]) => `${y}: ${esc(s)}`).join(' · ') : '';
+  return head + `
+    <section class="card no-print">
+      <div class="filters" style="display:flex;flex-wrap:wrap;gap:14px 22px;align-items:flex-end">
+        <label class="field" style="flex:1 1 260px"><span class="field-label">Surgeon</span><select data-change="sx-surg" aria-label="Surgeon" style="width:100%">${options}</select></label>
+        <div class="field"><span class="field-label">Show</span><div class="toggle"><button type="button" class="${!isCh ? 'on' : ''}" data-act="sx-metric" data-v="cases">Case volume</button><button type="button" class="${isCh ? 'on' : ''}" data-act="sx-metric" data-v="charges">Gross charges</button></div></div>
+        <div class="field"><span class="field-label">Weekly line</span><div class="toggle"><button type="button" class="${f.smooth === 4 ? 'on' : ''}" data-act="sx-smooth" data-v="4">4-week average</button><button type="button" class="${f.smooth === 1 ? 'on' : ''}" data-act="sx-smooth" data-v="1">Each week</button></div></div>
+        <div class="field"><span class="field-label">Room types</span><div style="display:flex;gap:6px;flex-wrap:wrap">${VOL_ROOMS.map(([k, l]) => `<button type="button" class="chip ${rooms[k] ? 'on' : ''}" data-act="sx-room" data-v="${k}">${l}</button>`).join('')}</div></div>
+      </div>
+    </section>
+    <p style="font-size:17px;line-height:1.5;margin:18px 0 14px;max-width:1100px">${sentence}</p>
+    <div class="kpis" style="margin-bottom:18px">${kpis.map((k) => `<div class="kpi"><div class="label">${k.l}</div><div class="value" style="font-size:26px">${k.v}</div>${k.c ? `<span class="small muted">${k.c}</span>` : ''}</div>`).join('')}</div>
+    <div class="grid2" style="margin-top:0">
+      <section class="card"><div class="card-head"><h2>${isCh ? 'Gross charges' : 'Cases'} per week${f.smooth > 1 ? ' (4-week average)' : ''}</h2><span class="hint">Week 1 begins Jan 1</span></div>${volLegend(years)}${volLineSVG(years, lineData, axisFmt, `${isCh ? 'Gross charges' : 'Cases'} per week by year for ${who}`)}</section>
+      <section class="card"><div class="card-head"><h2>${isCh ? 'Gross charges' : 'Cases'} per month</h2></div>${volLegend(years)}${volBarSVG(years, barData, axisFmt, `${isCh ? 'Gross charges' : 'Cases'} per month by year for ${who}`)}</section>
+    </div>
+    <section class="card" style="margin-top:18px">
+      <div class="card-head"><h2>By period</h2><span class="hint">Cases, gross charges and the change from ${prior || 'the prior year'}</span></div>
+      <div class="table-wrap"><table class="breakdown"><thead><tr><th>Period</th>${years.map((y) => `<th class="num">${y} cases</th>`).join('')}<th class="num">Δ cases</th>${years.map((y) => `<th class="num">${y} charges</th>`).join('')}<th class="num">Δ charges</th><th class="num">${latest} avg charge / case</th></tr></thead><tbody>${rows}</tbody></table></div>
+      <p class="help" style="margin:10px 0 0">Rooms included: ${VOL_ROOMS.filter(([k]) => rooms[k]).map(([, l]) => l).join(', ')}. A case is an encounter with recorded room time, dated by admit date (discharge date when admit is blank). Gross charges are the account's total charge amount, not what was collected. "Same weeks" compares like periods; the latest year's most recent weeks may still have charges posting.${sources ? ` Sources — ${sources}.` : ''}${meta.importedAt ? ` Last uploaded ${fmtTS(meta.importedAt)} by ${esc(meta.importedBy || '')}.` : ''}</p>
+    </section>`;
+}
+/* Card on a physician's page. */
+function physicianVolumeCardHTML(p) {
+  const rec = volForPhysician(p); if (!rec) return '';
+  const { years, w, m } = volAgg(rec, { OR: true, SC: true, MPR: true, OTH: true });
+  const asOf = volAsOf(); if (!asOf || !years.length) return '';
+  const latest = asOf.year, prior = years.filter((y) => y < latest).slice(-1)[0];
+  const ytd = (y, k) => (w[y] ? w[y].slice(0, asOf.week).reduce((s, a) => s + a[k], 0) : 0);
+  const c = ytd(latest, 0), pc = prior ? ytd(prior, 0) : 0, ch = ytd(latest, 1), pch = prior ? ytd(prior, 1) : 0;
+  const barData = {}; years.forEach((y) => { barData[y] = m[y].map((a, i) => (y === latest && i + 1 > asOf.month ? null : a[0])); });
+  return `<section class="card">
+      <div class="card-head"><h2>Surgical volume &amp; charges</h2><a href="#/scorecard/${rec.id}">Open the scorecard</a></div>
+      <div class="kpis" style="grid-template-columns:repeat(auto-fit,minmax(130px,1fr));margin-bottom:12px">
+        <div class="kpi"><div class="label">Cases ${latest}, weeks 1–${asOf.week}</div><div class="value">${volInt(c)}</div>${prior ? `<span class="small ${volCls(c - pc)}">${volSigned(c - pc)} (${volPctText(volPct(c, pc))}) vs ${prior}</span>` : ''}</div>
+        <div class="kpi"><div class="label">Gross charges ${latest}</div><div class="value" style="font-size:24px">${volShort(ch)}</div>${prior ? `<span class="small ${volCls(ch - pch)}">${volSigned(ch - pch, volShort)} (${volPctText(volPct(ch, pch))}) vs ${prior}</span>` : ''}</div>
+        <div class="kpi"><div class="label">Avg charge per case</div><div class="value" style="font-size:24px">${c ? volMoney(ch / c) : '—'}</div>${pc ? `<span class="small muted">${volMoney(pch / pc)} in ${prior}</span>` : ''}</div>
+      </div>
+      ${volLegend(years)}${volBarSVG(years, barData, volInt, `Procedure cases per month by year for ${volDisplayName(rec)}`)}
+      <p class="help" style="margin:8px 0 0">Cases with recorded room time, all room types, through ${fmtDate(asOf.date)}. Open the scorecard for weekly trends, gross charges and room-type filters.</p>
+    </section>`;
+}
+/* ---------- Upload: PowerBI case export (.xlsx / .csv) or a scorecard data file (.json) ---------- */
+async function readSpreadsheetRows(file) {
+  const name = (file.name || '').toLowerCase();
+  if (name.endsWith('.csv') || name.endsWith('.txt')) return parseCSV(await file.text());
+  if (!window.XLSX) { try { await loadScript('lib/xlsx.full.min.js'); } catch { throw new Error('the spreadsheet reader (lib/xlsx.full.min.js) is missing from the web folder'); } }
+  const wb = XLSX.read(await file.arrayBuffer(), { type: 'array', cellDates: true });
+  let best = null;
+  for (const sn of wb.SheetNames) { const rows = XLSX.utils.sheet_to_json(wb.Sheets[sn], { header: 1, raw: true, defval: '' }); if (rows.length > 1 && (!best || rows.length > best.length)) best = rows; }
+  if (!best) throw new Error('the workbook has no data rows');
+  return best;
+}
+function volCellDate(v) {
+  if (v === null || v === undefined || v === '') return '';
+  if (v instanceof Date) return isNaN(v) ? '' : new Date(v.getTime() - v.getTimezoneOffset() * 60000).toISOString().slice(0, 10);
+  if (typeof v === 'number') { const d = new Date(Math.round((v - 25569) * 86400000)); return isNaN(d) ? '' : d.toISOString().slice(0, 10); }
+  const s = String(v).trim(); let m = s.match(/^(\d{4})-(\d{2})-(\d{2})/); if (m) return `${m[1]}-${m[2]}-${m[3]}`;
+  m = s.match(/^(\d{1,2})\/(\d{1,2})\/(\d{2,4})/); if (m) { const y = m[3].length === 2 ? '20' + m[3] : m[3]; return `${y}-${m[1].padStart(2, '0')}-${m[2].padStart(2, '0')}`; }
+  m = s.match(/^(\d{4})-([A-Za-z]{3})$/); if (m) { const i = VOL_MONTHS.findIndex((x) => x.toLowerCase() === m[2].toLowerCase()); if (i >= 0) return `${m[1]}-${String(i + 1).padStart(2, '0')}-15`; }
+  return '';
+}
+const VOL_COLS = { physicianname: 'name', surgeon: 'name', provider: 'name', attendingphysician: 'name', admitdate: 'admit', servicedate: 'admit', dateofservice: 'admit', dischargedate: 'discharge', discharge: 'discharge', yrmo: 'month', month: 'month', operatingroom: 'room', room: 'room', operatingminutes: 'minutes', orminutes: 'minutes', chargeamt: 'charges', charges: 'charges', grosscharges: 'charges', totalcharges: 'charges', accountnumber: 'account', casenumber: 'case', attendingproviderspecialty: 'specialty', specialty: 'specialty' };
+/* Turns case-level rows into surgeon records: one entry per surgeon, year-week, room type and per surgeon, month, room type. */
+function volBuildFromCases(rows, fileName) {
+  const norm = (s) => String(s || '').toLowerCase().replace(/[^a-z0-9]/g, '');
+  const cols = rows[0].map((h) => VOL_COLS[norm(h)] || null);
+  const ix = {}; cols.forEach((c, i) => { if (c && !(c in ix)) ix[c] = i; });
+  if (!('name' in ix)) throw new Error('no "Physician Name" column was found');
+  if (!('admit' in ix) && !('discharge' in ix) && !('month' in ix)) throw new Error('no "Admit Date" column was found');
+  const W = {}, M = {}, spec = {}, seen = new Set(); let kept = 0, skipped = 0, noRoomTime = 0, dups = 0, minDate = '', maxDate = '';
+  for (let r = 1; r < rows.length; r++) {
+    const row = rows[r]; const g = (k) => (k in ix ? row[ix[k]] : '');
+    const name = String(g('name') || '').trim().toUpperCase().replace(/\s+/g, ' ');
+    if (!name || /^UNKNOWN/.test(name)) { skipped++; continue; }
+    if ('minutes' in ix && !(num(g('minutes')) > 0)) { noRoomTime++; continue; }
+    const acct = String(g('account') || g('case') || '').trim(); if (acct) { if (seen.has(acct)) { dups++; continue; } seen.add(acct); }
+    const date = volCellDate(g('admit')) || volCellDate(g('discharge')) || volCellDate(g('month'));
+    if (!date) { skipped++; continue; }
+    const rt = volRoomType(g('room')), ch = num(g('charges')), y = date.slice(0, 4);
+    const kw = `${name}\u0001${y}-W${String(volWeekOf(date)).padStart(2, '0')}\u0001${rt}`, km = `${name}\u0001${date.slice(0, 7)}\u0001${rt}`;
+    (W[kw] = W[kw] || [0, 0])[0]++; W[kw][1] += ch; (M[km] = M[km] || [0, 0])[0]++; M[km][1] += ch;
+    const sp = String(g('specialty') || '').trim(); if (sp) { (spec[name] = spec[name] || {})[sp] = (spec[name][sp] || 0) + 1; }
+    kept++; if (!minDate || date < minDate) minDate = date; if (date > maxDate) maxDate = date;
+  }
+  const recs = {};
+  const add = (store) => Object.entries(store).forEach(([k, v]) => { const [name, period, rt] = k.split('\u0001'); const rec = recs[name] = recs[name] || { surgeon: name, specialty: '', series: [] }; rec.series.push({ period, cases: v[0], charges: Math.round(v[1]), roomType: rt }); });
+  add(W); add(M);
+  Object.values(recs).forEach((rec) => { const s = spec[rec.surgeon]; rec.specialty = s ? Object.entries(s).sort((a, b) => b[1] - a[1])[0][0] : 'Other'; rec.series.sort((a, b) => a.period.localeCompare(b.period)); });
+  const years = [...new Set(Object.values(recs).flatMap((r) => r.series.map((s) => s.period.slice(0, 4))))].sort();
+  return { records: Object.values(recs), years, asOf: maxDate, minDate, kept, skipped, noRoomTime, dups, total: rows.length - 1, source: `${fileName} (uploaded ${todayISO()})` };
+}
+function volParseJSON(text) {
+  const d = JSON.parse(text);
+  const recs = Array.isArray(d) ? d : d.records; if (!Array.isArray(recs)) throw new Error('this is not a surgeon scorecard data file');
+  const records = recs.filter((r) => r && r.surgeon && Array.isArray(r.series)).map((r) => ({ surgeon: String(r.surgeon).toUpperCase(), specialty: r.specialty || 'Other', series: r.series.filter((s) => s && typeof s.period === 'string').map((s) => ({ period: s.period, cases: num(s.cases), charges: Math.round(num(s.charges)), roomType: VOL_ROOMS.some(([k]) => k === s.roomType) ? s.roomType : 'OTH' })) }));
+  const years = [...new Set(records.flatMap((r) => r.series.map((s) => s.period.slice(0, 4))))].sort();
+  const meta = (d.meta || {});
+  return { records, years, asOf: meta.asOf || '', sources: meta.sources || null, kept: records.reduce((s, r) => s + r.series.filter((x) => x.period[5] !== 'W').reduce((a, x) => a + x.cases, 0), 0), total: null, source: `scorecard data file (uploaded ${todayISO()})` };
+}
+function volSlug(name) { return 'vol_' + name.toLowerCase().replace(/[^a-z0-9]+/g, '_').replace(/^_|_$/g, '').slice(0, 56); }
+async function importVolumes(file) {
+  if (!isAdmin()) { toast('Only the administrator can upload surgeon volumes.', 'err'); return; }
+  let parsed;
+  try {
+    const name = (file.name || '').toLowerCase();
+    if (name.endsWith('.json')) parsed = volParseJSON(await file.text());
+    else { toast('Reading the spreadsheet…'); parsed = volBuildFromCases(await readSpreadsheetRows(file), file.name); }
+  } catch (e) { toast('That file could not be read: ' + (e && e.message ? e.message : e), 'err'); return; }
+  if (!parsed.records.length) { toast('No surgeon cases were found in that file. Use the PowerBI case export with Physician Name, Admit Date, Operating Room, Operating Minutes and Charge Amt columns.', 'err'); return; }
+  const existing = volRecords(), fileYears = new Set(parsed.years);
+  const matched = parsed.records.filter((r) => volMatchPhysician(r.surgeon)).length;
+  const newNames = parsed.records.filter((r) => !existing.some((e) => e.surgeon === r.surgeon)).length;
+  const kept = existing.filter((e) => e.series.some((s) => !fileYears.has(s.period.slice(0, 4)))).length;
+  const top = parsed.records.map((r) => ({ r, n: r.series.filter((s) => s.period[5] !== 'W').reduce((a, s) => a + s.cases, 0), ch: r.series.filter((s) => s.period[5] !== 'W').reduce((a, s) => a + s.charges, 0) })).sort((a, b) => b.n - a.n);
+  const body = `
+    <p>${parsed.total !== null ? `<b>${volInt(parsed.total)}</b> rows read, <b>${volInt(parsed.kept)}</b> procedure cases kept` : `<b>${volInt(parsed.kept)}</b> procedure cases`} for <b>${parsed.records.length}</b> surgeon${parsed.records.length === 1 ? '' : 's'}${parsed.minDate ? `, ${fmtDate(parsed.minDate)} to ${fmtDate(parsed.asOf)}` : parsed.asOf ? `, through ${fmtDate(parsed.asOf)}` : ''}.</p>
+    <ul class="list small" style="margin:10px 0">
+      <li><span>Years in this file (these replace what is stored for the same years)</span><b>${parsed.years.join(', ')}</b></li>
+      <li><span>Surgeons matched to a physician record</span><b>${matched} of ${parsed.records.length}</b></li>
+      <li><span>Surgeons not seen before</span><b>${newNames}</b></li>
+      ${existing.length ? `<li><span>Stored surgeons keeping numbers from other years</span><b>${kept}</b></li>` : ''}
+      ${parsed.noRoomTime ? `<li><span class="muted">Rows without room time (clinic and other encounters), not counted</span><span class="muted">${volInt(parsed.noRoomTime)}</span></li>` : ''}
+      ${parsed.dups ? `<li><span class="muted">Duplicate account rows skipped</span><span class="muted">${volInt(parsed.dups)}</span></li>` : ''}
+      ${parsed.skipped ? `<li><span class="muted">Rows skipped (no surgeon name or no date)</span><span class="muted">${volInt(parsed.skipped)}</span></li>` : ''}
+    </ul>
+    <h3>Largest by case count</h3>
+    <ul class="list small" style="max-height:220px;overflow:auto">${top.slice(0, 12).map(({ r, n, ch }) => { const p = volMatchPhysician(r.surgeon); return `<li><span><b>${esc(volTitle(r.surgeon))}</b> <span class="muted">· ${esc(r.specialty)}${p ? '' : ' · no physician record'}</span></span><span class="nowrap">${volInt(n)} cases · ${volShort(ch)}</span></li>`; }).join('')}</ul>
+    ${existing.length ? `<label class="check" style="display:flex;gap:10px;align-items:center;margin-top:14px"><input type="checkbox" id="vol-replace-all"> <span>Remove everything stored before, including other years</span></label>` : ''}
+    <p class="help" style="margin-top:12px">Only surgeon-level totals by week and month are stored. Nothing about individual patients leaves this browser.</p>`;
+  openModal({
+    title: 'Upload surgeon scorecard — review before saving', body,
+    submitLabel: `Save ${parsed.years.join(', ')} for ${parsed.records.length} surgeon${parsed.records.length === 1 ? '' : 's'}`,
+    onSubmit: () => { applyVolumeImport(parsed, !!($('#vol-replace-all') && $('#vol-replace-all').checked)); return true; },
+  });
+}
+function applyVolumeImport(parsed, replaceAll) {
+  const fileYears = new Set(parsed.years), meta = volMeta() || { id: 'meta', sources: {} };
+  let recs = replaceAll ? [] : volRecords().map((r) => ({ ...r, series: r.series.filter((s) => !fileYears.has(s.period.slice(0, 4))) }));
+  parsed.records.forEach((nr) => {
+    let rec = recs.find((r) => r.surgeon === nr.surgeon);
+    if (!rec) { rec = { id: volSlug(nr.surgeon), physicianId: '', surgeon: nr.surgeon, specialty: nr.specialty, series: [] }; recs.push(rec); }
+    if (nr.specialty && nr.specialty !== 'Other') rec.specialty = nr.specialty;
+    rec.series = rec.series.concat(nr.series).sort((a, b) => a.period.localeCompare(b.period));
+  });
+  recs = recs.filter((r) => r.series.length);
+  recs.forEach((r) => { const p = volMatchPhysician(r.surgeon); if (p) r.physicianId = p.id; r.updatedAt = nowISO(); r.updatedBy = session.name; });
+  meta.sources = replaceAll ? {} : (meta.sources || {});
+  if (parsed.sources) Object.assign(meta.sources, parsed.sources); else parsed.years.forEach((y) => { meta.sources[y] = parsed.source; });
+  if (parsed.asOf && (!meta.asOf || parsed.asOf > meta.asOf || replaceAll)) meta.asOf = parsed.asOf;
+  meta.importedAt = nowISO(); meta.importedBy = session.name;
+  db.volumes = [meta, ...recs];
+  saveDB(); toast(`Surgeon scorecard saved — ${recs.length} surgeons, ${parsed.years.join(', ')}`);
+  if (!location.hash.startsWith('#/scorecard')) location.hash = '#/scorecard'; else rerender();
+}
+function exportVolumes() {
+  const meta = volMeta() || {};
+  const recs = volRecords().map((r) => ({ surgeon: r.surgeon, specialty: r.specialty, series: r.series }));
+  download(`surgeon-volumes-${todayISO()}.json`, JSON.stringify({ app: 'nwsh-physician-relations', kind: 'surgeon-volumes', exportedAt: nowISO(), exportedBy: session.name, meta: { asOf: meta.asOf || '', sources: meta.sources || {} }, records: recs }), 'application/json');
+  toast('Scorecard data file downloaded — it can be uploaded again from the Scorecard page');
 }
 
 /* ===================== Event delegation ===================== */
@@ -3514,6 +3843,11 @@ const actions = {
   'import-meditech': () => $('#meditech-input').click(),
   'export-phys-csv': () => exportPhysCSV(),
   'import-phys-csv': () => $('#csv-input').click(),
+  'import-volumes': () => $('#volumes-input').click(),
+  'export-volumes': () => exportVolumes(),
+  'sx-metric': (el) => { ui.sx.metric = el.dataset.v; rerender(); },
+  'sx-smooth': (el) => { ui.sx.smooth = +el.dataset.v; rerender(); },
+  'sx-room': (el) => { const k = el.dataset.v, on = Object.keys(ui.sx.rooms).filter((r) => ui.sx.rooms[r]); if (ui.sx.rooms[k] && on.length === 1) { toast('Keep at least one room type on.'); return; } ui.sx.rooms[k] = !ui.sx.rooms[k]; rerender(); },
   'export-contacts-csv': () => exportContactsCSV(),
   'clear-all': () => confirmBox(`Erase <b>all</b> physicians, contacts, referrals and attachments ${MODE === 'server' ? 'in the shared database' : 'stored in this browser'}? Export a backup first if you might need them.`, async () => {
     if (MODE === 'server') {
@@ -3640,6 +3974,7 @@ document.addEventListener('change', (e) => {
     case 'rep-from': ui.rep.from = t.value; rerender(); break;
     case 'rep-to': ui.rep.to = t.value; rerender(); break;
     case 'rep-compare': ui.rep.compare = t.value; rerender(); break;
+    case 'sx-surg': ui.sx.vol = t.value; location.hash = t.value ? '#/scorecard/' + t.value : '#/scorecard'; if (!t.value) rerender(); break;
     case 'risk-days': { const v = Math.max(1, Math.round(num(t.value)) || 14); db.settings.riskDays = v; t.value = v; saveDB(); toast('Saved'); updateNavCount(); break; }
     case 'team-name': { const v = t.value.trim(); if (v) { db.settings.team[+t.dataset.i] = v; saveDB(); toast('Saved'); } break; }
   }
@@ -3647,6 +3982,7 @@ document.addEventListener('change', (e) => {
 $('#import-input').addEventListener('change', (e) => { const f = e.target.files[0]; if (f) importBackup(f); e.target.value = ''; });
 $('#meditech-input').addEventListener('change', (e) => { const f = e.target.files[0]; if (f) importMeditech(f); e.target.value = ''; });
 $('#csv-input').addEventListener('change', (e) => { const f = e.target.files[0]; if (f) importPhysiciansCSV(f); e.target.value = ''; });
+$('#volumes-input').addEventListener('change', (e) => { const f = e.target.files[0]; if (f) importVolumes(f); e.target.value = ''; });
 
 // Keep multiple open tabs in sync
 window.addEventListener('storage', (e) => { if (e.key === STORE_KEY && session) { db = loadDB(); rerender(); } });
