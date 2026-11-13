@@ -67,7 +67,8 @@
   .nav .count { background: var(--red); color: #fff; font-size: 12px; font-weight: 700; border-radius: 10px; padding: 1px 7px; }
   .userbox { display: flex; align-items: center; gap: 6px; white-space: nowrap; }
   .userbox .who { color: var(--muted); font-size: 14px; margin-right: 6px; }
-  @media (max-width: 1400px) { .nav a { padding: 0 8px; font-size: 15px; } }
+  @media (min-width: 1181px) { .nav a svg { display: none; } .nav a { padding: 0 11px; } .topbar-inner { gap: 16px; } }
+  @media (min-width: 1181px) and (max-width: 1300px) { .nav a { padding: 0 8px; font-size: 15px; } .userbox .who { display: none; } }
   @media (max-width: 1180px) {
     .topbar-inner { flex-wrap: wrap; height: auto; padding: 10px 16px 0; gap: 8px 12px; }
     .brand { flex: 1; } .brand img { height: 40px; }
@@ -440,6 +441,7 @@
 <input type="file" id="import-input" accept="application/json,.json" hidden>
 <input type="file" id="meditech-input" accept=".pdf,.json,.txt,application/pdf,application/json,text/plain" hidden>
 <input type="file" id="csv-input" accept=".csv,text/csv" hidden>
+<input type="file" id="imaging-input" accept=".txt,.csv,.json,text/plain,text/csv,application/json" hidden>
 <input type="file" id="volumes-input" accept=".xlsx,.xls,.csv,.json,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet,text/csv,application/json" hidden>
 
 <script>
@@ -649,6 +651,7 @@ function emptyDB() {
     referrals: [],
     tasks: [],
     volumes: [],
+    imaging: [],
     meta: { createdAt: nowISO(), updatedAt: nowISO() },
   };
 }
@@ -661,6 +664,7 @@ function normalizeDB(d) {
   d.referrals = d.referrals || [];
   d.tasks = d.tasks || [];
   d.volumes = d.volumes || [];
+  d.imaging = d.imaging || [];
   d.clinics = d.clinics || [];
   d.meta = d.meta || base.meta;
   return d;
@@ -680,7 +684,7 @@ function dbFromServer(res) {
   const settingsRow = (d.settings || []).find((s) => s.id === 'main') || {};
   const out = normalizeDB({
     settings: Object.assign({ team: (res.defaults && res.defaults.team) || [] }, settingsRow),
-    clinics: d.clinics || [], physicians: d.physicians || [], contacts: d.contacts || [], referrals: d.referrals || [], tasks: d.tasks || [], volumes: d.volumes || [],
+    clinics: d.clinics || [], physicians: d.physicians || [], contacts: d.contacts || [], referrals: d.referrals || [], tasks: d.tasks || [], volumes: d.volumes || [], imaging: d.imaging || [],
     meta: { updatedAt: settingsRow.updatedAt || nowISO() },
   });
   delete out.settings.id;
@@ -690,7 +694,7 @@ function dbFromServer(res) {
 }
 function takeSnapshot(d) {
   const s = {};
-  ['clinics', 'physicians', 'contacts', 'referrals', 'tasks', 'volumes'].forEach((c) => (d[c] || []).forEach((r) => { s[c + '/' + r.id] = JSON.stringify(r); }));
+  ['clinics', 'physicians', 'contacts', 'referrals', 'tasks', 'volumes', 'imaging'].forEach((c) => (d[c] || []).forEach((r) => { s[c + '/' + r.id] = JSON.stringify(r); }));
   s['settings/main'] = JSON.stringify({ id: 'main', ...d.settings });
   return s;
 }
@@ -1112,6 +1116,7 @@ const ui = {
   rep: { preset: '12m', from: '', to: '', compare: 'prev', sort: 'ordered', dir: -1 },
   act: { q: '', who: '', method: '', from: '', to: '' },
   sx: { vol: '', metric: 'cases', smooth: 4, rooms: { OR: true, SC: true, MPR: true, OTH: true } },
+  im: { id: '', period: '6', mods: {}, sites: {}, showAll: false },
   year: new Date().getFullYear(),
 };
 
@@ -1151,6 +1156,7 @@ function route() {
     }
     case 'activity': main.innerHTML = viewActivity(); updateActivityTable(); break;
     case 'scorecard': main.innerHTML = viewScorecard(parts[1] || ''); break;
+    case 'imaging': main.innerHTML = viewImaging(parts[1] || ''); break;
     case 'settings': main.innerHTML = viewSettings(); loadDigestStatus(); break;
     default: main.innerHTML = viewHome();
   }
@@ -1343,6 +1349,7 @@ function viewPhysicians() {
           <option value="name" ${f.sort === 'name' ? 'selected' : ''}>Last name</option>
           <option value="refs" ${f.sort === 'refs' ? 'selected' : ''}>Most referrals in progress</option>
           <option value="risk" ${f.sort === 'risk' ? 'selected' : ''}>Most referrals at risk</option>
+          <option value="img" ${f.sort === 'img' ? 'selected' : ''}>Most imaging exams ordered</option>
           <option value="next" ${f.sort === 'next' ? 'selected' : ''}>Next follow-up</option>
           <option value="last" ${f.sort === 'last' ? 'selected' : ''}>Most recently contacted</option>
           <option value="stale" ${f.sort === 'stale' ? 'selected' : ''}>Longest since contact</option>
@@ -1357,7 +1364,7 @@ function viewPhysicians() {
       <div class="table-wrap" id="phys-table"></div>
     </section>`;
 }
-const PHYS_SORT_DESC = ['last', 'enc', 'proc', 'enc25', 'refs', 'risk', 'total'];
+const PHYS_SORT_DESC = ['last', 'enc', 'proc', 'enc25', 'refs', 'risk', 'total', 'img'];
 function physBreakdownHTML(rows) {
   const g = ui.phys.group, groups = new Map();
   const keyOf = (p) => { switch (g) { case 'spec': return [p.specialty || 'No specialty', p.specialty || '']; case 'rel': { const k = p.nwshRelation || 'none'; return [NWSH_REL[k][0], k]; } case 'stage': { const k = p.stage || 'a'; return [stageLabelFor(k, p.relType), k]; } case 'clinic': { const c = p.clinicId ? getClinic(p.clinicId) : null; return [c ? c.name : (p.practice || 'No clinic on file'), c ? c.id : '']; } case 'city': return [p.city || (p.clinicId && getClinic(p.clinicId) ? getClinic(p.clinicId).city : '') || 'No city on file', '']; } return ['—', '']; };
@@ -1374,7 +1381,8 @@ function updatePhysTable() {
   const f = ui.phys;
   const q = f.q.trim().toLowerCase();
   const byP = refsByPhysician();
-  const refInfo = (p) => { const rs = byP.get(p.id) || []; let open = 0, risk = 0; rs.forEach((r) => { const s = refStatus(r); if (s === 'risk') { risk++; open++; } else if (s === 'active') open++; }); return { total: rs.length, open, risk }; };
+  const imgBy = imgByPhysician();
+  const refInfo = (p) => { const rs = byP.get(p.id) || []; let open = 0, risk = 0; rs.forEach((r) => { const s = refStatus(r); if (s === 'risk') { risk++; open++; } else if (s === 'active') open++; }); return { total: rs.length, open, risk, img: imgBy.get(p.id) || 0 }; };
   let rows = db.physicians.map((p) => ({ p, lc: lastContact(p.id), nf: nextFU(p.id), ri: refInfo(p) })).filter(({ p, ri }) => {
     if (f.refs === 'open' && !ri.open) return false;
     if (f.refs === 'risk' && !ri.risk) return false;
@@ -1403,7 +1411,7 @@ function updatePhysTable() {
     proc: (r) => (r.p.nwsh ? r.p.nwsh.procedures2026 : -1),
     enc25: (r) => (r.p.nwsh ? r.p.nwsh.encounters2025 : -1),
     seen: (r) => (r.p.nwsh && r.p.nwsh.lastSeen ? r.p.nwsh.lastSeen : '9999'),
-    refs: (r) => r.ri.open, risk: (r) => r.ri.risk, total: (r) => r.ri.total,
+    refs: (r) => r.ri.open, risk: (r) => r.ri.risk, total: (r) => r.ri.total, img: (r) => r.ri.img,
     rel: (r) => ['staff', 'referring', 'lapsed', 'none'].indexOf(r.p.nwshRelation || 'none'),
   };
   const key = keys[f.sort] || keys.name;
@@ -1421,7 +1429,7 @@ function updatePhysTable() {
           <td>${stageBadge(p)}</td>
           <td>${nwshBadge(p)}</td>
           <td class="num nowrap">${p.nwsh ? `<b>${fmtNum(p.nwsh.procedures2026)}</b> / ${fmtNum(p.nwsh.encounters2026)}<div class="sub">${p.nwsh.lastSeen ? 'seen ' + fmtDate(p.nwsh.lastSeen) : p.nwsh.encounters2025 ? fmtNum(p.nwsh.encounters2025) + ' in 2025' : ''}</div>` : '<span class="muted">—</span>'}</td>
-          <td class="num nowrap">${ri.total ? `<b>${ri.open}</b> open${ri.risk ? ` · <span style="color:var(--red)">${ri.risk} at risk</span>` : ''}<div class="sub">${ri.total} tracked</div>` : '<span class="muted">—</span>'}</td>
+          <td class="num nowrap">${ri.total ? `<b>${ri.open}</b> open${ri.risk ? ` · <span style="color:var(--red)">${ri.risk} at risk</span>` : ''}<div class="sub">${ri.total} tracked</div>` : '<span class="muted">—</span>'}${ri.img ? `<div class="sub">${volInt(ri.img)} imaging exams</div>` : ''}</td>
           <td class="nowrap">${lc ? `${fmtDate(lc.date)}<div class="sub">${esc(lc.method)} · ${esc(lc.who)}</div>` : '<span class="muted">Never</span>'}</td>
           <td class="nowrap">${nf ? `${fmtDate(nf.fuDate)}<div>${fuBadge(nf)}</div>` : '<span class="muted">None scheduled</span>'}</td>
           <td class="nowrap" style="text-align:right"><a class="btn sm" href="#/physician/${p.id}">Open ${ico('i-chevron', 'sm')}</a></td>
@@ -1659,6 +1667,7 @@ function viewPhysician(p) {
           <p class="help" style="margin:10px 0 0">Source: ${esc(p.nwsh.source)}. Encounters minus procedure cases are loaded as the "ancillary actual" below.</p>
         </section>` : ''}
         ${physicianVolumeCardHTML(p)}
+        ${physicianImagingCardHTML(p)}
         <section class="card">
           <div class="card-head"><h2>Goals &amp; actuals</h2><button class="btn sm no-print" data-act="add-goal" data-id="${p.id}">${ico('i-plus', 'sm')}Add a year</button></div>
           ${goalsTableHTML(p)}
@@ -2808,6 +2817,7 @@ function viewSettings() {
           <button class="btn primary" data-act="export-json">${ico('i-download')}Export a backup</button>
           ${isAdmin() ? `<button class="btn" data-act="import-json">${ico('i-upload')}Restore from a backup…</button>` : ''}
           ${isAdmin() ? `<button class="btn" data-act="import-volumes">${ico('i-upload')}Upload surgeon scorecard</button>` : ''}
+          ${isAdmin() ? `<button class="btn" data-act="import-imaging">${ico('i-upload')}Upload imaging referrals</button>` : ''}
           <button class="btn" data-act="export-phys-csv">Physicians spreadsheet</button>
           <button class="btn" data-act="export-contacts-csv">Activity spreadsheet</button>
         </div>
@@ -3099,7 +3109,7 @@ async function importBackup(file) {
     const d = normalizeDB(data.db);
     if (MODE === 'server') {
       try {
-        const r = await api('replace', { data: { clinics: d.clinics, physicians: d.physicians, contacts: d.contacts, referrals: d.referrals, tasks: d.tasks, volumes: d.volumes, settings: [{ id: 'main', ...d.settings }] } });
+        const r = await api('replace', { data: { clinics: d.clinics, physicians: d.physicians, contacts: d.contacts, referrals: d.referrals, tasks: d.tasks, volumes: d.volumes, imaging: d.imaging, settings: [{ id: 'main', ...d.settings }] } });
         serverVersion = r.version; db = d; snapshot = takeSnapshot(db);
       } catch (e) { toast('The backup could not be restored: ' + e.message, 'err'); return; }
     } else {
@@ -3124,16 +3134,21 @@ function exportPhysCSV() {
   download(`physicians-${todayISO()}.csv`, '﻿' + toCSV(rows), 'text/csv');
 }
 /* ---------- Spreadsheet upload: adds new physicians only ---------- */
+/* Tolerant CSV reader: a quote only opens a field at its start, and a quote inside a quoted field only closes
+   it when a comma or line end follows. Meditech exports do not escape quotes inside names. */
 function parseCSV(text) {
-  const rows = []; let row = [], field = '', q = false;
+  const rows = []; let row = [], field = '', q = false, atStart = true;
   text = text.replace(/^﻿/, '');
   for (let i = 0; i < text.length; i++) {
     const c = text[i];
-    if (q) { if (c === '"') { if (text[i + 1] === '"') { field += '"'; i++; } else q = false; } else field += c; }
-    else if (c === '"') q = true;
-    else if (c === ',') { row.push(field); field = ''; }
-    else if (c === '\n' || c === '\r') { if (c === '\r' && text[i + 1] === '\n') i++; row.push(field); rows.push(row); row = []; field = ''; }
-    else field += c;
+    if (q) {
+      if (c === '"') { const nx = text[i + 1]; if (nx === '"') { field += '"'; i++; } else if (nx === ',' || nx === '\n' || nx === '\r' || nx === undefined) q = false; else field += '"'; }
+      else field += c;
+    }
+    else if (c === '"' && atStart) { q = true; atStart = false; }
+    else if (c === ',') { row.push(field); field = ''; atStart = true; }
+    else if (c === '\n' || c === '\r') { if (c === '\r' && text[i + 1] === '\n') i++; row.push(field); rows.push(row); row = []; field = ''; atStart = true; }
+    else { field += c; atStart = false; }
   }
   if (field !== '' || row.length) { row.push(field); rows.push(row); }
   return rows.filter((r) => r.some((x) => String(x).trim() !== ''));
@@ -3379,6 +3394,7 @@ function viewScorecard(volId) {
   const head = `<div class="page-head">
       <div><h1>Surgeon Scorecard</h1><p class="lead">Procedure cases and gross charges by surgeon, compared with the same weeks of earlier years.</p></div>
       <div class="actions no-print">
+        ${analyticsSwitcher('scorecard')}
         ${recs.length ? `<button class="btn" data-act="export-volumes">${ico('i-download')}Download data file</button>` : ''}
         ${isAdmin() ? `<button class="btn" data-act="import-volumes">${ico('i-upload')}Upload surgeon scorecard</button>` : ''}
       </div>
@@ -3591,6 +3607,292 @@ function exportVolumes() {
   const recs = volRecords().map((r) => ({ surgeon: r.surgeon, specialty: r.specialty, series: r.series }));
   download(`surgeon-volumes-${todayISO()}.json`, JSON.stringify({ app: 'nwsh-physician-relations', kind: 'surgeon-volumes', exportedAt: nowISO(), exportedBy: session.name, meta: { asOf: meta.asOf || '', sources: meta.sources || {} }, records: recs }), 'application/json');
   toast('Scorecard data file downloaded — it can be uploaded again from the Scorecard page');
+}
+
+
+/* ===================== Imaging referrals: who orders imaging at NWSH facilities =====================
+   Collection "imaging": one record per referring provider —
+     { id, physicianId, referrer, series: [{ p, m, s, n, r, c }] }
+   p = "YYYY-MM", m = modality, s = facility, n = exams ordered, r = resulted (report signed), c = cancelled.
+   One extra record with id "meta" keeps the date range and the source of each month.
+   Built from the Meditech imaging export; patient columns are dropped on the spot, only counts are stored. */
+const IMG_MODS = ['X-Ray', 'MRI', 'CT Scan', 'Ultrasound', 'Interventional Radiology', 'Mammography', 'DEXA', 'Fluoroscopy', 'Other'];
+const IMG_COLORS = { 'X-Ray': '#2a78d6', 'MRI': '#eb6834', 'CT Scan': '#1baf7a', 'Ultrasound': '#eda100', 'Interventional Radiology': '#e87ba4', 'Mammography': '#008300', 'DEXA': '#6250d6', 'Fluoroscopy': '#e34948', 'Other': '#898781' };
+const IMG_CRED = /^(MD|DO|PA-?C?|NP|FNP(-C|-BC)?|ARNP|APRN|CRNA|DC|DPM|DDS|DMD|PHD|OD|PT|DPT|CNM|MPAS|RN|DNP(-C)?|ANP|PMHNP|ACNP|NP-C|CNP|LPN|MSN|BSN|MBBS|FACS|FACC|FAAP|CPNP|CCC-SLP)$/i;
+function imgModality(c) { const t = String(c || '').trim(); const hit = IMG_MODS.find((m) => m.toLowerCase() === t.toLowerCase()); if (hit) return hit; const l = t.toLowerCase(); return /x-?ray|xr\b/.test(l) ? 'X-Ray' : /mri|magnetic/.test(l) ? 'MRI' : /\bct\b/.test(l) ? 'CT Scan' : /ultra|sono/.test(l) ? 'Ultrasound' : /interv/.test(l) ? 'Interventional Radiology' : /mammo/.test(l) ? 'Mammography' : /dexa|bone dens/.test(l) ? 'DEXA' : /fluoro/.test(l) ? 'Fluoroscopy' : 'Other'; }
+function imgSite(s) { const l = String(s || '').toLowerCase(); return l.startsWith('northwest specialty') ? 'Hospital' : /axis/.test(l) ? 'Axis Spine Center' : /breast/.test(l) ? 'Breast Imaging Center' : /urgent/.test(l) ? 'Urgent Care' : (String(s || '').trim() || 'Other'); }
+/* Names arrive as "First M Last, MD" or "Last,First DO". Returns first, last, credentials and a display form. */
+function imgNameParts(raw) {
+  const s = String(raw || '').trim(); if (!s) return null;
+  const i = s.indexOf(','); const a = i >= 0 ? s.slice(0, i).trim() : s, b = i >= 0 ? s.slice(i + 1).trim() : '';
+  const bt = b.split(/\s+/).filter(Boolean); const isCred = (x) => IMG_CRED.test(x.replace(/\./g, ''));
+  let first = '', last = '', cred = '';
+  if (i < 0 || (bt.length && isCred(bt[0]))) { const t = a.split(/\s+/).filter(Boolean); if (!t.length) return null; last = t[t.length - 1]; first = t[0]; if (first.length === 1 && t.length > 2) first = t[1]; cred = bt.filter(isCred).join(' '); }
+  else { last = a; const names = bt.filter((x) => !isCred(x)); first = names[0] || ''; cred = bt.filter(isCred).join(' '); }
+  if (!last) return null;
+  return { first, last, cred: cred.toUpperCase(), display: volTitle(`${first ? first + ' ' : ''}${last}`) + (cred ? `, ${cred.toUpperCase()}` : '') };
+}
+function imgIsTestName(parts) { return !parts || /^(test|temp|zz+|unknown)\b/i.test(parts.last) || /^(test|temp)\b/i.test(parts.first); }
+function imgMatchPhysician(parts) {
+  if (!parts) return null;
+  const L = parts.last.toLowerCase(), F = parts.first.toLowerCase();
+  const both = db.physicians.find((x) => (x.lastName || '').toLowerCase() === L && (x.firstName || '').toLowerCase().split(/\s+/)[0] === F);
+  if (both) return both;
+  const byLast = db.physicians.filter((x) => (x.lastName || '').toLowerCase() === L);
+  return byLast.length === 1 && (!F || (byLast[0].firstName || '').toLowerCase()[0] === F[0]) ? byLast[0] : null;
+}
+function imgRecords() { return (db.imaging || []).filter((r) => r.id !== 'meta' && Array.isArray(r.series)); }
+function imgMeta() { return (db.imaging || []).find((r) => r.id === 'meta') || null; }
+function imgRecById(id) { return imgRecords().find((r) => r.id === id) || null; }
+function imgPhysician(rec) { return (rec.physicianId && getPhys(rec.physicianId)) || imgMatchPhysician(imgNameParts(rec.referrer)) || null; }
+function imgForPhysician(p) { return imgRecords().find((r) => r.physicianId === p.id) || imgRecords().find((r) => { const n = imgNameParts(r.referrer); return n && n.last.toLowerCase() === (p.lastName || '').toLowerCase() && n.first.toLowerCase() === (p.firstName || '').toLowerCase().split(/\s+/)[0]; }) || null; }
+let _imgBy = null, _imgByGen = -1;
+function imgByPhysician() {
+  if (_imgBy && _imgByGen === refGen) return _imgBy;
+  const m = new Map(); imgRecords().forEach((r) => { if (r.physicianId) m.set(r.physicianId, (m.get(r.physicianId) || 0) + r.series.reduce((a, e) => a + num(e.n), 0)); });
+  _imgBy = m; _imgByGen = refGen; return m;
+}
+function imgMonths() { const meta = imgMeta(), cap = meta && meta.asOf ? meta.asOf.slice(0, 7) : ''; const set = new Set(); imgRecords().forEach((r) => r.series.forEach((e) => { if (!cap || e.p <= cap) set.add(e.p); })); return [...set].sort(); }
+function imgDisplayName(rec) { const p = imgPhysician(rec); return p ? physName(p) : rec.referrer; }
+/* Which months a preset covers, counted back from the latest month loaded. Returns { months, prior, label }. */
+function imgPeriod(preset) {
+  const all = imgMonths(); if (!all.length) return { months: [], prior: [], label: '' };
+  if (preset === 'all') return { months: all, prior: [], label: `${fmtMonth(all[0])} to ${fmtMonth(all[all.length - 1])}` };
+  if (preset === 'ytd') { const y = all[all.length - 1].slice(0, 4); const months = all.filter((m) => m.startsWith(y)); const prior = all.filter((m) => m.startsWith(String(+y - 1))); return { months, prior, label: `${y} year to date` }; }
+  const k = +preset || 6; const months = all.slice(-k); const prior = all.slice(Math.max(0, all.length - 2 * k), all.length - k);
+  return { months, prior: prior.length === k ? prior : [], label: k === 1 ? fmtMonth(months[0]) : `${fmtMonth(months[0])} to ${fmtMonth(months[months.length - 1])}` };
+}
+/* " (Nov partial)" when the latest month loaded does not run to its last day. */
+function imgPartialNote() { const meta = imgMeta(); if (!meta || !meta.asOf) return ''; const d = new Date(meta.asOf + 'T00:00:00'); const last = new Date(d.getFullYear(), d.getMonth() + 1, 0).getDate(); return d.getDate() < last ? ` (${fmtMonth(meta.asOf.slice(0, 7))} partial, through the ${d.getDate()}${['th', 'st', 'nd', 'rd'][(d.getDate() % 10 > 3 || Math.floor(d.getDate() % 100 / 10) === 1) ? 0 : d.getDate() % 10]})` : ''; }
+function imgFilterOn(e) { const f = ui.im; return f.mods[e.m] !== false && f.sites[e.s] !== false; }
+/* Sums for a set of records over a set of months, honoring the modality and site chips. */
+function imgSum(recs, months) {
+  const set = new Set(months); const out = { n: 0, r: 0, c: 0, byMod: {}, bySite: {}, byMonth: {}, refs: new Set() };
+  months.forEach((m) => { out.byMonth[m] = { n: 0, r: 0, c: 0, mods: {} }; });
+  recs.forEach((rec) => rec.series.forEach((e) => { if (!set.has(e.p) || !imgFilterOn(e)) return; const n = num(e.n); out.n += n; out.r += num(e.r); out.c += num(e.c); out.byMod[e.m] = (out.byMod[e.m] || 0) + n; out.bySite[e.s] = (out.bySite[e.s] || 0) + n; const bm = out.byMonth[e.p]; bm.n += n; bm.r += num(e.r); bm.c += num(e.c); bm.mods[e.m] = (bm.mods[e.m] || 0) + n; if (n) out.refs.add(rec.id); }));
+  return out;
+}
+function imgPctText(n, d) { return d ? `${Math.round((n / d) * 1000) / 10}%` : '—'; }
+/* Stacked monthly bars, one segment per modality, a 2px surface gap between segments, month totals above. */
+function imgStackSVG(months, byMonth, label) {
+  const W = 760, H = 270, padL = 52, padB = 30, padT = 22, padR = 10, n = Math.max(1, months.length);
+  const totals = months.map((m) => byMonth[m] ? byMonth[m].n : 0), max = Math.max(0, ...totals);
+  const { tick, top } = volTicks(max, 5);
+  const gw = (W - padL - padR) / n, bw = Math.max(6, Math.min(44, gw - 10));
+  const y = (v) => padT + (H - padT - padB) * (1 - v / top);
+  const grid = Array.from({ length: 6 }, (_, i) => i * tick).map((v) => `<line x1="${padL}" x2="${W - padR}" y1="${y(v)}" y2="${y(v)}" class="grid"/><text x="${padL - 6}" y="${y(v) + 4}" class="ax" text-anchor="end">${volInt(v)}</text>`).join('');
+  const every = n > 14 ? 2 : 1;
+  const bars = months.map((m, i) => {
+    const x = padL + i * gw + (gw - bw) / 2; let cum = 0; const segs = [];
+    IMG_MODS.forEach((mod) => { const v = byMonth[m] && byMonth[m].mods[mod] || 0; if (!v) return; const yPrev = y(cum); cum += v; const yTop = y(cum); const h = Math.max(0, yPrev - yTop - 2); segs.push(`<rect x="${x.toFixed(1)}" y="${(yTop + 1).toFixed(1)}" width="${bw.toFixed(1)}" height="${h.toFixed(1)}" rx="2" fill="${IMG_COLORS[mod]}"><title>${esc(mod)}, ${esc(fmtMonth(m))}: ${volInt(v)} exams</title></rect>`); });
+    const total = totals[i];
+    return `<g class="bar">${segs.join('')}${total ? `<text x="${(x + bw / 2).toFixed(1)}" y="${(y(total) - 5).toFixed(1)}" class="ax" text-anchor="middle" style="font-weight:700;fill:var(--text)">${volInt(total)}</text>` : ''}${i % every === 0 ? `<text x="${(x + bw / 2).toFixed(1)}" y="${H - 9}" class="ax" text-anchor="middle">${esc(fmtMonth(m).replace(' 20', " '"))}</text>` : ''}</g>`;
+  }).join('');
+  return `<svg class="chart" viewBox="0 0 ${W} ${H}" role="img" aria-label="${esc(label)}">${grid}<line x1="${padL}" x2="${W - padR}" y1="${y(0)}" y2="${y(0)}" class="axis"/>${bars}</svg>`;
+}
+function imgLegend(mods) { return `<div class="chart-legend">${IMG_MODS.filter((m) => mods.includes(m)).map((m) => `<span><i style="background:${IMG_COLORS[m]}"></i>${esc(m)}</span>`).join('')}</div>`; }
+/* Horizontal bars for a ranked list: label, bar, value. */
+function imgHBarSVG(items, color, label) {
+  const W = 760, rowH = 26, padL = 230, padR = 64, H = Math.max(40, items.length * rowH + 10);
+  const max = Math.max(1, ...items.map((it) => it.v));
+  const rows = items.map((it, i) => { const yy = 6 + i * rowH, w = ((W - padL - padR) * it.v) / max; return `<g class="bar"><title>${esc(it.label)}: ${volInt(it.v)}${it.sub ? ` (${esc(it.sub)})` : ''}</title><text x="${padL - 10}" y="${yy + 16}" class="ax" text-anchor="end" style="font-size:12px;fill:var(--text)">${esc(shortText(it.label, 34))}</text><rect x="${padL}" y="${yy + 4}" width="${Math.max(2, w).toFixed(1)}" height="${rowH - 10}" rx="3" fill="${it.color || color}"/><text x="${(padL + Math.max(2, w) + 6).toFixed(1)}" y="${yy + 16}" class="ax" style="font-size:12px;fill:var(--text);font-weight:700">${volInt(it.v)}</text></g>`; }).join('');
+  return `<svg class="chart" viewBox="0 0 ${W} ${H}" role="img" aria-label="${esc(label)}" style="max-height:${H}px">${rows}</svg>`;
+}
+function analyticsSwitcher(which) {
+  return `<div class="toggle" role="group" aria-label="Analytics view"><a class="${which === 'scorecard' ? 'on' : ''}" href="#/scorecard" style="display:inline-flex;align-items:center;padding:0 14px;height:40px;font-weight:700;text-decoration:none">Surgical volume</a><a class="${which === 'imaging' ? 'on' : ''}" href="#/imaging" style="display:inline-flex;align-items:center;padding:0 14px;height:40px;font-weight:700;text-decoration:none">Imaging referrals</a></div>`;
+}
+/* ---------- The imaging referrals page ---------- */
+function viewImaging(recId) {
+  const recs = imgRecords(), f = ui.im;
+  const head = `<div class="page-head">
+      <div><h1>Imaging Referrals</h1><p class="lead">Who orders imaging at NWSH facilities, by month, modality and facility.</p></div>
+      <div class="actions no-print">
+        ${analyticsSwitcher('imaging')}
+        ${recs.length ? `<button class="btn" data-act="export-imaging">${ico('i-download')}Download data file</button>` : ''}
+        ${isAdmin() ? `<button class="btn" data-act="import-imaging">${ico('i-upload')}Upload imaging referrals</button>` : ''}
+      </div>
+    </div>`;
+  if (!recs.length) return head + `<div class="card empty"><p style="margin:0 0 8px;font-size:17px"><b>No imaging referrals have been loaded yet.</b></p>
+      <p class="muted" style="max-width:640px;margin:0 auto">${isAdmin() ? 'Click <b>Upload imaging referrals</b> and pick the Meditech imaging export (.txt or .csv). You will see a summary of what will change before anything is saved.' : 'Ask the administrator to upload the Meditech imaging export from Settings or this page.'}</p></div>`;
+  f.id = recId && imgRecById(recId) ? recId : '';
+  const rec = f.id ? imgRecById(f.id) : null;
+  const scope = rec ? [rec] : recs;
+  const per = imgPeriod(f.period), months = per.months;
+  const now = imgSum(scope, months), before = per.prior.length ? imgSum(scope, per.prior) : null;
+  const allMods = IMG_MODS.filter((m) => recs.some((r) => r.series.some((e) => e.m === m)));
+  const allSites = [...new Set(recs.flatMap((r) => r.series.map((e) => e.s)))].sort();
+  const modsOn = allMods.filter((m) => f.mods[m] !== false);
+  const topMod = Object.entries(now.byMod).sort((a, b) => b[1] - a[1])[0];
+  const weeks = Math.max(1, months.length * 4.345);
+  const who = rec ? imgDisplayName(rec) : 'All referring providers';
+  const p = rec ? imgPhysician(rec) : null;
+  const d = before ? now.n - before.n : null;
+  const partial = months.length && months[months.length - 1] === imgMonths().slice(-1)[0] ? imgPartialNote() : '';
+  const sentence = `<b>${esc(who)}</b>${p ? ` <a href="#/physician/${p.id}" class="small">(open physician page)</a>` : rec ? ' <span class="muted small">(not in the physician list)</span>' : ''}: <b>${volInt(now.n)}</b> imaging exam${now.n === 1 ? '' : 's'} ordered ${esc(per.label)}${esc(partial)}`
+    + (before ? `, <b class="${volCls(d)}">${volSigned(d)} (${volPctText(volPct(now.n, before.n))})</b> compared with the ${per.prior.length} months before` : '') + '.'
+    + (now.n ? ` ${imgPctText(now.r, now.n)} resulted, ${imgPctText(now.c, now.n)} cancelled.${topMod ? ` Most ordered: <b>${esc(topMod[0])}</b> (${volInt(topMod[1])}).` : ''}` : '');
+  const kpis = [
+    { l: `Exams ordered, ${esc(per.label)}`, v: volInt(now.n), c: before ? `<span class="${volCls(d)}">${volSigned(d)} · ${volPctText(volPct(now.n, before.n))}</span> vs the ${per.prior.length} months before` : '' },
+    { l: 'Resulted (report signed)', v: imgPctText(now.r, now.n), c: `${volInt(now.r)} exams` },
+    { l: 'Cancelled', v: imgPctText(now.c, now.n), c: `${volInt(now.c)} exams${before ? ` · ${imgPctText(before.c, before.n)} before` : ''}`, red: now.n && now.c / now.n > 0.12 },
+    { l: 'Exams per week', v: volInt(now.n / weeks), c: before ? `${volInt(before.n / Math.max(1, per.prior.length * 4.345))} before` : '' },
+    rec ? { l: 'Share of all imaging', v: imgPctText(now.n, imgSum(recs, months).n), c: 'of exams in this period' } : { l: 'Referring providers', v: volInt(now.refs.size), c: 'with at least one exam' },
+    { l: 'Most ordered', v: topMod ? esc(topMod[0]) : '—', c: topMod ? `${volInt(topMod[1])} exams · ${imgPctText(topMod[1], now.n)}` : '' },
+  ];
+  // referrer ranking for this period
+  const ranked = recs.map((r) => { const s = imgSum([r], months), b = before ? imgSum([r], per.prior) : null; const tm = Object.entries(s.byMod).sort((x, y) => y[1] - x[1])[0]; return { r, n: s.n, c: s.c, b: b ? b.n : null, top: tm ? tm[0] : '' }; }).filter((x) => x.n > 0).sort((a, b) => b.n - a.n);
+  const shown = f.showAll ? ranked : ranked.slice(0, 25);
+  const bySpec = {}; recs.forEach((r) => { const ph = imgPhysician(r); const k = ph ? (ph.specialty || 'No specialty on file') : 'Not in the physician list'; (bySpec[k] = bySpec[k] || []).push(r); });
+  const total = {}; recs.forEach((r) => { total[r.id] = r.series.reduce((a, e) => a + num(e.n), 0); });
+  const groups = Object.keys(bySpec).sort((a, b) => (a === 'Not in the physician list') - (b === 'Not in the physician list') || a.localeCompare(b));
+  const options = `<option value="">All referring providers</option>` + groups.map((g) => `<optgroup label="${esc(g)}">${bySpec[g].sort((a, b) => total[b.id] - total[a.id]).slice(0, g === 'Not in the physician list' ? 300 : 1000).map((r) => `<option value="${r.id}" ${rec && rec.id === r.id ? 'selected' : ''}>${esc(imgDisplayName(r))} (${volInt(total[r.id])})</option>`).join('')}</optgroup>`).join('');
+  const periods = [['3', 'Last 3 months'], ['6', 'Last 6 months'], ['12', 'Last 12 months'], ['ytd', 'This year to date'], ['all', 'Everything loaded']];
+  const meta = imgMeta() || {};
+  const modItems = IMG_MODS.filter((m) => now.byMod[m]).map((m) => ({ label: m, v: now.byMod[m], color: IMG_COLORS[m] }));
+  const siteItems = Object.entries(now.bySite).sort((a, b) => b[1] - a[1]).map(([k, v]) => ({ label: k, v }));
+  return head + `
+    <section class="card no-print">
+      <div class="filters" style="display:flex;flex-wrap:wrap;gap:14px 22px;align-items:flex-end">
+        <label class="field" style="flex:1 1 300px"><span class="field-label">Referring provider</span><select data-change="im-ref" aria-label="Referring provider" style="width:100%">${options}</select></label>
+        <label class="field"><span class="field-label">Period</span><select data-change="im-period" aria-label="Period">${periods.map(([k, l]) => `<option value="${k}" ${f.period === k ? 'selected' : ''}>${l}</option>`).join('')}</select></label>
+        <div class="field"><span class="field-label">Modalities</span><div style="display:flex;gap:6px;flex-wrap:wrap">${allMods.map((m) => `<button type="button" class="chip ${f.mods[m] !== false ? 'on' : ''}" data-act="im-mod" data-v="${esc(m)}"><i style="display:inline-block;width:10px;height:10px;border-radius:3px;background:${IMG_COLORS[m]}"></i>${esc(m)}</button>`).join('')}</div></div>
+        <div class="field"><span class="field-label">Facility</span><div style="display:flex;gap:6px;flex-wrap:wrap">${allSites.map((s) => `<button type="button" class="chip ${f.sites[s] !== false ? 'on' : ''}" data-act="im-site" data-v="${esc(s)}">${esc(s)}</button>`).join('')}</div></div>
+      </div>
+    </section>
+    <p style="font-size:17px;line-height:1.5;margin:18px 0 14px;max-width:1100px">${sentence}</p>
+    <div class="kpis" style="margin-bottom:18px">${kpis.map((k) => `<div class="kpi ${k.red ? 'red' : ''}"><div class="label">${k.l}</div><div class="value" style="font-size:26px">${k.v}</div>${k.c ? `<span class="small muted">${k.c}</span>` : ''}</div>`).join('')}</div>
+    <div class="grid2" style="margin-top:0">
+      <section class="card"><div class="card-head"><h2>Exams per month</h2><span class="hint">by modality</span></div>${imgLegend(modsOn)}${imgStackSVG(months, now.byMonth, `Imaging exams per month by modality for ${who}`)}</section>
+      <section class="card"><div class="card-head"><h2>${rec ? 'By modality' : 'Top referring providers'}</h2><span class="hint">${esc(per.label)}</span></div>
+        ${rec ? imgHBarSVG(modItems, '#2a78d6', `Exams by modality for ${who}`) + (siteItems.length > 1 ? `<h3 style="margin:14px 0 6px;font-size:14px;color:var(--muted)">By facility</h3>` + imgHBarSVG(siteItems, '#2a78d6', `Exams by facility for ${who}`) : '')
+          : imgHBarSVG(ranked.slice(0, 12).map((x) => ({ label: imgDisplayName(x.r), v: x.n, sub: x.top })), '#2a78d6', 'Top referring providers by exams ordered')}
+      </section>
+    </div>
+    ${rec ? '' : `<section class="card" style="margin-top:18px">
+      <div class="card-head"><h2>Referring providers</h2><span class="hint">${ranked.length} with exams ${esc(per.label)} · click a row to see one provider</span></div>
+      <div class="table-wrap"><table class="breakdown"><thead><tr><th>Referring provider</th><th>Physician record</th><th class="num">Exams</th>${before ? '<th class="num">Change</th>' : ''}<th class="num">Share</th><th class="num">Cancelled</th><th>Most ordered</th></tr></thead>
+        <tbody>${shown.map((x) => { const ph = imgPhysician(x.r); const dd = x.b !== null ? x.n - x.b : null; return `<tr class="clickable" data-act="im-pick" data-id="${x.r.id}"><td><b>${esc(imgDisplayName(x.r))}</b></td><td>${ph ? `<a href="#/physician/${ph.id}">${esc(ph.specialty || 'Open')}</a>` : '<span class="muted">Not in the physician list</span>'}</td><td class="num"><b>${volInt(x.n)}</b></td>${before ? `<td class="num ${volCls(dd)}">${dd === null ? '—' : volSigned(dd)}</td>` : ''}<td class="num">${imgPctText(x.n, now.n)}</td><td class="num ${x.n && x.c / x.n > 0.12 ? 'red' : ''}">${imgPctText(x.c, x.n)}</td><td>${esc(x.top)}</td></tr>`; }).join('')}</tbody></table></div>
+      ${ranked.length > 25 ? `<p class="help" style="margin:8px 0 0"><button class="btn sm link" data-act="im-all">${f.showAll ? 'Show the top 25' : `Show all ${ranked.length}`}</button></p>` : ''}
+    </section>`}
+    <section class="card" style="margin-top:18px">
+      <div class="card-head"><h2>By month</h2><span class="hint">${esc(who)}</span></div>
+      <div class="table-wrap"><table class="breakdown"><thead><tr><th>Month</th>${modsOn.map((m) => `<th class="num">${esc(m)}</th>`).join('')}<th class="num">Total</th><th class="num">Resulted</th><th class="num">Cancelled</th></tr></thead>
+        <tbody>${months.map((m) => { const bm = now.byMonth[m]; return `<tr><td><b>${esc(fmtMonth(m))}</b></td>${modsOn.map((mod) => `<td class="num">${bm.mods[mod] ? volInt(bm.mods[mod]) : '<span class="muted">—</span>'}</td>`).join('')}<td class="num"><b>${volInt(bm.n)}</b></td><td class="num">${volInt(bm.r)}</td><td class="num">${volInt(bm.c)}</td></tr>`; }).join('')}
+        <tr><td><b>Total</b></td>${modsOn.map((mod) => `<td class="num"><b>${volInt(now.byMod[mod] || 0)}</b></td>`).join('')}<td class="num"><b>${volInt(now.n)}</b></td><td class="num"><b>${volInt(now.r)}</b></td><td class="num"><b>${volInt(now.c)}</b></td></tr></tbody></table></div>
+      <p class="help" style="margin:10px 0 0">An exam is one imaging order line in Meditech, dated by service date. "Resulted" means the order is resulted or complete or its report is signed. Facilities: ${esc(allSites.join(', '))}. ${meta.from && meta.asOf ? `Data covers ${fmtDate(meta.from)} to ${fmtDate(meta.asOf)}.` : ''}${meta.importedAt ? ` Last uploaded ${fmtTS(meta.importedAt)} by ${esc(meta.importedBy || '')}.` : ''}</p>
+    </section>`;
+}
+/* Card on a physician's page. */
+function physicianImagingCardHTML(p) {
+  const rec = imgForPhysician(p); if (!rec) return '';
+  const all = imgMonths(); if (!all.length) return '';
+  const months = all.slice(-12), prevK = all.slice(Math.max(0, all.length - 6), all.length - 3), last3 = all.slice(-3);
+  const saved = { mods: ui.im.mods, sites: ui.im.sites }; ui.im.mods = {}; ui.im.sites = {};
+  const s = imgSum([rec], months), s3 = imgSum([rec], last3), sPrev = prevK.length === 3 ? imgSum([rec], prevK) : null;
+  ui.im.mods = saved.mods; ui.im.sites = saved.sites;
+  const topMod = Object.entries(s.byMod).sort((a, b) => b[1] - a[1])[0];
+  const d = sPrev ? s3.n - sPrev.n : null;
+  const mods = IMG_MODS.filter((m) => s.byMod[m]);
+  return `<section class="card">
+      <div class="card-head"><h2>Imaging referrals to NWSH</h2><a href="#/imaging/${rec.id}">Open imaging referrals</a></div>
+      <div class="kpis" style="grid-template-columns:repeat(auto-fit,minmax(130px,1fr));margin-bottom:12px">
+        <div class="kpi"><div class="label">Exams, last ${months.length} month${months.length === 1 ? '' : 's'}</div><div class="value">${volInt(s.n)}</div><span class="small muted">${fmtMonth(months[0])} to ${fmtMonth(months[months.length - 1])}</span></div>
+        <div class="kpi"><div class="label">Last 3 months${esc(imgPartialNote())}</div><div class="value">${volInt(s3.n)}</div>${sPrev ? `<span class="small ${volCls(d)}">${volSigned(d)} (${volPctText(volPct(s3.n, sPrev.n))}) vs the 3 months before</span>` : ''}</div>
+        <div class="kpi ${s.n && s.c / s.n > 0.12 ? 'red' : ''}"><div class="label">Cancelled</div><div class="value" style="font-size:24px">${imgPctText(s.c, s.n)}</div><span class="small muted">${volInt(s.c)} exams</span></div>
+        <div class="kpi"><div class="label">Most ordered</div><div class="value" style="font-size:20px">${topMod ? esc(topMod[0]) : '—'}</div>${topMod ? `<span class="small muted">${imgPctText(topMod[1], s.n)} of exams</span>` : ''}</div>
+      </div>
+      ${imgLegend(mods)}${imgStackSVG(months, s.byMonth, `Imaging exams per month for ${physName(p)}`)}
+      <p class="help" style="margin:8px 0 0">Imaging ordered by this provider and performed at NWSH facilities, from the Meditech imaging export. Open imaging referrals for modality and facility filters.</p>
+    </section>`;
+}
+/* ---------- Upload: Meditech imaging export (.txt / .csv) or an imaging data file (.json) ---------- */
+function imgBuildFromExport(rows, fileName) {
+  const norm = (h) => String(h || '').toLowerCase().replace(/[^a-z0-9#]/g, '');
+  const hdr = rows[0].map(norm); const col = (names) => names.map((n) => hdr.indexOf(n)).find((i) => i >= 0);
+  const iSite = col(['sitename', 'site', 'facility']), iCat = col(['category', 'modality']), iDate = col(['svcdate', 'servicedate', 'dateofservice', 'examdate', 'date']), iRef = col(['referring', 'referringprovider', 'referringphysician', 'ordering', 'orderingprovider']), iAtt = col(['attending']);
+  const statusIdx = hdr.map((h, i) => (h === 'status' || h === 'orderstatus' || h === 'reportstatus' ? i : -1)).filter((i) => i >= 0);
+  const iOrd = hdr.indexOf('orderstatus') >= 0 ? hdr.indexOf('orderstatus') : statusIdx[0], iRpt = hdr.indexOf('reportstatus') >= 0 ? hdr.indexOf('reportstatus') : statusIdx[1];
+  if (iCat === undefined || iDate === undefined || (iRef === undefined && iAtt === undefined)) throw new Error('this does not look like the Meditech imaging export (needs CATEGORY, SVC DATE and REFERRING columns)');
+  const agg = {}, refNames = {}, today = todayISO(); let kept = 0, skipped = 0, testRows = 0, minDate = '', maxDate = '', cancelled = 0, future = 0, maxPast = ''; const months = new Set();
+  for (let r = 1; r < rows.length; r++) {
+    const row = rows[r]; if (!row || row.length < 3) continue;
+    const date = volCellDate(row[iDate]); if (!date) { skipped++; continue; }
+    const raw = String((iRef !== undefined && row[iRef]) || (iAtt !== undefined && row[iAtt]) || '').trim();
+    const parts = imgNameParts(raw); if (!parts) { skipped++; continue; }
+    if (imgIsTestName(parts)) { testRows++; continue; }
+    const os = String(iOrd !== undefined ? row[iOrd] : '').trim().toLowerCase(), rs = String(iRpt !== undefined ? row[iRpt] : '').trim().toLowerCase();
+    const resulted = os === 'resulted' || os === 'complete' || os === 'completed' || rs === 'signed' ? 1 : 0, canc = os.startsWith('cancel') ? 1 : 0;
+    const key = parts.display, p = date.slice(0, 7), m = imgModality(row[iCat]), s = imgSite(iSite !== undefined ? row[iSite] : '');
+    const k = `${key}\u0001${p}\u0001${m}\u0001${s}`; const a = agg[k] = agg[k] || [0, 0, 0]; a[0]++; a[1] += resulted; a[2] += canc;
+    refNames[key] = parts; months.add(p); kept++; cancelled += canc; if (!minDate || date < minDate) minDate = date; if (date > maxDate) maxDate = date; if (date > today) future++; else if (date > maxPast) maxPast = date;
+  }
+  const recs = {};
+  Object.entries(agg).forEach(([k, v]) => { const [name, p, m, s] = k.split('\u0001'); const rec = recs[name] = recs[name] || { referrer: name, series: [] }; rec.series.push({ p, m, s, n: v[0], r: v[1], c: v[2] }); });
+  Object.values(recs).forEach((rec) => rec.series.sort((a, b) => a.p.localeCompare(b.p) || a.m.localeCompare(b.m)));
+  // the as-of date never runs past today: exams booked for a future date are kept but sit outside the analysis window
+  return { records: Object.values(recs), months: [...months].sort(), from: minDate, asOf: maxPast || maxDate, future, kept, skipped, testRows, cancelled, total: rows.length - 1, source: `${fileName} (uploaded ${todayISO()})` };
+}
+function imgParseJSON(text) {
+  const d = JSON.parse(text); const recs = Array.isArray(d) ? d : d.records; if (!Array.isArray(recs)) throw new Error('this is not an imaging referrals data file');
+  const records = recs.filter((r) => r && r.referrer && Array.isArray(r.series)).map((r) => ({ referrer: String(r.referrer), series: r.series.filter((e) => e && typeof e.p === 'string').map((e) => ({ p: e.p.slice(0, 7), m: imgModality(e.m), s: String(e.s || 'Other'), n: num(e.n), r: num(e.r), c: num(e.c) })) }));
+  const months = [...new Set(records.flatMap((r) => r.series.map((e) => e.p)))].sort(); const meta = d.meta || {};
+  return { records, months, from: meta.from || '', asOf: meta.asOf || '', sources: meta.sources || null, kept: records.reduce((a, r) => a + r.series.reduce((x, e) => x + e.n, 0), 0), cancelled: records.reduce((a, r) => a + r.series.reduce((x, e) => x + e.c, 0), 0), skipped: 0, testRows: 0, total: null, source: `imaging data file (uploaded ${todayISO()})` };
+}
+function imgSlug(name) { return 'img_' + name.toLowerCase().replace(/[^a-z0-9]+/g, '_').replace(/^_|_$/g, '').slice(0, 56); }
+async function importImaging(file) {
+  if (!isAdmin()) { toast('Only the administrator can upload imaging referrals.', 'err'); return; }
+  let parsed;
+  try {
+    const name = (file.name || '').toLowerCase();
+    if (name.endsWith('.json')) parsed = imgParseJSON(await file.text());
+    else { toast('Reading the export…'); parsed = imgBuildFromExport(parseCSV(await file.text()), file.name); }
+  } catch (e) { toast('That file could not be read: ' + (e && e.message ? e.message : e), 'err'); return; }
+  if (!parsed.records.length) { toast('No imaging exams were found in that file. Use the Meditech imaging export with CATEGORY, SVC DATE, STATUS and REFERRING columns.', 'err'); return; }
+  const existing = imgRecords(), fileMonths = new Set(parsed.months);
+  const matched = parsed.records.filter((r) => imgMatchPhysician(imgNameParts(r.referrer))).length;
+  const newNames = parsed.records.filter((r) => !existing.some((e) => e.referrer === r.referrer)).length;
+  const top = parsed.records.map((r) => ({ r, n: r.series.reduce((a, e) => a + e.n, 0) })).sort((a, b) => b.n - a.n);
+  const body = `
+    <p>${parsed.total !== null ? `<b>${volInt(parsed.total)}</b> rows read, <b>${volInt(parsed.kept)}</b> imaging exams kept` : `<b>${volInt(parsed.kept)}</b> imaging exams`} for <b>${volInt(parsed.records.length)}</b> referring provider${parsed.records.length === 1 ? '' : 's'}${parsed.from ? `, ${fmtDate(parsed.from)} to ${fmtDate(parsed.asOf)}` : ''}.</p>
+    <ul class="list small" style="margin:10px 0">
+      <li><span>Months in this file (these replace what is stored for the same months)</span><b>${parsed.months.length > 6 ? `${fmtMonth(parsed.months[0])} to ${fmtMonth(parsed.months[parsed.months.length - 1])} (${parsed.months.length})` : parsed.months.map(fmtMonth).join(', ')}</b></li>
+      <li><span>Referring providers matched to a physician record</span><b>${matched} of ${parsed.records.length}</b></li>
+      <li><span>Referring providers not seen before</span><b>${newNames}</b></li>
+      <li><span>Cancelled exams (kept, counted separately)</span><b>${volInt(parsed.cancelled)}</b></li>
+      ${parsed.future ? `<li><span class="muted">Exams booked for a future date (kept, shown once their month arrives)</span><span class="muted">${volInt(parsed.future)}</span></li>` : ''}
+      ${parsed.testRows ? `<li><span class="muted">Test and placeholder providers skipped</span><span class="muted">${volInt(parsed.testRows)}</span></li>` : ''}
+      ${parsed.skipped ? `<li><span class="muted">Rows skipped (no date or no provider)</span><span class="muted">${volInt(parsed.skipped)}</span></li>` : ''}
+    </ul>
+    <h3>Largest by exams ordered</h3>
+    <ul class="list small" style="max-height:220px;overflow:auto">${top.slice(0, 12).map(({ r, n }) => { const ph = imgMatchPhysician(imgNameParts(r.referrer)); return `<li><span><b>${esc(r.referrer)}</b>${ph ? '' : ' <span class="muted">· no physician record</span>'}</span><span class="nowrap">${volInt(n)} exams</span></li>`; }).join('')}</ul>
+    ${existing.length ? `<label class="check" style="display:flex;gap:10px;align-items:center;margin-top:14px"><input type="checkbox" id="img-replace-all"> <span>Remove everything stored before, including other months</span></label>` : ''}
+    <p class="help" style="margin-top:12px">Only counts by provider, month, modality and facility are stored. Patient names and MRNs never leave this browser.</p>`;
+  openModal({ title: 'Upload imaging referrals — review before saving', body, submitLabel: `Save ${volInt(parsed.kept)} exams for ${parsed.records.length} providers`,
+    onSubmit: () => { applyImagingImport(parsed, !!($('#img-replace-all') && $('#img-replace-all').checked)); return true; } });
+}
+function applyImagingImport(parsed, replaceAll) {
+  const fileMonths = new Set(parsed.months), meta = imgMeta() || { id: 'meta', sources: {} };
+  let recs = replaceAll ? [] : imgRecords().map((r) => ({ ...r, series: r.series.filter((e) => !fileMonths.has(e.p)) }));
+  parsed.records.forEach((nr) => {
+    let rec = recs.find((r) => r.referrer === nr.referrer);
+    if (!rec) { rec = { id: imgSlug(nr.referrer), physicianId: '', referrer: nr.referrer, series: [] }; recs.push(rec); }
+    rec.series = rec.series.concat(nr.series).sort((a, b) => a.p.localeCompare(b.p) || a.m.localeCompare(b.m));
+  });
+  recs = recs.filter((r) => r.series.length);
+  const ids = new Set(); recs.forEach((r) => { while (ids.has(r.id)) r.id += '_'; ids.add(r.id); const ph = imgMatchPhysician(imgNameParts(r.referrer)); r.physicianId = ph ? ph.id : ''; r.updatedAt = nowISO(); r.updatedBy = session.name; });
+  meta.sources = replaceAll ? {} : (meta.sources || {});
+  if (parsed.sources) Object.assign(meta.sources, parsed.sources); else parsed.months.forEach((m) => { meta.sources[m] = parsed.source; });
+  if (parsed.asOf && (!meta.asOf || parsed.asOf > meta.asOf || replaceAll)) meta.asOf = parsed.asOf;
+  if (parsed.from && (!meta.from || parsed.from < meta.from || replaceAll)) meta.from = parsed.from;
+  meta.importedAt = nowISO(); meta.importedBy = session.name;
+  db.imaging = [meta, ...recs];
+  saveDB(); toast(`Imaging referrals saved — ${recs.length} providers, ${parsed.months.length} month${parsed.months.length === 1 ? '' : 's'}`);
+  if (!location.hash.startsWith('#/imaging')) location.hash = '#/imaging'; else rerender();
+}
+function exportImaging() {
+  const meta = imgMeta() || {};
+  download(`imaging-referrals-${todayISO()}.json`, JSON.stringify({ app: 'nwsh-physician-relations', kind: 'imaging-referrals', exportedAt: nowISO(), exportedBy: session.name, meta: { from: meta.from || '', asOf: meta.asOf || '', sources: meta.sources || {} }, records: imgRecords().map((r) => ({ referrer: r.referrer, series: r.series })) }), 'application/json');
+  toast('Imaging data file downloaded — it can be uploaded again from the Imaging referrals page');
 }
 
 /* ===================== Event delegation ===================== */
@@ -3844,6 +4146,12 @@ const actions = {
   'export-phys-csv': () => exportPhysCSV(),
   'import-phys-csv': () => $('#csv-input').click(),
   'import-volumes': () => $('#volumes-input').click(),
+  'import-imaging': () => $('#imaging-input').click(),
+  'export-imaging': () => exportImaging(),
+  'im-mod': (el) => { const k = el.dataset.v, on = IMG_MODS.filter((m) => ui.im.mods[m] !== false); if (ui.im.mods[k] !== false && on.length === 1) { toast('Keep at least one modality on.'); return; } ui.im.mods[k] = ui.im.mods[k] === false ? true : false; rerender(); },
+  'im-site': (el) => { const k = el.dataset.v; ui.im.sites[k] = ui.im.sites[k] === false ? true : false; rerender(); },
+  'im-pick': (el) => { location.hash = '#/imaging/' + el.dataset.id; },
+  'im-all': () => { ui.im.showAll = !ui.im.showAll; rerender(); },
   'export-volumes': () => exportVolumes(),
   'sx-metric': (el) => { ui.sx.metric = el.dataset.v; rerender(); },
   'sx-smooth': (el) => { ui.sx.smooth = +el.dataset.v; rerender(); },
@@ -3974,6 +4282,8 @@ document.addEventListener('change', (e) => {
     case 'rep-from': ui.rep.from = t.value; rerender(); break;
     case 'rep-to': ui.rep.to = t.value; rerender(); break;
     case 'rep-compare': ui.rep.compare = t.value; rerender(); break;
+    case 'im-ref': ui.im.id = t.value; location.hash = t.value ? '#/imaging/' + t.value : '#/imaging'; if (!t.value) rerender(); break;
+    case 'im-period': ui.im.period = t.value; rerender(); break;
     case 'sx-surg': ui.sx.vol = t.value; location.hash = t.value ? '#/scorecard/' + t.value : '#/scorecard'; if (!t.value) rerender(); break;
     case 'risk-days': { const v = Math.max(1, Math.round(num(t.value)) || 14); db.settings.riskDays = v; t.value = v; saveDB(); toast('Saved'); updateNavCount(); break; }
     case 'team-name': { const v = t.value.trim(); if (v) { db.settings.team[+t.dataset.i] = v; saveDB(); toast('Saved'); } break; }
@@ -3983,6 +4293,7 @@ $('#import-input').addEventListener('change', (e) => { const f = e.target.files[
 $('#meditech-input').addEventListener('change', (e) => { const f = e.target.files[0]; if (f) importMeditech(f); e.target.value = ''; });
 $('#csv-input').addEventListener('change', (e) => { const f = e.target.files[0]; if (f) importPhysiciansCSV(f); e.target.value = ''; });
 $('#volumes-input').addEventListener('change', (e) => { const f = e.target.files[0]; if (f) importVolumes(f); e.target.value = ''; });
+$('#imaging-input').addEventListener('change', (e) => { const f = e.target.files[0]; if (f) importImaging(f); e.target.value = ''; });
 
 // Keep multiple open tabs in sync
 window.addEventListener('storage', (e) => { if (e.key === STORE_KEY && session) { db = loadDB(); rerender(); } });

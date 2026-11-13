@@ -69,6 +69,16 @@ same-weeks total and full year. Each matched physician's page gets a "Surgical v
 - **Download data file** writes the stored totals back out as a .json that can be uploaded again or kept as a
   backup. The starting file is in `imports/`.
 
+**Imaging referrals** — who orders imaging at NWSH facilities (hospital, Axis, Breast Imaging Center, urgent
+cares), by month, modality and facility, with a resulted and cancelled count. Pick a referring provider or see
+everyone, choose a period, and turn modalities and facilities on and off. Matched physicians get an "Imaging
+referrals to NWSH" card on their page, and the physicians list can sort by imaging exams ordered.
+- **Upload imaging referrals** (administrator, on the Imaging referrals page or in Settings) reads the Meditech
+  imaging export (.txt or .csv with SITE NAME, CATEGORY, SVC DATE, STATUS, REFERRING columns) in the browser.
+  Patient columns are dropped on the spot; only counts by provider, month, modality and facility are stored.
+  The months in the file replace what is stored for those months; other months stay.
+- **Download data file** writes the stored counts as a .json that can be uploaded again.
+
 ## Logins
 Edit `config.php`. Passwords are stored as bcrypt hashes, never in plain text. To change one: sign in as
 `admin` → Settings → Password hash generator → paste the hash into `config.php`. The `admin` login is the
