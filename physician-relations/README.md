@@ -58,7 +58,7 @@ follow-up date. Follow-ups roll into a queue (overdue / due this week / just min
   also accepts a `.json` worklist file prepared outside the app. Do not upload worklist files to the web
   folder — they go through the browser only.
 
-**Scorecard** — procedure cases and gross charges by surgeon, by week and by month, for every year loaded.
+**Reports → Surgical volume** — procedure cases and gross charges by surgeon, by week and by month, for every year loaded.
 Pick a surgeon (or all surgeons), switch between case volume and gross charges, smooth the weekly line with a
 4-week average, and turn room types on and off (OR 1–10, Surgery Center 11–12, MPR, Endo / Axis / IR). The
 summary compares the latest year with the same weeks of earlier years; the table shows every month, quarter,
@@ -69,7 +69,7 @@ same-weeks total and full year. Each matched physician's page gets a "Surgical v
 - **Download data file** writes the stored totals back out as a .json that can be uploaded again or kept as a
   backup. The starting file is in `imports/`.
 
-**Imaging referrals** — who orders imaging at NWSH facilities (hospital, Axis, Breast Imaging Center, urgent
+**Reports → Imaging referrals** — who orders imaging at NWSH facilities (hospital, Axis, Breast Imaging Center, urgent
 cares), by month, modality and facility, with a resulted and cancelled count. Pick a referring provider or see
 everyone, choose a period, and turn modalities and facilities on and off. Matched physicians get an "Imaging
 referrals to NWSH" card on their page, and the physicians list can sort by imaging exams ordered.

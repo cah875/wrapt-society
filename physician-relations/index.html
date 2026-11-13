@@ -193,6 +193,11 @@
   td .primary-text { font-weight: 700; font-size: 16px; }
   td .sub { color: var(--muted); font-size: 14px; }
   .count-line { color: var(--muted); font-size: 14px; margin: 10px 0 0; }
+  .kpis.four { grid-template-columns: repeat(4, minmax(0, 1fr)); }
+  @media (max-width: 900px) { .kpis.four { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
+  td.who { min-width: 230px; }
+  .ref-table td:nth-child(5) { min-width: 210px; }
+  .section-title { font-size: 13px; text-transform: uppercase; letter-spacing: .06em; color: var(--muted); margin: 14px 0 0 4px; }
   .chips { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; margin: 0 0 14px; }
   .chips-label { font-size: 13px; color: var(--muted); font-weight: 600; margin-right: 2px; }
   .chip { display: inline-flex; align-items: center; gap: 6px; border: 1px solid var(--border); background: var(--surface); border-radius: 999px; padding: 6px 13px; font: inherit; font-size: 14px; font-weight: 600; cursor: pointer; color: var(--text); line-height: 1.2; }
@@ -419,7 +424,7 @@
         <a href="#/home" data-nav="home"><svg class="i"><use href="#i-home"/></svg>Home</a>
         <a href="#/physicians" data-nav="physicians"><svg class="i"><use href="#i-people"/></svg>Physicians</a>
         <a href="#/referrals" data-nav="referrals"><svg class="i"><use href="#i-route"/></svg>Referrals<span class="count" id="nav-ref-count" hidden></span></a>
-        <a href="#/scorecard" data-nav="scorecard"><svg class="i"><use href="#i-chart"/></svg>Scorecard</a>
+        <a href="#/reports" data-nav="reports"><svg class="i"><use href="#i-chart"/></svg>Reports</a>
         <a href="#/followups" data-nav="followups"><svg class="i"><use href="#i-flag"/></svg>To-Do<span class="count" id="nav-fu-count" hidden></span></a>
         <a href="#/activity" data-nav="activity"><svg class="i"><use href="#i-list"/></svg>Activity</a>
       </nav>
@@ -1006,7 +1011,7 @@ function contactSubject(c) {
 }
 const subjectLink = (c) => { const s = contactSubject(c); return `<a href="${s.href}">${esc(s.label)}</a>`; };
 /* Relationship with NWSH, from the hospital's own encounter data (roster import) */
-const NWSH_REL = { staff: ['Active medical staff', 'b-d'], referring: ['Referring to NWSH (2026)', 'b-c'], lapsed: ['Referred in 2025 only', 'b-soon'], none: ['Not yet referring', 'b-a'] };
+const NWSH_REL = { staff: ['Active staff', 'b-d'], referring: ['Referring 2026', 'b-c'], lapsed: ['Referred 2025 only', 'b-soon'], none: ['Not yet referring', 'b-a'] };
 function nwshBadge(p) { const r = NWSH_REL[p.nwshRelation || 'none']; return `<span class="badge ${r[1]}">${r[0]}</span>`; }
 
 /* ---------- Tasks ---------- */
@@ -1092,7 +1097,7 @@ function refRiskReason(r) {
 function refRiskReasonCalc(r) {
   if (r.status !== 'active') return '';
   const l = currentLeg(r); if (!l) return '';
-  if (l.scheduledDate && !l.completedDate && daysBetween(l.scheduledDate, todayISO()) > 2) return `Appointment on ${fmtDate(l.scheduledDate)} was not marked as seen`;
+  if (l.scheduledDate && !l.completedDate && daysBetween(l.scheduledDate, todayISO()) > 2) return `Appointment ${fmtDate(l.scheduledDate)} passed, not marked as seen`;
   if (legIsAuthOnly(l)) return '';
   const w = refWaiting(r);
   if (legStage(l) !== 'resulted' && w >= db.settings.riskDays) return `No movement for ${w} days`;
@@ -1163,7 +1168,7 @@ function route() {
   const parts = location.hash.replace(/^#\/?/, '').split('/');
   const view = parts[0] || 'home';
   const navKey = view === 'physician' || view === 'clinics' || view === 'clinic' ? 'physicians' : view === 'referral' ? 'referrals' : view;
-  $$('[data-nav]').forEach((a) => a.classList.toggle('active', a.dataset.nav === navKey));
+  $$('[data-nav]').forEach((a) => a.classList.toggle('active', a.dataset.nav === (['scorecard', 'imaging', 'reports'].includes(view) ? 'reports' : navKey)));
   updateNavCount();
   const main = $('#view');
   switch (view) {
@@ -1188,8 +1193,9 @@ function route() {
       break;
     }
     case 'activity': main.innerHTML = viewActivity(); updateActivityTable(); break;
-    case 'scorecard': main.innerHTML = viewScorecard(parts[1] || ''); break;
-    case 'imaging': main.innerHTML = viewImaging(parts[1] || ''); break;
+    case 'reports': { const sub = parts[1] || 'referrals'; main.innerHTML = sub === 'surgeons' ? viewScorecard(parts[2] || '') : sub === 'imaging' ? viewImaging(parts[2] || '') : viewReportsReferrals(); break; }
+    case 'scorecard': location.hash = '#/reports/surgeons' + (parts[1] ? '/' + parts[1] : ''); return;
+    case 'imaging': location.hash = '#/reports/imaging' + (parts[1] ? '/' + parts[1] : ''); return;
     case 'settings': main.innerHTML = viewSettings(); loadDigestStatus(); break;
     default: main.innerHTML = viewHome();
   }
@@ -1279,7 +1285,7 @@ function viewHome() {
       }).join('')}</ul>` : (riskRefs.length || myTasks.length ? '' : `<p class="empty">Nothing is overdue or due this week, and no referrals are at risk. Nice work.</p>`)}
     </section>
 
-    <div class="kpis" style="margin-top:18px">
+    <div class="kpis four" style="margin-top:18px">
       <a class="kpi" href="#/physicians" data-act="filter-phys" data-stage=""><div class="label">Physicians</div><div class="value">${P.length}</div></a>
       <a class="kpi" href="#/physicians" data-act="filter-phys" data-rel="referring" data-sort="enc"><div class="label">Referring to NWSH, 2026</div><div class="value">${count((p) => p.nwshRelation === 'referring')}</div></a>
       ${count((p) => p.nwshRelation === 'lapsed') ? `<a class="kpi red" href="#/physicians" data-act="filter-phys" data-rel="lapsed" data-sort="enc25"><div class="label">Referred in 2025, not yet in 2026</div><div class="value">${count((p) => p.nwshRelation === 'lapsed')}</div></a>` : ''}
@@ -1454,18 +1460,18 @@ function updatePhysTable() {
   const th = (k, label, cls = '') => `<th class="sortable ${cls}" data-act="phys-sort-col" data-key="${k}" title="Sort by ${label}">${label} ${arrow(k)}</th>`;
   el.innerHTML = (f.group ? physBreakdownHTML(rows) : '') + (rows.length ? `
     <table>
-      <thead><tr>${th('name', 'Physician')}${th('status', 'Status')}${th('rel', 'With NWSH')}${th('enc', '2026 cases / encounters', 'num')}${th('refs', 'Referrals', 'num')}${th('last', 'Last contact')}${th('next', 'Next follow-up')}<th></th></tr></thead>
+      <thead><tr>${th('name', 'Physician')}${th('status', 'Status')}${th('rel', 'With NWSH')}${th('enc', 'NWSH volume 2026', 'num')}${th('refs', 'Referrals', 'num')}${th('last', 'Last contact')}${th('next', 'Next follow-up')}<th></th></tr></thead>
       <tbody>${rows.map(({ p, lc, nf, ri }) => `
         <tr class="clickable" data-act="open-phys" data-id="${p.id}">
-          <td><div class="primary-text"><a href="#/physician/${p.id}">${esc(physSortName(p))}${p.credentials ? `, ${esc(p.credentials)}` : ''}</a></div>
+          <td class="who"><div class="primary-text nowrap"><a href="#/physician/${p.id}">${esc(physSortName(p))}${p.credentials ? `, ${esc(p.credentials)}` : ''}</a></div>
               <div class="sub">${[p.specialty, p.practice].filter(Boolean).map(esc).join(' · ') || '&nbsp;'}</div></td>
           <td>${stageBadge(p)}</td>
           <td>${nwshBadge(p)}</td>
-          <td class="num nowrap">${p.nwsh ? `<b>${fmtNum(p.nwsh.procedures2026)}</b> / ${fmtNum(p.nwsh.encounters2026)}<div class="sub">${p.nwsh.lastSeen ? 'seen ' + fmtDate(p.nwsh.lastSeen) : p.nwsh.encounters2025 ? fmtNum(p.nwsh.encounters2025) + ' in 2025' : ''}</div>` : '<span class="muted">—</span>'}</td>
-          <td class="num nowrap">${ri.total ? `<b>${ri.open}</b> open${ri.risk ? ` · <span style="color:var(--red)">${ri.risk} at risk</span>` : ''}<div class="sub">${ri.total} tracked</div>` : '<span class="muted">—</span>'}${ri.img ? `<div class="sub">${volInt(ri.img)} imaging exams</div>` : ''}</td>
+          <td class="num nowrap">${p.nwsh ? `<b>${fmtNum(p.nwsh.procedures2026)}</b> cases<div class="sub">${fmtNum(p.nwsh.encounters2026)} encounters${p.nwsh.lastSeen ? ` · seen ${fmtDate(p.nwsh.lastSeen)}` : ''}</div>` : '<span class="muted">—</span>'}</td>
+          <td class="num nowrap">${ri.total ? `<b>${ri.open}</b> open${ri.risk ? ` · <span style="color:var(--red)">${ri.risk} at risk</span>` : ''}<div class="sub">${ri.total} tracked</div>` : ri.img ? '' : '<span class="muted">—</span>'}${ri.img ? `<div class="${ri.total ? 'sub' : 'muted'}">${volInt(ri.img)} imaging exams</div>` : ''}</td>
           <td class="nowrap">${lc ? `${fmtDate(lc.date)}<div class="sub">${esc(lc.method)} · ${esc(lc.who)}</div>` : '<span class="muted">Never</span>'}</td>
           <td class="nowrap">${nf ? `${fmtDate(nf.fuDate)}<div>${fuBadge(nf)}</div>` : '<span class="muted">None scheduled</span>'}</td>
-          <td class="nowrap" style="text-align:right"><a class="btn sm" href="#/physician/${p.id}">Open ${ico('i-chevron', 'sm')}</a></td>
+          <td class="nowrap" style="text-align:right;padding-left:0"><a class="btn sm" href="#/physician/${p.id}" title="Open ${esc(physName(p))}" aria-label="Open" style="padding:0 8px">${ico('i-chevron', 'sm')}</a></td>
         </tr>`).join('')}
       </tbody>
     </table>
@@ -1684,24 +1690,6 @@ function viewPhysician(p) {
           <p class="small muted" style="margin:16px 0 0">Added ${fmtTS(p.createdAt)} by ${esc(p.createdBy)}${p.updatedAt ? ` · Last updated ${fmtTS(p.updatedAt)} by ${esc(p.updatedBy)}` : ''}</p>
         </section>
 
-        ${p.nwsh ? `<section class="card">
-          <div class="card-head"><h2>Activity at NWSH</h2>${nwshBadge(p)}</div>
-          <div class="kpis" style="grid-template-columns:repeat(auto-fit,minmax(120px,1fr));margin-bottom:12px">
-            <div class="kpi"><div class="label">Procedure cases 2026</div><div class="value">${fmtNum(p.nwsh.procedures2026)}</div><span class="small muted">${fmtNum(p.nwsh.procedures2025)} in 2025</span></div>
-            <div class="kpi"><div class="label">Encounters 2026</div><div class="value">${fmtNum(p.nwsh.encounters2026)}</div><span class="small muted">${fmtNum(p.nwsh.encounters2025)} in 2025</span></div>
-            <div class="kpi"><div class="label">Clinic visits 2026</div><div class="value">${fmtNum(p.nwsh.clinicVisits2026)}</div></div>
-            <div class="kpi ${p.nwsh.lastSeen && daysBetween(p.nwsh.lastSeen, todayISO()) > 90 ? 'red' : ''}"><div class="label">Last seen at NWSH</div><div class="value" style="font-size:20px">${p.nwsh.lastSeen ? fmtDate(p.nwsh.lastSeen) : '—'}</div>${p.nwsh.lastSeen ? `<span class="small muted">${daysBetween(p.nwsh.lastSeen, todayISO())} days ago</span>` : ''}</div>
-          </div>
-          <dl class="dl">
-            <dt>Role</dt><dd>${orDash(p.nwsh.role)}</dd>
-            <dt>Primary service line</dt><dd>${orDash(p.nwsh.serviceLine)}</dd>
-            <dt>Service lines</dt><dd>${orDash(p.nwsh.serviceLines)}</dd>
-            <dt>Clinics (visits)</dt><dd>${orDash(p.nwsh.clinics)}</dd>
-          </dl>
-          <p class="help" style="margin:10px 0 0">Source: ${esc(p.nwsh.source)}. Encounters minus procedure cases are loaded as the "ancillary actual" below.</p>
-        </section>` : ''}
-        ${physicianVolumeCardHTML(p)}
-        ${physicianImagingCardHTML(p)}
         <section class="card">
           <div class="card-head"><h2>Goals &amp; actuals</h2><button class="btn sm no-print" data-act="add-goal" data-id="${p.id}">${ico('i-plus', 'sm')}Add a year</button></div>
           ${goalsTableHTML(p)}
@@ -1731,9 +1719,25 @@ function viewPhysician(p) {
               <thead><tr><th>Patient</th><th>Referred from → to</th><th>Where it stands</th><th class="num">Waiting</th></tr></thead>
               <tbody>${open.map((r) => { const l = currentLeg(r); return `<tr class="clickable" data-act="open-ref" data-id="${r.id}"><td><a href="#/patient/${encodeURIComponent(r.mrn)}">${esc(r.mrn)}</a><div class="sub">${esc(r.initials || '')}</div></td><td><b>${esc(l.from.label)}</b> ${ico('i-arrow-right', 'sm')} <b>${esc(l.to.label)}</b><div class="sub">${esc(l.service || '')}</div></td><td>${refBadge(r)}<div class="sub">${esc(legStatusShort(l))}</div></td><td class="num nowrap">${refWaiting(r)} d</td></tr>`; }).join('')}</tbody>
             </table></div>${rs.length > open.length ? `<p class="help" style="margin:6px 0 0">Showing the ${open.length} most pressing open referrals.</p>` : ''}` : ''; })()}
-            <p class="help" style="margin:10px 0 0"><a href="#/referrals" data-act="ref-phys-link" data-id="${p.id}">See this physician's referrals</a> · <a href="#/referrals" data-act="ref-view-link">Open the reports</a></p>`;
+            <p class="help" style="margin:10px 0 0"><a href="#/referrals" data-act="ref-phys-link" data-id="${p.id}">See this physician's referrals</a> · <a href="#/reports">Open the reports</a></p>`;
           })()}
         </section>
+        ${(() => { const cards = (p.nwsh ? `<section class="card">
+          <div class="card-head"><h2>Encounters &amp; procedures</h2>${nwshBadge(p)}</div>
+          <div class="kpis" style="grid-template-columns:repeat(auto-fit,minmax(120px,1fr));margin-bottom:12px">
+            <div class="kpi"><div class="label">Procedure cases 2026</div><div class="value">${fmtNum(p.nwsh.procedures2026)}</div><span class="small muted">${fmtNum(p.nwsh.procedures2025)} in 2025</span></div>
+            <div class="kpi"><div class="label">Encounters 2026</div><div class="value">${fmtNum(p.nwsh.encounters2026)}</div><span class="small muted">${fmtNum(p.nwsh.encounters2025)} in 2025</span></div>
+            <div class="kpi"><div class="label">Clinic visits 2026</div><div class="value">${fmtNum(p.nwsh.clinicVisits2026)}</div></div>
+            <div class="kpi ${p.nwsh.lastSeen && daysBetween(p.nwsh.lastSeen, todayISO()) > 90 ? 'red' : ''}"><div class="label">Last seen at NWSH</div><div class="value" style="font-size:20px">${p.nwsh.lastSeen ? fmtDate(p.nwsh.lastSeen) : '—'}</div>${p.nwsh.lastSeen ? `<span class="small muted">${daysBetween(p.nwsh.lastSeen, todayISO())} days ago</span>` : ''}</div>
+          </div>
+          <dl class="dl">
+            <dt>Role</dt><dd>${orDash(p.nwsh.role)}</dd>
+            <dt>Primary service line</dt><dd>${orDash(p.nwsh.serviceLine)}</dd>
+            <dt>Service lines</dt><dd>${orDash(p.nwsh.serviceLines)}</dd>
+            <dt>Clinics (visits)</dt><dd>${orDash(p.nwsh.clinics)}</dd>
+          </dl>
+          <p class="help" style="margin:10px 0 0">Source: ${esc(p.nwsh.source)}. Encounters minus procedure cases are loaded as the "ancillary actual" below.</p>
+        </section>` : '') + physicianVolumeCardHTML(p) + physicianImagingCardHTML(p); return cards.trim() ? `<h2 class="section-title">Activity at NWSH</h2>` + cards : ''; })()}
       </div>
 
       <div>
@@ -1993,7 +1997,7 @@ function repRange() {
 function compareRange(range) {
   const c = ui.rep.compare; if (c === 'none') return null;
   if (c === 'year') { const sh = (iso) => `${+iso.slice(0, 4) - 1}${iso.slice(4)}`; return { from: sh(range.from), to: sh(range.to), label: 'same period last year' }; }
-  const len = daysBetween(range.from, range.to) + 1; return { from: addDays(range.from, -len), to: addDays(range.from, -1), label: 'the previous ' + len + ' days' };
+  const len = daysBetween(range.from, range.to) + 1; return { from: addDays(range.from, -len), to: addDays(range.from, -1), label: 'the previous period', detail: `the ${len} days before, ${fmtDate(addDays(range.from, -len))} – ${fmtDate(addDays(range.from, -1))}` };
 }
 const inRange = (iso, r) => !!iso && iso.slice(0, 10) >= r.from && iso.slice(0, 10) <= r.to;
 function refInvolves(r, pid, role) { return r.legs.some((l) => (role !== 'to' && l.from && l.from.physicianId === pid) || (role !== 'from' && l.to && l.to.physicianId === pid)); }
@@ -2057,6 +2061,7 @@ function trendChartHTML(series) {
 
 /* ===================== View: Referrals & orders ===================== */
 const REF_CATS = ['Clinic referral', 'Imaging', 'Surgery & procedures', 'Other'];
+const REF_CAT_SHORT = { 'Clinic referral': 'Clinic', 'Imaging': 'Imaging', 'Surgery & procedures': 'Surgery', 'Other': 'Other' };
 function refMed(r) { const l = r.legs[0]; return (l && l.meditech) || null; }
 /* What kind of hand-off this is, from the Meditech referral type when there is one, else from the wording. */
 function refCategory(r) {
@@ -2431,13 +2436,12 @@ function viewReferrals() {
     <div class="page-head">
       <div><h1>Referrals &amp; Orders</h1><p class="lead">Follow each patient hand-off from start to finish so nobody falls through the cracks.</p></div>
       <div class="actions">
-        <div class="toggle" role="group" aria-label="View"><button class="${f.view !== 'reports' ? 'on' : ''}" data-act="ref-view" data-view="list">Tracking list</button><button class="${f.view === 'reports' ? 'on' : ''}" data-act="ref-view" data-view="reports">Reports</button></div>
+        <a class="btn" href="#/reports">${ico('i-chart')}Reports</a>
         <button class="btn" data-act="import-meditech">${ico('i-upload')}Import from Meditech</button>
-        <button class="btn" data-act="${f.view === 'reports' ? 'export-rep-csv' : 'export-ref-csv'}">${ico('i-download')}Download spreadsheet</button>
+        <button class="btn" data-act="export-ref-csv">${ico('i-download')}Download spreadsheet</button>
         <button class="btn primary" data-act="add-referral">${ico('i-plus')}Start tracking a referral</button>
       </div>
     </div>`;
-  if (f.view === 'reports') return head + viewReferralReports();
   const involved = refsByPhysician();
   const physOpts = db.physicians.filter((p) => involved.has(p.id)).sort((a, b) => physSortName(a).localeCompare(physSortName(b)));
   const destOpts = [...new Set(R.flatMap((r) => r.legs.map((l) => l.to && l.to.label)).filter(Boolean))].sort();
@@ -2507,11 +2511,11 @@ function refListHTML() {
         <tr class="clickable ${f.sel.has(r.id) ? 'selected' : ''}" data-act="open-ref" data-id="${r.id}">
           <td class="chk"><input type="checkbox" data-change="ref-sel" data-id="${r.id}" ${f.sel.has(r.id) ? 'checked' : ''} aria-label="Select"></td>
           <td class="nowrap"><div class="primary-text"><a href="#/patient/${encodeURIComponent(r.mrn)}" title="All referrals for this patient">${esc(r.mrn)}</a></div><div class="sub">${esc(r.initials || '')}${r.payer ? ` · ${esc(shortText(r.payer, 24))}` : ''}</div></td>
-          <td><span class="tag">${esc(refCategory(r))}</span>${pri ? ` <span class="badge b-over">${pri}</span>` : ''}</td>
-          <td>${l ? `<div><b>${esc(l.from.label)}</b> ${ico('i-arrow-right', 'sm')} <b>${esc(l.to.label)}</b></div><div class="sub">${esc(l.service || '')}${r.legs.length > 1 ? ` · step ${r.legs.length}` : ''}</div>` : '<span class="muted">No steps yet</span>'}</td>
+          <td class="nowrap"><span class="tag" title="${esc(refCategory(r))}">${esc(REF_CAT_SHORT[refCategory(r)] || refCategory(r))}</span>${pri ? ` <span class="badge b-over">${pri}</span>` : ''}</td>
+          <td class="who"><div><b>${esc(l.from.label)}</b> ${ico('i-arrow-right', 'sm')} <b>${esc(l.to.label)}</b></div><div class="sub">${esc(l.service || '')}${r.legs.length > 1 ? ` · step ${r.legs.length}` : ''}</div></td>
           <td>${refBadge(r)}<div class="sub">${esc(risk && /Appointment/.test(risk) ? risk : legStatusShort(l))}${md && md.authStatus ? `<br>Meditech: ${esc(md.authStatus)}${md.statusDate ? ` · ${fmtDate(md.statusDate)}` : ''}` : ''}</div></td>
           <td class="nowrap">${fmtDate(refFirstDate(r))}${!open ? `<div class="sub">${s === 'complete' ? 'Completed' : 'Dropped'} ${fmtDate(r.closedAt)}</div>` : ''}</td>
-          <td class="num nowrap"><b>${refDays(r)}</b><div class="sub">days${open ? `<br>${refWaiting(r)} since move` : ''}</div></td>
+          <td class="num nowrap"><b>${refDays(r)}</b> days${open ? `<div class="sub">${refWaiting(r)} since move</div>` : ''}</td>
           <td class="nowrap">${r.owner ? esc(r.owner) : '<span class="muted">—</span>'}</td>
           <td class="nowrap" style="text-align:right"><a class="btn sm" href="#/referral/${r.id}">Open ${ico('i-chevron', 'sm')}</a></td>
         </tr>`; }).join('')}</tbody></table></div>
@@ -2631,10 +2635,10 @@ function viewReferralReports() {
         <div class="field"><span class="field-label">Period</span><select data-change="rep-preset">${REP_PRESETS.map(([k, l]) => `<option value="${k}" ${s.preset === k ? 'selected' : ''}>${l}</option>`).join('')}</select></div>
         ${s.preset === 'custom' ? `<div class="field"><span class="field-label">From</span><input type="date" value="${esc(s.from)}" data-change="rep-from"></div><div class="field"><span class="field-label">To</span><input type="date" value="${esc(s.to)}" data-change="rep-to"></div>` : ''}
         <div class="field"><span class="field-label">Compare with</span><select data-change="rep-compare"><option value="prev" ${s.compare === 'prev' ? 'selected' : ''}>Previous period</option><option value="year" ${s.compare === 'year' ? 'selected' : ''}>Same period last year</option><option value="none" ${s.compare === 'none' ? 'selected' : ''}>No comparison</option></select></div>
-        <div class="field" style="align-self:end"><span class="help">Showing <b>${esc(range.label)}</b> (${fmtDate(range.from)} – ${fmtDate(range.to)})${cmp ? ` vs ${esc(cmp.label)}` : ''}</span></div>
+        <div class="field" style="align-self:end"><span class="help">Showing <b>${esc(range.label)}</b> (${fmtDate(range.from)} – ${fmtDate(range.to)})${cmp ? ` vs ${esc((cmp.detail || cmp.label))}` : ''}</span></div>
       </div>
     </section>
-    <div class="kpis" style="margin:18px 0">
+    <div class="kpis four" style="margin:18px 0">
       ${tile('Ordered', now.ordered, 'ordered')}
       ${tile('Completed', now.completed, 'completed')}
       ${tile('Dropped out', now.dropped, 'dropped', { lowerIsBetter: true })}
@@ -3416,9 +3420,9 @@ function volRecById(id) { return volRecords().find((r) => r.id === id) || null; 
 function viewScorecard(volId) {
   const recs = volRecords();
   const head = `<div class="page-head">
-      <div><h1>Surgeon Scorecard</h1><p class="lead">Procedure cases and gross charges by surgeon, compared with the same weeks of earlier years.</p></div>
+      <div><h1>Surgical volume</h1><p class="lead">Procedure cases and gross charges by surgeon, compared with the same weeks of earlier years.</p></div>
       <div class="actions no-print">
-        ${analyticsSwitcher('scorecard')}
+        ${analyticsSwitcher('surgeons')}
         ${recs.length ? `<button class="btn" data-act="export-volumes">${ico('i-download')}Download data file</button>` : ''}
         ${isAdmin() ? `<button class="btn" data-act="import-volumes">${ico('i-upload')}Upload surgeon scorecard</button>` : ''}
       </div>
@@ -3503,7 +3507,7 @@ function physicianVolumeCardHTML(p) {
   const c = ytd(latest, 0), pc = prior ? ytd(prior, 0) : 0, ch = ytd(latest, 1), pch = prior ? ytd(prior, 1) : 0;
   const barData = {}; years.forEach((y) => { barData[y] = m[y].map((a, i) => (y === latest && i + 1 > asOf.month ? null : a[0])); });
   return `<section class="card">
-      <div class="card-head"><h2>Surgical volume &amp; charges</h2><a href="#/scorecard/${rec.id}">Open the scorecard</a></div>
+      <div class="card-head"><h2>Surgical volume &amp; charges</h2><a href="#/reports/surgeons/${rec.id}">Open the surgical volume report</a></div>
       <div class="kpis" style="grid-template-columns:repeat(auto-fit,minmax(130px,1fr));margin-bottom:12px">
         <div class="kpi"><div class="label">Cases ${latest}, weeks 1–${asOf.week}</div><div class="value">${volInt(c)}</div>${prior ? `<span class="small ${volCls(c - pc)}">${volSigned(c - pc)} (${volPctText(volPct(c, pc))}) vs ${prior}</span>` : ''}</div>
         <div class="kpi"><div class="label">Gross charges ${latest}</div><div class="value" style="font-size:24px">${volShort(ch)}</div>${prior ? `<span class="small ${volCls(ch - pch)}">${volSigned(ch - pch, volShort)} (${volPctText(volPct(ch, pch))}) vs ${prior}</span>` : ''}</div>
@@ -3624,7 +3628,7 @@ function applyVolumeImport(parsed, replaceAll) {
   meta.importedAt = nowISO(); meta.importedBy = session.name;
   db.volumes = [meta, ...recs];
   saveDB(); toast(`Surgeon scorecard saved — ${recs.length} surgeons, ${parsed.years.join(', ')}`);
-  if (!location.hash.startsWith('#/scorecard')) location.hash = '#/scorecard'; else rerender();
+  if (!location.hash.startsWith('#/reports/surgeons')) location.hash = '#/reports/surgeons'; else rerender();
 }
 function exportVolumes() {
   const meta = volMeta() || {};
@@ -3717,13 +3721,21 @@ function imgHBarSVG(items, color, label) {
   return `<svg class="chart" viewBox="0 0 ${W} ${H}" role="img" aria-label="${esc(label)}" style="max-height:${H}px">${rows}</svg>`;
 }
 function analyticsSwitcher(which) {
-  return `<div class="toggle" role="group" aria-label="Analytics view"><a class="${which === 'scorecard' ? 'on' : ''}" href="#/scorecard" style="display:inline-flex;align-items:center;padding:0 14px;height:40px;font-weight:700;text-decoration:none">Surgical volume</a><a class="${which === 'imaging' ? 'on' : ''}" href="#/imaging" style="display:inline-flex;align-items:center;padding:0 14px;height:40px;font-weight:700;text-decoration:none">Imaging referrals</a></div>`;
+  const tab = (key, href, label) => `<a class="${which === key ? 'on' : ''}" href="${href}" style="display:inline-flex;align-items:center;padding:0 14px;height:40px;font-weight:700;text-decoration:none">${label}</a>`;
+  return `<div class="toggle" role="group" aria-label="Report">${tab('referrals', '#/reports', 'Referral tracking')}${tab('surgeons', '#/reports/surgeons', 'Surgical volume')}${tab('imaging', '#/reports/imaging', 'Imaging referrals')}</div>`;
+}
+/* Reports home: the referral tracking report, with the switch to the other two reports. */
+function viewReportsReferrals() {
+  return `<div class="page-head">
+      <div><h1>Reports</h1><p class="lead">Referral tracking, surgical volume and imaging referrals, with comparisons over time.</p></div>
+      <div class="actions no-print">${analyticsSwitcher('referrals')}<button class="btn" data-act="export-rep-csv">${ico('i-download')}Download spreadsheet</button><a class="btn" href="#/referrals">${ico('i-route')}Tracking list</a></div>
+    </div>` + viewReferralReports();
 }
 /* ---------- The imaging referrals page ---------- */
 function viewImaging(recId) {
   const recs = imgRecords(), f = ui.im;
   const head = `<div class="page-head">
-      <div><h1>Imaging Referrals</h1><p class="lead">Who orders imaging at NWSH facilities, by month, modality and facility.</p></div>
+      <div><h1>Imaging referrals</h1><p class="lead">Who orders imaging at NWSH facilities, by month, modality and facility.</p></div>
       <div class="actions no-print">
         ${analyticsSwitcher('imaging')}
         ${recs.length ? `<button class="btn" data-act="export-imaging">${ico('i-download')}Download data file</button>` : ''}
@@ -3812,7 +3824,7 @@ function physicianImagingCardHTML(p) {
   const d = sPrev ? s3.n - sPrev.n : null;
   const mods = IMG_MODS.filter((m) => s.byMod[m]);
   return `<section class="card">
-      <div class="card-head"><h2>Imaging referrals to NWSH</h2><a href="#/imaging/${rec.id}">Open imaging referrals</a></div>
+      <div class="card-head"><h2>Imaging referrals to NWSH</h2><a href="#/reports/imaging/${rec.id}">Open the imaging report</a></div>
       <div class="kpis" style="grid-template-columns:repeat(auto-fit,minmax(130px,1fr));margin-bottom:12px">
         <div class="kpi"><div class="label">Exams, last ${months.length} month${months.length === 1 ? '' : 's'}</div><div class="value">${volInt(s.n)}</div><span class="small muted">${fmtMonth(months[0])} to ${fmtMonth(months[months.length - 1])}</span></div>
         <div class="kpi"><div class="label">Last 3 months${esc(imgPartialNote())}</div><div class="value">${volInt(s3.n)}</div>${sPrev ? `<span class="small ${volCls(d)}">${volSigned(d)} (${volPctText(volPct(s3.n, sPrev.n))}) vs the 3 months before</span>` : ''}</div>
@@ -3923,7 +3935,7 @@ function applyImagingImport(parsed, replaceAll) {
   meta.importedAt = nowISO(); meta.importedBy = session.name;
   db.imaging = [meta, ...recs];
   saveDB(); toast(`Imaging referrals saved — ${recs.length} providers, ${parsed.months.length} month${parsed.months.length === 1 ? '' : 's'}`);
-  if (!location.hash.startsWith('#/imaging')) location.hash = '#/imaging'; else rerender();
+  if (!location.hash.startsWith('#/reports/imaging')) location.hash = '#/reports/imaging'; else rerender();
 }
 function exportImaging() {
   const meta = imgMeta() || {};
@@ -4076,8 +4088,8 @@ const actions = {
   'ref-tab': (el) => { ui.ref.tab = el.dataset.tab; updateRefList(); },
   'ref-more': (el) => { ui.ref.limit = el.dataset.all ? 1e9 : (ui.ref.limit || 100) + 100; const y = window.scrollY; updateRefList(); window.scrollTo(0, y); },
   'ref-tab-link': (el) => { ui.ref.tab = el.dataset.tab; ui.ref.q = ''; ui.ref.view = 'list'; },
-  'ref-view': (el) => { ui.ref.view = el.dataset.view; rerender(); },
-  'ref-view-link': () => { ui.ref.view = 'reports'; },
+  'ref-view': (el) => { location.hash = el.dataset.view === 'reports' ? '#/reports' : '#/referrals'; },
+  'ref-view-link': () => {},
   'ref-clear': () => { refClearFilters(); rerender(); },
   'ref-phys-link': (el) => { refClearFilters(); Object.assign(ui.ref, { view: 'list', tab: 'all', phys: el.dataset.id }); rerender(); },
   'rep-sort': (el) => { const k = el.dataset.key; ui.rep.dir = ui.rep.sort === k ? -ui.rep.dir : -1; ui.rep.sort = k; rerender(); },
@@ -4230,7 +4242,7 @@ const actions = {
   'export-imaging': () => exportImaging(),
   'im-mod': (el) => { const k = el.dataset.v, on = IMG_MODS.filter((m) => ui.im.mods[m] !== false); if (ui.im.mods[k] !== false && on.length === 1) { toast('Keep at least one modality on.'); return; } ui.im.mods[k] = ui.im.mods[k] === false ? true : false; rerender(); },
   'im-site': (el) => { const k = el.dataset.v; ui.im.sites[k] = ui.im.sites[k] === false ? true : false; rerender(); },
-  'im-pick': (el) => { location.hash = '#/imaging/' + el.dataset.id; },
+  'im-pick': (el) => { location.hash = '#/reports/imaging/' + el.dataset.id; },
   'im-all': () => { ui.im.showAll = !ui.im.showAll; rerender(); },
   'export-volumes': () => exportVolumes(),
   'sx-metric': (el) => { ui.sx.metric = el.dataset.v; rerender(); },
@@ -4362,9 +4374,9 @@ document.addEventListener('change', (e) => {
     case 'rep-from': ui.rep.from = t.value; rerender(); break;
     case 'rep-to': ui.rep.to = t.value; rerender(); break;
     case 'rep-compare': ui.rep.compare = t.value; rerender(); break;
-    case 'im-ref': ui.im.id = t.value; location.hash = t.value ? '#/imaging/' + t.value : '#/imaging'; if (!t.value) rerender(); break;
+    case 'im-ref': ui.im.id = t.value; location.hash = t.value ? '#/reports/imaging/' + t.value : '#/reports/imaging'; if (!t.value) rerender(); break;
     case 'im-period': ui.im.period = t.value; rerender(); break;
-    case 'sx-surg': ui.sx.vol = t.value; location.hash = t.value ? '#/scorecard/' + t.value : '#/scorecard'; if (!t.value) rerender(); break;
+    case 'sx-surg': ui.sx.vol = t.value; location.hash = t.value ? '#/reports/surgeons/' + t.value : '#/reports/surgeons'; if (!t.value) rerender(); break;
     case 'risk-days': { const v = Math.max(1, Math.round(num(t.value)) || 14); db.settings.riskDays = v; t.value = v; saveDB(); toast('Saved'); updateNavCount(); break; }
     case 'team-name': { const v = t.value.trim(); if (v) { db.settings.team[+t.dataset.i] = v; saveDB(); toast('Saved'); } break; }
   }
