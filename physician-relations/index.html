@@ -3405,8 +3405,8 @@ function viewScorecard(volId) {
   const options = `<option value="">All surgeons (combined)</option>` + Object.keys(bySpec).sort().map((sp) => `<optgroup label="${esc(sp)}">${bySpec[sp].sort((a, b) => volDisplayName(a).localeCompare(volDisplayName(b))).map((r) => `<option value="${r.id}" ${rec && rec.id === r.id ? 'selected' : ''}>${esc(volDisplayName(r))}</option>`).join('')}</optgroup>`).join('');
   const p = rec ? volPhysician(rec) : null;
   const sentence = `<b>${esc(who)}</b>${p ? ` <a href="#/physician/${p.id}" class="small">(open physician page)</a>` : ''}: <b>${fmt(cur)}</b> ${unit} in ${latest} through week ${AW}${asOf.date ? ` (${fmtDate(asOf.date)})` : ''}`
-    + (prior ? `, <b class="${volCls(cur - prev)}">${volSigned(cur - prev, fmt)} (${volPctText(volPct(cur, prev))})</b> compared with the same weeks of ${prior}` : '')
-    + (prev2 !== null ? ` and ${volPctText(volPct(cur, prev2))} compared with ${prior2}` : '') + '.'
+    + (prior ? (prev ? `, <b class="${volCls(cur - prev)}">${volSigned(cur - prev, fmt)} (${volPctText(volPct(cur, prev))})</b> compared with the same weeks of ${prior}` : `; no ${isCh ? 'charges' : 'cases'} were recorded in the same weeks of ${prior}`) : '')
+    + (prev2 !== null && prev2 ? ` and ${volPctText(volPct(cur, prev2))} compared with ${prior2}` : prev2 === 0 && prev ? ` and none in ${prior2}` : '') + '.'
     + (curC ? ` The average gross charge per case is <b>${volMoney(apc)}</b>${apcPrev ? ` (${volMoney(apcPrev)} in ${prior}, ${volPctText(volPct(apc, apcPrev))})` : ''}.` : '');
   const kpis = [
     { l: `${latest} ${isCh ? 'charges' : 'cases'}, weeks 1–${AW}`, v: fmt(cur), c: prior ? `<span class="${volCls(cur - prev)}">${volSigned(cur - prev, fmt)} · ${volPctText(volPct(cur, prev))}</span> vs ${prior}` : '' },
