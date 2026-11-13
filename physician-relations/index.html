@@ -527,6 +527,39 @@ function fmtSize(b) { return b < 1024 ? b + ' B' : b < 1048576 ? (b / 1024).toFi
 function pct(a, g) { return g > 0 ? Math.round((a / g) * 100) : null; }
 function fmtNum(n) { return (Math.round(n * 10) / 10).toLocaleString(); }
 function initials(p) { return (((p.firstName || '')[0] || '') + ((p.lastName || '')[0] || '')).toUpperCase(); }
+/* Name keys for matching people across Meditech, PowerBI and the roster: the first name is its first token
+   longer than one letter ("J Luke" and "Luke J" both key as "luke"); the last name is compared whole. */
+function firstKey(s) { const t = String(s || '').replace(/\./g, '').trim().split(/\s+/).filter(Boolean); return (t.find((x) => x.length > 1) || t[0] || '').toLowerCase(); }
+function lastKey(s) { return String(s || '').replace(/\./g, '').trim().toLowerCase(); }
+function nameKey(first, last) { return `${firstKey(first)}|${lastKey(last)}`; }
+function nameTokens(s) { return String(s || '').replace(/\./g, '').toLowerCase().split(/[\s,]+/).filter(Boolean); }
+/* Do two first names belong to the same person? "Justin Luke", "J Luke", "Luke J", "Luke", "Justin L" and "J" all agree;
+   "Luke" and "Larry" do not. They agree when they share a full name, or when every full name on each side is
+   matched by an initial on the other. */
+function firstNamesAgree(a, b) {
+  const A = nameTokens(a), B = nameTokens(b); if (!A.length || !B.length) return !A.length && !B.length;
+  const fA = A.filter((x) => x.length > 1), fB = B.filter((x) => x.length > 1), iA = A.filter((x) => x.length === 1), iB = B.filter((x) => x.length === 1);
+  if (fA.some((x) => fB.includes(x))) return true;
+  if (!fA.length) return fB.some((y) => iA.includes(y[0]));
+  if (!fB.length) return fA.some((x) => iB.includes(x[0]));
+  return fA.every((x) => iB.includes(x[0])) && fB.every((y) => iA.includes(y[0]));
+}
+function sharedFullNames(a, b) { const fA = nameTokens(a).filter((x) => x.length > 1), fB = nameTokens(b).filter((x) => x.length > 1); return fA.filter((x) => fB.includes(x)).length; }
+/* Picks one record out of several with the same last name whose first names agree with the given first name:
+   the one sharing the most full names, then the most complete record. */
+function pickByFirstName(cands, first, getFirst) {
+  const ok = cands.filter((x) => firstNamesAgree(first, getFirst(x)));
+  if (ok.length <= 1) return ok[0] || null;
+  ok.sort((x, y) => sharedFullNames(first, getFirst(y)) - sharedFullNames(first, getFirst(x)) || nameTokens(getFirst(y)).filter((t) => t.length > 1).length - nameTokens(getFirst(x)).filter((t) => t.length > 1).length);
+  return ok[0];
+}
+/* The physician record for a name: same last name, first names that agree (see firstNamesAgree). */
+function findPhysicianByName(first, last) {
+  const L = lastKey(last); if (!L) return null;
+  const same = db.physicians.filter((x) => lastKey(x.lastName) === L);
+  if (!nameTokens(first).length) return same.length === 1 ? same[0] : null;
+  return pickByFirstName(same, first, (x) => x.firstName);
+}
 function physName(p) { return `Dr. ${p.firstName || ''} ${p.lastName || ''}`.replace(/\s+/g, ' ').trim() + (p.credentials ? `, ${p.credentials}` : ''); }
 function physSortName(p) { return `${p.lastName || ''}, ${p.firstName || ''}`; }
 function telLink(v) { return v ? `<a href="tel:${esc(v.replace(/[^\d+]/g, ''))}">${esc(v)}</a>` : '<span class="muted">—</span>'; }
@@ -1596,6 +1629,7 @@ function viewPhysician(p) {
           <button class="btn" data-act="task-add" data-pid="${p.id}">${ico('i-flag')}Assign a task</button>
           <button class="btn" data-act="edit-physician" data-id="${p.id}">${ico('i-edit')}Edit details</button>
           <button class="btn" data-act="print">${ico('i-print')}Print</button>
+          ${isAdmin() ? `<button class="btn" data-act="merge-physician" data-id="${p.id}" title="Fold this record into another record for the same person">Merge into…</button>` : ''}
           ${isAdmin() ? `<button class="btn danger" data-act="delete-physician" data-id="${p.id}">${ico('i-trash')}Delete</button>` : ''}
         </div>
       </div>
@@ -2104,7 +2138,7 @@ function mtDate(s) { const m = /^(\d\d)\/(\d\d)\/(\d\d)(?:\d\d)?/.exec((s || '')
 /* What makes two worklist lines the same referral. The Eff Date is left out on purpose: it is the start
    date the worklist was run with, so it changes from run to run. */
 function meditechKey(row) { return row.referralNumber ? 'ref:' + row.referralNumber : ['mrn', row.mrn, row.referralType, row.order, row.referredTo || row.referredToLocation].join('|'); }
-function mtName(s) { /* "Last,First M" -> { last, first } */ const m = /^([^,]+),\s*(\S+)/.exec((s || '').trim()); return m ? { last: m[1].trim(), first: m[2].trim() } : null; }
+function mtName(s) { /* "Last,First M" -> { last, first } */ const m = /^([^,]+),\s*(.+)$/.exec((s || '').trim()); return m ? { last: m[1].trim(), first: m[2].trim() } : null; }
 function parseMeditechWorklist(raw) {
   let text = String(raw || '');
   const run = /ARM Tracking Date:\s*([\d/]+ [\d:]+)/.exec(text); const trackingDate = run ? run[1] : '';
@@ -2180,11 +2214,7 @@ function meditechOutcome(row) {
 /* ---------- Import a Meditech worklist into the tracker ---------- */
 function meditechParty(nameStr, fallbackLabel) {
   const nm = mtName(nameStr);
-  if (nm) {
-    const last = nm.last.toLowerCase(), first = nm.first.toLowerCase();
-    const p = db.physicians.find((x) => (x.lastName || '').toLowerCase() === last && (x.firstName || '').toLowerCase().split(' ')[0] === first);
-    return p ? { label: physName(p), physicianId: p.id } : { label: `Dr. ${nm.first} ${nm.last}` };
-  }
+  if (nm) { const p = findPhysicianByName(nm.first, nm.last); return p ? { label: physName(p), physicianId: p.id } : { label: `Dr. ${nm.first} ${nm.last}` }; }
   return { label: fallbackLabel };
 }
 function meditechLeg(row, trackingDate) {
@@ -3180,6 +3210,7 @@ async function importPhysiciansCSV(file) {
     if (rec.npi && existingNpi.has(rec.npi)) { skip.push({ label, why: `NPI ${rec.npi} already exists` }); return; }
     const nk = norm(rec.firstName) + '|' + norm(rec.lastName);
     if (existingName.has(nk)) { skip.push({ label, why: 'already exists' }); return; }
+    const same = findPhysicianByName(rec.firstName, rec.lastName); if (same) { skip.push({ label, why: `already exists as ${physName(same)}` }); return; }
     if (rec.npi && add.some((a) => a.npi === rec.npi) || add.some((a) => norm(a.firstName) + '|' + norm(a.lastName) === nk)) { skip.push({ label, why: 'listed twice in the file' }); return; }
     const relType = norm(rec.relType) === 'referrer' ? 'referrer' : 'prospect';
     const stage = stageByLabel[norm(rec.stage)] || 'a';
@@ -3309,17 +3340,10 @@ function volRoomType(room) {
 function volWeekOf(iso) { const d = new Date(iso + 'T00:00:00'); const jan1 = new Date(d.getFullYear(), 0, 1); return Math.floor((d - jan1) / 86400000 / 7) + 1; }
 function volRecords() { return (db.volumes || []).filter((r) => r.id !== 'meta' && Array.isArray(r.series)); }
 function volMeta() { return (db.volumes || []).find((r) => r.id === 'meta') || null; }
-function volNameParts(s) { const [l, f] = String(s || '').split(','); return { last: (l || '').trim(), first: (f || '').trim().split(/\s+/)[0] || '' }; }
-function volMatchPhysician(surgeon) {
-  const { last, first } = volNameParts(surgeon); if (!last) return null;
-  const L = last.toLowerCase(), F = first.toLowerCase();
-  const byBoth = db.physicians.find((x) => (x.lastName || '').toLowerCase() === L && (x.firstName || '').toLowerCase().split(/\s+/)[0] === F);
-  if (byBoth) return byBoth;
-  const byLast = db.physicians.filter((x) => (x.lastName || '').toLowerCase() === L);
-  return byLast.length === 1 && (!F || (byLast[0].firstName || '').toLowerCase()[0] === F[0]) ? byLast[0] : null;
-}
+function volNameParts(s) { const [l, f] = String(s || '').split(','); return { last: (l || '').trim(), first: (f || '').trim() }; }
+function volMatchPhysician(surgeon) { const { last, first } = volNameParts(surgeon); return last ? findPhysicianByName(first, last) : null; }
 function volPhysician(rec) { return (rec.physicianId && getPhys(rec.physicianId)) || volMatchPhysician(rec.surgeon) || null; }
-function volForPhysician(p) { return volRecords().find((r) => r.physicianId === p.id) || volRecords().find((r) => { const n = volNameParts(r.surgeon); return n.last.toLowerCase() === (p.lastName || '').toLowerCase() && n.first.toLowerCase() === (p.firstName || '').toLowerCase().split(/\s+/)[0]; }) || null; }
+function volForPhysician(p) { return volRecords().find((r) => r.physicianId === p.id) || pickByFirstName(volRecords().filter((r) => lastKey(volNameParts(r.surgeon).last) === lastKey(p.lastName)), p.firstName, (r) => volNameParts(r.surgeon).first) || null; }
 function volTitle(s) { return String(s || '').split(' ').map((w) => w.replace(/[A-Za-z][A-Za-z']*/g, (x) => x[0].toUpperCase() + x.slice(1).toLowerCase())).join(' '); }
 function volDisplayName(rec) { const p = volPhysician(rec); return p ? physName(p) : volTitle(rec.surgeon); }
 function volYears() { const ys = new Set(); volRecords().forEach((r) => r.series.forEach((s) => ys.add(+s.period.slice(0, 4)))); return [...ys].filter(Boolean).sort(); }
@@ -3627,25 +3651,19 @@ function imgNameParts(raw) {
   const i = s.indexOf(','); const a = i >= 0 ? s.slice(0, i).trim() : s, b = i >= 0 ? s.slice(i + 1).trim() : '';
   const bt = b.split(/\s+/).filter(Boolean); const isCred = (x) => IMG_CRED.test(x.replace(/\./g, ''));
   let first = '', last = '', cred = '';
-  if (i < 0 || (bt.length && isCred(bt[0]))) { const t = a.split(/\s+/).filter(Boolean); if (!t.length) return null; last = t[t.length - 1]; first = t[0]; if (first.length === 1 && t.length > 2) first = t[1]; cred = bt.filter(isCred).join(' '); }
-  else { last = a; const names = bt.filter((x) => !isCred(x)); first = names[0] || ''; cred = bt.filter(isCred).join(' '); }
+  if (i < 0 || (bt.length && isCred(bt[0]))) { const t = a.split(/\s+/).filter(Boolean); if (!t.length) return null; last = t[t.length - 1]; first = t.slice(0, -1).join(' '); cred = bt.filter(isCred).join(' '); }
+  else { last = a; first = bt.filter((x) => !isCred(x)).join(' '); cred = bt.filter(isCred).join(' '); }
   if (!last) return null;
-  return { first, last, cred: cred.toUpperCase(), display: volTitle(`${first ? first + ' ' : ''}${last}`) + (cred ? `, ${cred.toUpperCase()}` : '') };
+  const fk = firstKey(first); const shown = first.replace(/\./g, '').split(/\s+/).find((x) => x.toLowerCase() === fk) || first;
+  return { first, last, cred: cred.toUpperCase().replace(/\./g, ''), key: nameKey(first, last), display: volTitle(`${shown ? shown + ' ' : ''}${last}`) + (cred ? `, ${cred.toUpperCase().replace(/\./g, '')}` : '') };
 }
 function imgIsTestName(parts) { return !parts || /^(test|temp|zz+|unknown)\b/i.test(parts.last) || /^(test|temp)\b/i.test(parts.first); }
-function imgMatchPhysician(parts) {
-  if (!parts) return null;
-  const L = parts.last.toLowerCase(), F = parts.first.toLowerCase();
-  const both = db.physicians.find((x) => (x.lastName || '').toLowerCase() === L && (x.firstName || '').toLowerCase().split(/\s+/)[0] === F);
-  if (both) return both;
-  const byLast = db.physicians.filter((x) => (x.lastName || '').toLowerCase() === L);
-  return byLast.length === 1 && (!F || (byLast[0].firstName || '').toLowerCase()[0] === F[0]) ? byLast[0] : null;
-}
+function imgMatchPhysician(parts) { return parts ? findPhysicianByName(parts.first, parts.last) : null; }
 function imgRecords() { return (db.imaging || []).filter((r) => r.id !== 'meta' && Array.isArray(r.series)); }
 function imgMeta() { return (db.imaging || []).find((r) => r.id === 'meta') || null; }
 function imgRecById(id) { return imgRecords().find((r) => r.id === id) || null; }
 function imgPhysician(rec) { return (rec.physicianId && getPhys(rec.physicianId)) || imgMatchPhysician(imgNameParts(rec.referrer)) || null; }
-function imgForPhysician(p) { return imgRecords().find((r) => r.physicianId === p.id) || imgRecords().find((r) => { const n = imgNameParts(r.referrer); return n && n.last.toLowerCase() === (p.lastName || '').toLowerCase() && n.first.toLowerCase() === (p.firstName || '').toLowerCase().split(/\s+/)[0]; }) || null; }
+function imgForPhysician(p) { return imgRecords().find((r) => r.physicianId === p.id) || pickByFirstName(imgRecords().filter((r) => { const n = imgNameParts(r.referrer); return n && lastKey(n.last) === lastKey(p.lastName); }), p.firstName, (r) => imgNameParts(r.referrer).first) || null; }
 let _imgBy = null, _imgByGen = -1;
 function imgByPhysician() {
   if (_imgBy && _imgByGen === refGen) return _imgBy;
@@ -3822,12 +3840,27 @@ function imgBuildFromExport(rows, fileName) {
     if (imgIsTestName(parts)) { testRows++; continue; }
     const os = String(iOrd !== undefined ? row[iOrd] : '').trim().toLowerCase(), rs = String(iRpt !== undefined ? row[iRpt] : '').trim().toLowerCase();
     const resulted = os === 'resulted' || os === 'complete' || os === 'completed' || rs === 'signed' ? 1 : 0, canc = os.startsWith('cancel') ? 1 : 0;
-    const key = parts.display, p = date.slice(0, 7), m = imgModality(row[iCat]), s = imgSite(iSite !== undefined ? row[iSite] : '');
+    const key = parts.key, p = date.slice(0, 7), m = imgModality(row[iCat]), s = imgSite(iSite !== undefined ? row[iSite] : '');
     const k = `${key}\u0001${p}\u0001${m}\u0001${s}`; const a = agg[k] = agg[k] || [0, 0, 0]; a[0]++; a[1] += resulted; a[2] += canc;
-    refNames[key] = parts; months.add(p); kept++; cancelled += canc; if (!minDate || date < minDate) minDate = date; if (date > maxDate) maxDate = date; if (date > today) future++; else if (date > maxPast) maxPast = date;
+    const sp = refNames[key] = refNames[key] || {}; sp[parts.display] = (sp[parts.display] || 0) + 1; months.add(p); kept++; cancelled += canc; if (!minDate || date < minDate) minDate = date; if (date > maxDate) maxDate = date; if (date > today) future++; else if (date > maxPast) maxPast = date;
   }
+  // one record per person, across spellings: names with the same last name are clustered when their first names
+  // agree (see firstNamesAgree); initial-only names join a cluster only when exactly one fits
+  const cluster = {}; const byLast = {};
+  Object.entries(refNames).forEach(([key, sp]) => { const last = key.split('|')[1]; (byLast[last] = byLast[last] || []).push({ key, first: key.split('|')[0], firstFull: Object.keys(sp)[0], sp }); });
+  Object.values(byLast).forEach((names) => {
+    names.forEach((n) => { const ex = Object.keys(n.sp).map((d) => imgNameParts(d)); n.first = ex.sort((a, b) => nameTokens(b.first).length - nameTokens(a.first).length)[0].first; });
+    const withFull = names.filter((n) => nameTokens(n.first).some((t) => t.length > 1)), initialsOnly = names.filter((n) => !nameTokens(n.first).some((t) => t.length > 1));
+    const groups = [];
+    withFull.forEach((n) => { const g = groups.find((grp) => grp.some((o) => firstNamesAgree(o.first, n.first))); if (g) g.push(n); else groups.push([n]); });
+    initialsOnly.forEach((n) => { const fits = groups.filter((grp) => grp.some((o) => firstNamesAgree(o.first, n.first))); if (fits.length === 1) fits[0].push(n); else groups.push([n]); });
+    groups.forEach((grp) => grp.forEach((n) => { cluster[n.key] = grp[0].key; }));
+  });
+  // the spelling shown is the most common one across the cluster, preferring one that carries credentials and a full first name
+  const spellings = {}; Object.entries(refNames).forEach(([key, sp]) => { const c = cluster[key] || key; const t = spellings[c] = spellings[c] || {}; Object.entries(sp).forEach(([d, n]) => { t[d] = (t[d] || 0) + n; }); });
+  const bestName = (sp) => { const e = Object.entries(sp).sort((x, y) => y[1] - x[1]); const total = e.reduce((a, x) => a + x[1], 0); const good = e.filter((x) => x[1] >= total * 0.2); const withCred = good.find((x) => x[0].includes(',')); return (withCred || e[0])[0]; };
   const recs = {};
-  Object.entries(agg).forEach(([k, v]) => { const [name, p, m, s] = k.split('\u0001'); const rec = recs[name] = recs[name] || { referrer: name, series: [] }; rec.series.push({ p, m, s, n: v[0], r: v[1], c: v[2] }); });
+  Object.entries(agg).forEach(([k, v]) => { const [key0, p, m, s] = k.split('\u0001'); const key = cluster[key0] || key0; const rec = recs[key] = recs[key] || { referrer: bestName(spellings[key]), series: [] }; const hit = rec.series.find((e) => e.p === p && e.m === m && e.s === s); if (hit) { hit.n += v[0]; hit.r += v[1]; hit.c += v[2]; } else rec.series.push({ p, m, s, n: v[0], r: v[1], c: v[2] }); });
   Object.values(recs).forEach((rec) => rec.series.sort((a, b) => a.p.localeCompare(b.p) || a.m.localeCompare(b.m)));
   // the as-of date never runs past today: exams booked for a future date are kept but sit outside the analysis window
   return { records: Object.values(recs), months: [...months].sort(), from: minDate, asOf: maxPast || maxDate, future, kept, skipped, testRows, cancelled, total: rows.length - 1, source: `${fileName} (uploaded ${todayISO()})` };
@@ -3873,9 +3906,12 @@ async function importImaging(file) {
 function applyImagingImport(parsed, replaceAll) {
   const fileMonths = new Set(parsed.months), meta = imgMeta() || { id: 'meta', sources: {} };
   let recs = replaceAll ? [] : imgRecords().map((r) => ({ ...r, series: r.series.filter((e) => !fileMonths.has(e.p)) }));
+  const partsOf = (name) => imgNameParts(name) || { first: '', last: name };
   parsed.records.forEach((nr) => {
-    let rec = recs.find((r) => r.referrer === nr.referrer);
+    const np = partsOf(nr.referrer);
+    let rec = recs.find((r) => r.referrer === nr.referrer) || pickByFirstName(recs.filter((r) => lastKey(partsOf(r.referrer).last) === lastKey(np.last)), np.first, (r) => partsOf(r.referrer).first);
     if (!rec) { rec = { id: imgSlug(nr.referrer), physicianId: '', referrer: nr.referrer, series: [] }; recs.push(rec); }
+    else if ((nr.referrer.includes(',') && !rec.referrer.includes(',')) || nameTokens(np.first).length > nameTokens(partsOf(rec.referrer).first).length) rec.referrer = nr.referrer;
     rec.series = rec.series.concat(nr.series).sort((a, b) => a.p.localeCompare(b.p) || a.m.localeCompare(b.m));
   });
   recs = recs.filter((r) => r.series.length);
@@ -3895,6 +3931,33 @@ function exportImaging() {
   toast('Imaging data file downloaded — it can be uploaded again from the Imaging referrals page');
 }
 
+/* Folds one physician record into another (same person entered twice). The kept record wins on every field it
+   already has; blanks are filled from the duplicate; every link to the duplicate is repointed; then it is removed. */
+function mergePhysicians(fromId, intoId) {
+  const a = getPhys(fromId), b = getPhys(intoId); if (!a || !b || a === b) return;
+  const fill = ['credentials', 'specialty', 'practice', 'phone', 'cell', 'email', 'fax', 'npi', 'address', 'city', 'state', 'zip', 'pmName', 'pmTitle', 'pmPhone', 'pmEmail', 'clinicId'];
+  fill.forEach((k) => { if (!b[k] && a[k]) b[k] = a[k]; });
+  if (nameTokens(a.firstName).filter((t) => t.length > 1).length > nameTokens(b.firstName).filter((t) => t.length > 1).length) b.firstName = a.firstName;
+  b.otherClinicIds = [...new Set([...(b.otherClinicIds || []), ...(a.otherClinicIds || []), a.clinicId].filter((id) => id && id !== b.clinicId))];
+  if (a.notes) b.notes = [b.notes, a.notes].filter(Boolean).join('\n');
+  const order = ['a', 'b', 'c', 'd']; if (order.indexOf(a.stage || 'a') > order.indexOf(b.stage || 'a')) { b.stage = a.stage; }
+  if (a.relType === 'referrer') b.relType = 'referrer';
+  b.stageHistory = [...(b.stageHistory || []), ...(a.stageHistory || [])].sort((x, y) => (x.date || '').localeCompare(y.date || ''));
+  (a.goals || []).forEach((g) => { if (!(b.goals || []).some((h) => h.year === g.year)) (b.goals = b.goals || []).push(g); });
+  if (!b.nwsh && a.nwsh) b.nwsh = a.nwsh;
+  const rank = { staff: 3, referring: 2, lapsed: 1, none: 0 }; if ((rank[a.nwshRelation] || 0) > (rank[b.nwshRelation] || 0)) b.nwshRelation = a.nwshRelation;
+  if (a.createdAt && (!b.createdAt || a.createdAt < b.createdAt)) b.createdAt = a.createdAt;
+  db.contacts.forEach((c) => { if (c.physicianId === a.id) c.physicianId = b.id; });
+  db.tasks.forEach((t) => { if (t.physicianId === a.id) t.physicianId = b.id; });
+  db.referrals.forEach((r) => r.legs.forEach((l) => { ['from', 'to'].forEach((side) => { if (l[side] && l[side].physicianId === a.id) { l[side].physicianId = b.id; l[side].label = physName(b); } }); }));
+  (db.volumes || []).forEach((v) => { if (v.physicianId === a.id) v.physicianId = b.id; });
+  (db.imaging || []).forEach((v) => { if (v.physicianId === a.id) v.physicianId = b.id; });
+  b.stageHistory.push({ stage: b.stage || 'a', typeChange: true, label: `Merged with the duplicate record "${physName(a)}"`, date: todayISO(), by: session.name });
+  b.updatedAt = nowISO(); b.updatedBy = session.name;
+  db.physicians = db.physicians.filter((x) => x.id !== a.id);
+  saveDB(); toast(`Merged into ${physName(b)}`); location.hash = '#/physician/' + b.id; rerender();
+}
+
 /* ===================== Event delegation ===================== */
 const actions = {
   logout: () => logout(),
@@ -3912,6 +3975,23 @@ const actions = {
   },
   'clin-more': () => { ui.clin.limit = (ui.clin.limit || 100) + 200; rerender(); },
   'edit-physician': (el) => { const p = getPhys(el.dataset.id); openModal({ title: 'Edit ' + physName(p), body: physicianFormHTML(p), submitLabel: 'Save changes', onSubmit: () => savePhysicianFromForm($('#phys-form')) }); },
+  'merge-physician': (el) => {
+    const p = getPhys(el.dataset.id); if (!p) return;
+    const others = db.physicians.filter((x) => x.id !== p.id).sort((a, b) => physSortName(a).localeCompare(physSortName(b)));
+    const label = (x) => `${physSortName(x)}${x.credentials ? `, ${x.credentials}` : ''}${x.specialty ? ` · ${x.specialty}` : ''}${x.practice ? ` · ${x.practice}` : ''}`;
+    const likely = others.filter((x) => lastKey(x.lastName) === lastKey(p.lastName));
+    openModal({ title: `Merge ${physName(p)} into another record`, narrow: true, submitLabel: 'Merge records', body: `
+      <p>Use this when the same person exists twice. Pick the record to <b>keep</b>. Everything on <b>${esc(physName(p))}</b> — contacts, referrals, tasks, goals, clinics, status history and NWSH activity — moves to the record you pick, blanks on it are filled in, and then this duplicate is deleted.</p>
+      ${likely.length ? `<p class="help">Same last name: ${likely.map((x) => `<a href="#" data-act="merge-pick" data-label="${esc(label(x))}">${esc(label(x))}</a>`).join(' · ')}</p>` : ''}
+      <label><span class="req">Keep this record</span><input id="merge-target" list="merge-list" placeholder="Start typing a last name…" autocomplete="off"><datalist id="merge-list">${others.map((x) => `<option value="${esc(label(x))}"></option>`).join('')}</datalist></label>
+      <p class="help">This cannot be undone. Export a backup first if you are unsure.</p>`,
+      onSubmit: () => {
+        const v = ($('#merge-target').value || '').trim(); const into = others.find((x) => label(x) === v);
+        if (!into) { toast('Pick a record from the list.', 'err'); return false; }
+        mergePhysicians(p.id, into.id); return true;
+      } });
+  },
+  'merge-pick': (el, e) => { e.preventDefault(); const i = $('#merge-target'); if (i) i.value = el.dataset.label; },
   'delete-physician': (el) => {
     const p = getPhys(el.dataset.id);
     const cs = db.contacts.filter((c) => c.physicianId === p.id);
