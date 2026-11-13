@@ -195,7 +195,7 @@
   .count-line { color: var(--muted); font-size: 14px; margin: 10px 0 0; }
   .kpis.four { grid-template-columns: repeat(4, minmax(0, 1fr)); }
   @media (max-width: 900px) { .kpis.four { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
-  td.who { min-width: 230px; }
+  td.who { min-width: 220px; }
   .ref-table td:nth-child(5) { min-width: 210px; }
   .section-title { font-size: 13px; text-transform: uppercase; letter-spacing: .06em; color: var(--muted); margin: 14px 0 0 4px; }
   .chips { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; margin: 0 0 14px; }
@@ -1467,7 +1467,7 @@ function updatePhysTable() {
               <div class="sub">${[p.specialty, p.practice].filter(Boolean).map(esc).join(' · ') || '&nbsp;'}</div></td>
           <td>${stageBadge(p)}</td>
           <td>${nwshBadge(p)}</td>
-          <td class="num nowrap">${p.nwsh ? `<b>${fmtNum(p.nwsh.procedures2026)}</b> cases<div class="sub">${fmtNum(p.nwsh.encounters2026)} encounters${p.nwsh.lastSeen ? ` · seen ${fmtDate(p.nwsh.lastSeen)}` : ''}</div>` : '<span class="muted">—</span>'}</td>
+          <td class="num nowrap">${p.nwsh ? `<b>${fmtNum(p.nwsh.procedures2026)}</b> cases<div class="sub">${fmtNum(p.nwsh.encounters2026)} enc.${p.nwsh.lastSeen ? ` · seen ${new Date(p.nwsh.lastSeen + 'T00:00:00').toLocaleDateString(undefined, { month: 'short', day: 'numeric' })}` : ''}</div>` : '<span class="muted">—</span>'}</td>
           <td class="num nowrap">${ri.total ? `<b>${ri.open}</b> open${ri.risk ? ` · <span style="color:var(--red)">${ri.risk} at risk</span>` : ''}<div class="sub">${ri.total} tracked</div>` : ri.img ? '' : '<span class="muted">—</span>'}${ri.img ? `<div class="${ri.total ? 'sub' : 'muted'}">${volInt(ri.img)} imaging exams</div>` : ''}</td>
           <td class="nowrap">${lc ? `${fmtDate(lc.date)}<div class="sub">${esc(lc.method)} · ${esc(lc.who)}</div>` : '<span class="muted">Never</span>'}</td>
           <td class="nowrap">${nf ? `${fmtDate(nf.fuDate)}<div>${fuBadge(nf)}</div>` : '<span class="muted">None scheduled</span>'}</td>
