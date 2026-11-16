@@ -68,6 +68,8 @@ same-weeks total and full year. Each matched physician's page gets a "Surgical v
   surgeon-level totals only. The weeks and months the file covers replace what is stored for them; everything outside
   that stretch stays, so a monthly export can be added on top of earlier ones. Export whole months, starting the day
   after the stored data ends (the review step points out any gap or partial month).
+  Surgeons whose names differ between exports ("DEWING, CHRISTOPHE" in a width-limited export, "DEWING, CHRISTOPHER"
+  in another; two spellings that match the same physician record) are folded into one record, on upload and at sign-in.
 - **Download data file** writes the stored totals back out as a .json that can be uploaded again or kept as a
   backup. The starting file is in `imports/`.
 

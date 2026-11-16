@@ -550,15 +550,24 @@ function nameTokens(s) { return String(s || '').replace(/\./g, '').toLowerCase()
 /* Do two first names belong to the same person? "Justin Luke", "J Luke", "Luke J", "Luke", "Justin L" and "J" all agree;
    "Luke" and "Larry" do not. They agree when they share a full name, or when every full name on each side is
    matched by an initial on the other. */
+/* Short forms that do not start with the full name's letters; prefixes ("Doug", "Chris", a truncated "Christophe") are handled by firstTokensAgree. */
+const NICKNAMES = { mike: ['michael'], bill: ['william'], billy: ['william'], bob: ['robert'], bobby: ['robert'], rob: ['robert'], jim: ['james'], jimmy: ['james'], dick: ['richard'], rick: ['richard'], ricky: ['richard'], tom: ['thomas'], tommy: ['thomas'], tony: ['anthony'], ted: ['edward', 'theodore'], ed: ['edward'], eddie: ['edward'], jack: ['john'], joe: ['joseph'], joey: ['joseph'], steve: ['steven', 'stephen'], dave: ['david'], greg: ['gregory'], jeff: ['jeffrey'], ben: ['benjamin'], sam: ['samuel', 'samantha'], andy: ['andrew'], drew: ['andrew'], nick: ['nicholas'], pat: ['patrick', 'patricia'], dan: ['daniel'], danny: ['daniel'], ron: ['ronald'], ronnie: ['ronald'], don: ['donald'], ken: ['kenneth'], kenny: ['kenneth'], larry: ['lawrence'], jerry: ['gerald', 'jerome'], terry: ['terrence', 'terence'], tim: ['timothy'], jon: ['jonathan'], max: ['maxwell'], ray: ['raymond'], phil: ['philip', 'phillip'], liz: ['elizabeth'], beth: ['elizabeth'], betty: ['elizabeth'], kate: ['katherine', 'kathryn', 'katharine'], katie: ['katherine', 'kathryn'], kathy: ['katherine', 'kathleen'], cathy: ['catherine'], sue: ['susan'], peggy: ['margaret'], meg: ['margaret'], maggie: ['margaret'], jen: ['jennifer'], jenny: ['jennifer'], becky: ['rebecca'], alex: ['alexander', 'alexandra'], cindy: ['cynthia'], deb: ['deborah', 'debra'], debbie: ['deborah', 'debra'], fred: ['frederick'], hank: ['henry'], harry: ['harold', 'henry'], jake: ['jacob'], kim: ['kimberly'], lou: ['louis'], mandy: ['amanda'], nate: ['nathan', 'nathaniel'], sandy: ['sandra'], stan: ['stanley'], trish: ['patricia'], vicky: ['victoria'], vince: ['vincent'], walt: ['walter'], zach: ['zachary'], abe: ['abraham'], al: ['albert', 'alan', 'allen'], art: ['arthur'], gus: ['augustus'], chuck: ['charles'], charlie: ['charles'], hal: ['harold'], jay: ['jason'] };
+/* Do two full first-name tokens name the same person? Equal, one a prefix of the other (four letters or more: "Doug"/"Douglas",
+   the "Christophe" a width-limited export writes for "Christopher"), or a known short form. */
+function firstTokensAgree(x, y) {
+  if (x === y) return true;
+  if (x.length >= 4 && y.length >= 4 && (x.startsWith(y) || y.startsWith(x))) return true;
+  return !!((NICKNAMES[x] && NICKNAMES[x].includes(y)) || (NICKNAMES[y] && NICKNAMES[y].includes(x)));
+}
 function firstNamesAgree(a, b) {
   const A = nameTokens(a), B = nameTokens(b); if (!A.length || !B.length) return !A.length && !B.length;
   const fA = A.filter((x) => x.length > 1), fB = B.filter((x) => x.length > 1), iA = A.filter((x) => x.length === 1), iB = B.filter((x) => x.length === 1);
-  if (fA.some((x) => fB.includes(x))) return true;
+  if (fA.some((x) => fB.some((y) => firstTokensAgree(x, y)))) return true;
   if (!fA.length) return fB.some((y) => iA.includes(y[0]));
   if (!fB.length) return fA.some((x) => iB.includes(x[0]));
   return fA.every((x) => iB.includes(x[0])) && fB.every((y) => iA.includes(y[0]));
 }
-function sharedFullNames(a, b) { const fA = nameTokens(a).filter((x) => x.length > 1), fB = nameTokens(b).filter((x) => x.length > 1); return fA.filter((x) => fB.includes(x)).length; }
+function sharedFullNames(a, b) { const fA = nameTokens(a).filter((x) => x.length > 1), fB = nameTokens(b).filter((x) => x.length > 1); return fA.filter((x) => fB.some((y) => firstTokensAgree(x, y))).length; }
 /* Picks one record out of several with the same last name whose first names agree with the given first name:
    the one sharing the most full names, then the most complete record. */
 function pickByFirstName(cands, first, getFirst) {
@@ -2290,6 +2299,15 @@ function repairMeditechData() {
     });
   });
   (db.imaging || []).forEach((r) => (r.series || []).forEach((e) => { const v = imgSite(e.s); if (v !== e.s) { e.s = v; fixed++; } }));
+  /* surgeon volume records: match names to physician records added since the upload, then fold duplicate spellings together */
+  try {
+    const vr = volRecords();
+    if (vr.length) {
+      vr.forEach((r) => { if (!r.physicianId || !getPhys(r.physicianId)) { const p = volMatchPhysician(r.surgeon); if (p && p.id !== r.physicianId) { r.physicianId = p.id; fixed++; } } });
+      const con = volConsolidate(vr);
+      if (con.merged) { const meta = volMeta(); db.volumes = [...(meta ? [meta] : []), ...con.recs]; fixed += con.merged; }
+    }
+  } catch (e) { console.error('volumes repair', e); }
   if (drop.size || fixed) { saveDB(); if (drop.size) toast(`${drop.size} duplicate Meditech referral${drop.size === 1 ? '' : 's'} merged`); }
 }
 function planMeditechImport(parsed) {
@@ -3371,6 +3389,26 @@ function volWeekOf(iso) { const d = new Date(iso + 'T00:00:00'); const jan1 = ne
 function volRecords() { return (db.volumes || []).filter((r) => r.id !== 'meta' && Array.isArray(r.series)); }
 function volMeta() { return (db.volumes || []).find((r) => r.id === 'meta') || null; }
 function volNameParts(s) { const [l, f] = String(s || '').split(','); return { last: (l || '').trim(), first: (f || '').trim() }; }
+/* One surgeon record per person. Records that resolve to the same physician, or whose names agree (a width-limited
+   export writes "DEWING, CHRISTOPHE" where another writes "DEWING, CHRISTOPHER"), are folded into the fuller-named one. */
+function volConsolidate(recs) {
+  const keep = []; let merged = 0;
+  const fullness = (r) => { const f = volNameParts(r.surgeon).first; return [nameTokens(f).filter((t) => t.length > 1).length, f.length]; };
+  recs.forEach((r) => {
+    const { last, first } = volNameParts(r.surgeon), L = lastKey(last);
+    const twin = keep.find((k) => (r.physicianId && k.physicianId === r.physicianId) || (L && lastKey(volNameParts(k.surgeon).last) === L && firstNamesAgree(first, volNameParts(k.surgeon).first)));
+    if (!twin) { keep.push(r); return; }
+    const [a, b] = [fullness(twin), fullness(r)], win = b[0] > a[0] || (b[0] === a[0] && b[1] > a[1]) ? r : twin, lose = win === twin ? r : twin;
+    const map = new Map();
+    [...win.series, ...lose.series].forEach((s) => { const k = s.period + '|' + s.roomType; const cur = map.get(k); if (cur) { cur.cases += s.cases; cur.charges += s.charges; } else map.set(k, { ...s }); });
+    win.series = [...map.values()].sort((x, y) => x.period.localeCompare(y.period));
+    if (!win.physicianId && lose.physicianId) win.physicianId = lose.physicianId;
+    if ((!win.specialty || win.specialty === 'Other') && lose.specialty) win.specialty = lose.specialty;
+    if (win !== twin) keep[keep.indexOf(twin)] = win;
+    merged++;
+  });
+  return { recs: keep, merged };
+}
 function volMatchPhysician(surgeon) { const { last, first } = volNameParts(surgeon); return last ? findPhysicianByName(first, last) : null; }
 function volPhysician(rec) { return (rec.physicianId && getPhys(rec.physicianId)) || volMatchPhysician(rec.surgeon) || null; }
 function volForPhysician(p) { return volRecords().find((r) => r.physicianId === p.id) || pickByFirstName(volRecords().filter((r) => lastKey(volNameParts(r.surgeon).last) === lastKey(p.lastName)), p.firstName, (r) => volNameParts(r.surgeon).first) || null; }
@@ -3693,6 +3731,7 @@ function applyVolumeImport(parsed, replaceAll) {
   });
   recs = recs.filter((r) => r.series.length);
   recs.forEach((r) => { const p = volMatchPhysician(r.surgeon); if (p) r.physicianId = p.id; r.updatedAt = nowISO(); r.updatedBy = session.name; });
+  const con = volConsolidate(recs); recs = con.recs;
   meta.sources = replaceAll ? {} : (meta.sources || {});
   /* drop source notes for stretches this file fully covers (a note keyed "2026" or "2026-10 to 2026-11") */
   const capMonth = ((parsed.asOf || '') > (meta.asOf || '') ? parsed.asOf : meta.asOf || span.to).slice(0, 7);
@@ -3702,7 +3741,7 @@ function applyVolumeImport(parsed, replaceAll) {
   else if (!meta.asOf || span.to > meta.asOf || replaceAll) meta.asOf = span.to;
   meta.importedAt = nowISO(); meta.importedBy = session.name;
   db.volumes = [meta, ...recs];
-  saveDB(); toast(`Surgeon scorecard saved — ${recs.length} surgeons, ${span.label}`);
+  saveDB(); toast(`Surgeon scorecard saved — ${recs.length} surgeons, ${span.label}${con.merged ? `; ${con.merged} duplicate spelling${con.merged === 1 ? '' : 's'} folded together` : ''}`);
   if (!location.hash.startsWith('#/reports/surgeons')) location.hash = '#/reports/surgeons'; else rerender();
 }
 function exportVolumes() {
