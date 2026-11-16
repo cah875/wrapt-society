@@ -79,6 +79,18 @@ referrals to NWSH" card on their page, and the physicians list can sort by imagi
   The months in the file replace what is stored for those months; other months stay.
 - **Download data file** writes the stored counts as a .json that can be uploaded again.
 
+**Searchable pickers** — the surgeon and referring-provider boxes on the reports filter as you type; arrow keys
+and Enter pick, the × clears. The surgical volume report can be scoped to a whole specialty ("All Orthopedics")
+and broken out by service line (operating rooms, surgery center, pain and procedure rooms, endoscopy,
+interventional radiology, Axis). The imaging report can rank providers by one modality.
+
+**Tidy up names** (Settings, administrator) — finds different spellings of the same specialty, city or practice
+("Orthopaedics", "orthopedics", "Orthopedic") and merges them. New entries typed on the physician form or
+uploaded from a spreadsheet are matched to spellings already on file.
+
+**Sign-out timer** (Settings, administrator) — how long someone can leave the app untouched before being signed
+out. Default 4 hours; the value in Settings overrides `idle_minutes` in config.php.
+
 ## Logins
 Edit `config.php`. Passwords are stored as bcrypt hashes, never in plain text. To change one: sign in as
 `admin` → Settings → Password hash generator → paste the hash into `config.php`. The `admin` login is the

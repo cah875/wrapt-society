@@ -40,7 +40,9 @@ require __DIR__ . '/lib.php';
 $secure = !empty($_SERVER['HTTPS']) && $_SERVER['HTTPS'] !== 'off';
 session_name('nwshpr');
 session_set_cookie_params(['lifetime' => 0, 'path' => '/', 'secure' => $secure, 'httponly' => true, 'samesite' => 'Lax']);
-ini_set('session.gc_maxlifetime', (string)($CFG['idle_minutes'] * 60 * 2));
+/* The sign-out timer: the value set in Settings (settings/main → idleMinutes) when there is one, else config.php. */
+function idleMinutes(): int { global $CFG; static $v = null; if ($v !== null) return $v; $v = max(5, (int)$CFG['idle_minutes']); try { $row = store()->get('settings', 'main'); $m = (int)($row['idleMinutes'] ?? 0); if ($m >= 15 && $m <= 1440) $v = $m; } catch (Throwable $e) {} return $v; }
+ini_set('session.gc_maxlifetime', (string)(idleMinutes() * 60 * 2));
 session_start();
 
 /* Logins live in the database (collection "users") so the admin can manage them from
@@ -81,7 +83,7 @@ function findUser(string $username): ?array {
 function currentUser(): ?array {
   global $CFG;
   if (empty($_SESSION['u'])) return null;
-  if (time() - ($_SESSION['t'] ?? 0) > $CFG['idle_minutes'] * 60) { $_SESSION = []; return null; }
+  if (time() - ($_SESSION['t'] ?? 0) > idleMinutes() * 60) { $_SESSION = []; return null; }
   $_SESSION['t'] = time();
   return findUser($_SESSION['u']);
 }
@@ -120,7 +122,7 @@ try {
   switch ($action) {
 
     case 'ping':
-      out(['ok' => true, 'app' => APP_ID, 'mode' => 'server', 'loggedIn' => currentUser() !== null, 'appName' => $CFG['app_name'], 'idleMinutes' => $CFG['idle_minutes'], 'maxFileMB' => effectiveMaxFileMB()]);
+      out(['ok' => true, 'app' => APP_ID, 'mode' => 'server', 'loggedIn' => currentUser() !== null, 'appName' => $CFG['app_name'], 'idleMinutes' => idleMinutes(), 'maxFileMB' => effectiveMaxFileMB()]);
 
     case 'login':
       if ($method !== 'POST') fail('Bad request.');

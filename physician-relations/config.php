@@ -14,7 +14,7 @@
 */
 return [
   'app_name'     => 'Physician Relations',
-  'idle_minutes' => 30,   // sign out after this many idle minutes
+  'idle_minutes' => 240,  // sign out after this many idle minutes (Settings → Sign-out timer overrides this)
   'max_file_mb'  => 15,   // largest attachment allowed
   'app_url'      => 'https://docdockcrm.com',       // used in emails
   'mail_from'    => 'noreply@docdockcrm.com',       // sender address for emails

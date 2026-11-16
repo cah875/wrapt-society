@@ -197,6 +197,15 @@
   @media (max-width: 900px) { .kpis.four { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
   td.who { min-width: 220px; }
   .ref-table td:nth-child(5) { min-width: 210px; }
+  .combo { position: relative; }
+  .filters .field .combo-input, .combo-input { width: 100%; padding-right: 36px; }
+  .combo-clear { position: absolute; right: 6px; top: 50%; transform: translateY(-50%); border: 0; background: transparent; font-size: 22px; line-height: 1; color: var(--muted); cursor: pointer; padding: 2px 8px; }
+  .combo-list { position: absolute; left: 0; right: 0; top: calc(100% + 4px); z-index: 40; background: var(--surface); border: 1px solid var(--border); border-radius: 10px; box-shadow: 0 10px 30px rgba(0,0,0,.14); max-height: 340px; overflow: auto; padding: 4px 0; }
+  .combo-item { padding: 9px 14px; cursor: pointer; }
+  .combo-item.hl, .combo-item:hover { background: var(--surface-2); }
+  .combo-group { font-size: 12px; font-weight: 700; color: var(--muted); text-transform: uppercase; letter-spacing: .04em; padding: 10px 14px 4px; }
+  .combo-empty { padding: 9px 14px; color: var(--muted); font-size: 14px; }
+  tr.muted td { color: var(--muted); }
   .section-title { font-size: 13px; text-transform: uppercase; letter-spacing: .06em; color: var(--muted); margin: 14px 0 0 4px; }
   .chips { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; margin: 0 0 14px; }
   .chips-label { font-size: 13px; color: var(--muted); font-weight: 600; margin-right: 2px; }
@@ -682,6 +691,7 @@ function emptyDB() {
       departments: DEFAULT_DEPARTMENTS.slice(),
       accountTypes: DEFAULT_ACCOUNT_TYPES.slice(),
       riskDays: 14,
+      idleMinutes: 240,
     },
     clinics: [],
     physicians: [],
@@ -697,6 +707,7 @@ function normalizeDB(d) {
   const base = emptyDB();
   d.settings = Object.assign(base.settings, d.settings || {});
   d.settings.riskDays = Math.max(1, num(d.settings.riskDays) || 14);
+  d.settings.idleMinutes = Math.min(1440, Math.max(15, num(d.settings.idleMinutes) || 240));
   d.physicians = d.physicians || [];
   d.contacts = d.contacts || [];
   d.referrals = d.referrals || [];
@@ -848,10 +859,12 @@ function getSession() {
     if (!s) return null;
     const user = CONFIG.users.find((u) => u.username === s.username);
     if (!user) return null;
-    if (Date.now() - s.lastActive > CONFIG.idleMinutes * 60000) { sessionStorage.removeItem(SESSION_KEY); return null; }
+    if (Date.now() - s.lastActive > idleLimitMs()) { sessionStorage.removeItem(SESSION_KEY); return null; }
     return { ...s, name: user.name, role: user.role };
   } catch { return null; }
 }
+/* How long someone can leave the app untouched before being signed out: the Settings value, else the server's. */
+function idleLimitMs() { const m = (typeof db !== 'undefined' && db && db.settings && num(db.settings.idleMinutes)) || CONFIG.idleMinutes || 30; return Math.max(15, m) * 60000; }
 function touchSession() {
   if (!session) return;
   session.lastActive = Date.now();
@@ -956,7 +969,7 @@ function showLoginError(m) { const el = $('#login-error'); el.textContent = m; e
 ['mousemove', 'keydown', 'click', 'touchstart', 'scroll'].forEach((ev) => document.addEventListener(ev, () => {
   if (session && Date.now() - session.lastActive > 15000) touchSession();
 }, { passive: true }));
-setInterval(() => { if (session && Date.now() - session.lastActive > CONFIG.idleMinutes * 60000) logout('You were signed out after a period of inactivity. Please sign in again.'); }, 30000);
+setInterval(() => { if (session && Date.now() - session.lastActive > idleLimitMs()) logout('You were signed out after a period of inactivity. Please sign in again.'); }, 30000);
 
 /* ===================== Derived data ===================== */
 const getPhys = (id) => db.physicians.find((p) => p.id === id);
@@ -1153,8 +1166,9 @@ const ui = {
   ref: { tab: 'active', q: '', view: 'list', sort: 'attention', dir: 0, phys: '', role: 'any', dest: '', sender: '', from: '', to: '', cat: '', pri: '', payer: '', mstat: '', inout: '', owner: '', source: '', group: '', more: false, limit: 100, sel: new Set(), bulkOwner: '' },
   rep: { preset: '12m', from: '', to: '', compare: 'prev', sort: 'ordered', dir: -1 },
   act: { q: '', who: '', method: '', from: '', to: '' },
-  sx: { vol: '', metric: 'cases', smooth: 4, rooms: { OR: true, SC: true, MPR: true, OTH: true } },
-  im: { id: '', period: '6', mods: {}, sites: {}, showAll: false },
+  sx: { vol: '', metric: 'cases', smooth: 4, rooms: {} },
+  im: { id: '', period: '6', mods: {}, sites: {}, showAll: false, rank: '' },
+  tidy: { field: 'specialty', from: '', into: '' },
   year: new Date().getFullYear(),
 };
 
@@ -2275,6 +2289,7 @@ function repairMeditechData() {
       l.log.push({ date: l.sentDate, by: 'Meditech', text: `Future-dated order: starts ${fmtDate(start)}` }); fixed++;
     });
   });
+  (db.imaging || []).forEach((r) => (r.series || []).forEach((e) => { const v = imgSite(e.s); if (v !== e.s) { e.s = v; fixed++; } }));
   if (drop.size || fixed) { saveDB(); if (drop.size) toast(`${drop.size} duplicate Meditech referral${drop.size === 1 ? '' : 's'} merged`); }
 }
 function planMeditechImport(parsed) {
@@ -2823,6 +2838,7 @@ function viewSettings() {
           <div><button class="btn" type="submit">Save list</button></div>
         </form>
       </section>
+      ${isAdmin() ? `<section class="card" style="grid-column:1 / -1">${tidyCardHTML()}</section>` : ''}
     </div>
 
     <div class="grid2">
@@ -2836,6 +2852,9 @@ function viewSettings() {
       <section class="card">
         <h2>Referral alerts</h2>
         <label class="field" style="max-width:320px"><span class="field-label">Flag a referral as "at risk" after this many days with no movement</span><input type="number" min="1" max="365" value="${esc(db.settings.riskDays)}" data-change="risk-days"></label>
+        ${isAdmin() ? `<h3 style="margin:22px 0 6px">Sign-out timer</h3>
+        <label class="field" style="max-width:320px"><span class="field-label">Sign people out after this many minutes without activity</span><input type="number" min="15" max="1440" step="15" value="${esc(db.settings.idleMinutes)}" data-change="idle-minutes"></label>
+        <p class="help">${db.settings.idleMinutes >= 60 ? `${Math.round(db.settings.idleMinutes / 60 * 10) / 10} hour${db.settings.idleMinutes === 60 ? '' : 's'}` : `${db.settings.idleMinutes} minutes`} of no mouse, keyboard or touch. Applies to everyone. Shared or public computers call for a shorter time.</p>` : ''}
         <p class="help" style="margin-top:10px">A referral is also flagged when an appointment date passes without being marked as seen.</p>
       </section>
     </div>
@@ -3046,6 +3065,8 @@ function savePhysicianFromForm(form) {
   const data = Object.fromEntries(new FormData(form).entries());
   Object.keys(data).forEach((k) => (data[k] = String(data[k]).trim()));
   if (data.state) data.state = data.state.toUpperCase();
+  if (data.specialty) data.specialty = canonLabel('specialty', data.specialty);
+  if (data.city) data.city = canonLabel('city', data.city);
   const clinicName = data.clinicName; delete data.clinicName;
   const clinic = clinicName ? db.clinics.find((k) => k.name.toLowerCase() === clinicName.toLowerCase()) : null;
   if (clinicName && !clinic) { toast(`"${clinicName}" is not in the clinic list. Pick a name from the list, or add the clinic first.`, 'err'); return false; }
@@ -3211,6 +3232,7 @@ async function importPhysiciansCSV(file) {
     r.forEach((v, k) => { v = String(v ?? '').trim(); if (cols[k]) rec[cols[k]] = v; if (goalCols[k] && v !== '') { (goals[goalCols[k].year] = goals[goalCols[k].year] || {})[goalCols[k].key] = Math.max(0, num(v)); } });
     const line = i + 2, label = `${rec.lastName || ''}, ${rec.firstName || ''}`.replace(/^, |, $/g, '') || `row ${line}`;
     if (!rec.firstName || !rec.lastName) { skip.push({ label: `Row ${line}`, why: 'missing first or last name' }); return; }
+    if (rec.specialty) rec.specialty = canonLabel('specialty', rec.specialty); if (rec.city) rec.city = canonLabel('city', rec.city);
     if (rec.npi && existingNpi.has(rec.npi)) { skip.push({ label, why: `NPI ${rec.npi} already exists` }); return; }
     const nk = norm(rec.firstName) + '|' + norm(rec.lastName);
     if (existingName.has(nk)) { skip.push({ label, why: 'already exists' }); return; }
@@ -3331,14 +3353,18 @@ function loadSample() {
    period is "YYYY-Www" (week 1 begins Jan 1, seven-day blocks) or "YYYY-MM". roomType is OR, SC, MPR or OTH.
    One extra record with id "meta" keeps the as-of date and where each year's numbers came from.
    Surgeon-level totals only — nothing about individual patients is stored.                       */
-const VOL_ROOMS = [['OR', 'OR 1–10'], ['SC', 'Surgery Center 11–12'], ['MPR', 'MPR procedure rooms'], ['OTH', 'Endo / Axis / IR / imaging']];
+const VOL_ROOMS = [['OR', 'Operating rooms 1–10'], ['SC', 'Surgery center 11–12'], ['MPR', 'Pain & procedure rooms'], ['ENDO', 'Endoscopy'], ['IR', 'Interventional radiology'], ['AXIS', 'Axis Spine Center'], ['OTH', 'Endo / Axis / IR (older uploads)']];
+const VOL_ROOM_LABEL = Object.fromEntries(VOL_ROOMS);
 const VOL_MONTHS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
 function volRoomType(room) {
   const r = String(room || '').toUpperCase().replace(/\s+/g, '');
   const m = r.match(/^OR\.?(\d{1,2})$/);
   if (m) { const n = +m[1]; if (n >= 1 && n <= 10) return 'OR'; }
   if (r.startsWith('SC')) return 'SC';
-  if (r.startsWith('ZMPR')) return 'MPR';
+  if (r.startsWith('ZMPR') || r.startsWith('MPR')) return 'MPR';
+  if (r.includes('ENDO') || /^GI/.test(r)) return 'ENDO';
+  if (r.includes('AXIS')) return 'AXIS';
+  if (r === 'IR' || /^IR\d*$/.test(r) || r.includes('INTERV') || r.includes('ANGIO')) return 'IR';
   return 'OTH';
 }
 function volWeekOf(iso) { const d = new Date(iso + 'T00:00:00'); const jan1 = new Date(d.getFullYear(), 0, 1); return Math.floor((d - jan1) / 86400000 / 7) + 1; }
@@ -3356,8 +3382,8 @@ function volYearColor(y, years) { const i = years.length - 1 - years.indexOf(y);
 function volAgg(rec, rooms) {
   const years = volYears(), w = {}, m = {};
   years.forEach((y) => { w[y] = Array.from({ length: 53 }, () => [0, 0]); m[y] = Array.from({ length: 12 }, () => [0, 0]); });
-  (rec ? [rec] : volRecords()).forEach((r) => r.series.forEach((s) => {
-    if (rooms && !rooms[s.roomType || 'OTH']) return;
+  (Array.isArray(rec) ? rec : rec ? [rec] : volRecords()).forEach((r) => r.series.forEach((s) => {
+    if (rooms && rooms[s.roomType || 'OTH'] === false) return;
     const y = +s.period.slice(0, 4); if (!w[y]) return;
     if (s.period[5] === 'W') { const k = +s.period.slice(6) - 1; if (k >= 0 && k < 53) { w[y][k][0] += num(s.cases); w[y][k][1] += num(s.charges); } }
     else { const k = +s.period.slice(5, 7) - 1; if (k >= 0 && k < 12) { m[y][k][0] += num(s.cases); m[y][k][1] += num(s.charges); } }
@@ -3417,6 +3443,9 @@ function volBarSVG(years, data, fmt, label) {
 function volLegend(years) { return `<div class="chart-legend">${years.map((y) => `<span><i style="background:${volYearColor(y, years)}"></i>${y}</span>`).join('')}</div>`; }
 /* ---------- The scorecard page ---------- */
 function volRecById(id) { return volRecords().find((r) => r.id === id) || null; }
+function volRoomsPresent() { const set = new Set(); volRecords().forEach((r) => r.series.forEach((e) => set.add(e.roomType || 'OTH'))); return VOL_ROOMS.map(([k]) => k).filter((k) => set.has(k)); }
+/* The surgeon's specialty: the physician record's when matched, else the upload's. "Genetics" is a PowerBI placeholder. */
+function volSpecialty(rec) { const p = volPhysician(rec); let sp = p && p.specialty ? p.specialty : (rec.specialty === 'Genetics' ? '' : rec.specialty || ''); return sp ? volTitle(sp.replace(/^PAIN INJECTIONS$/i, 'Pain Management')) : 'Not specified'; }
 function viewScorecard(volId) {
   const recs = volRecords();
   const head = `<div class="page-head">
@@ -3429,10 +3458,14 @@ function viewScorecard(volId) {
     </div>`;
   if (!recs.length) return head + `<div class="card empty"><p style="margin:0 0 8px;font-size:17px"><b>No surgeon volumes have been loaded yet.</b></p>
       <p class="muted" style="max-width:640px;margin:0 auto">${isAdmin() ? 'Click <b>Upload surgeon scorecard</b> and pick the PowerBI case export (.xlsx or .csv) or a scorecard data file (.json). You will see a summary of what will change before anything is saved.' : 'Ask the administrator to upload the PowerBI case export from Settings or this page.'}</p></div>`;
-  ui.sx.vol = volId && volRecById(volId) ? volId : '';
-  const rec = ui.sx.vol ? volRecById(ui.sx.vol) : null;
+  volId = volId ? decodeURIComponent(volId) : '';
+  const bySpec = {}; recs.forEach((r) => { const k = volSpecialty(r); (bySpec[k] = bySpec[k] || []).push(r); });
+  const specSel = volId.startsWith('spec:') && bySpec[volId.slice(5)] ? volId.slice(5) : '';
+  ui.sx.vol = specSel ? volId : volId && volRecById(volId) ? volId : '';
+  const rec = !specSel && ui.sx.vol ? volRecById(ui.sx.vol) : null;
+  const scope = rec ? [rec] : specSel ? bySpec[specSel] : recs;
   const f = ui.sx, rooms = f.rooms;
-  const { years, w, m } = volAgg(rec, rooms);
+  const { years, w, m } = volAgg(scope, rooms);
   const asOf = volAsOf() || { date: '', year: years[years.length - 1], week: 53, month: 12 };
   const latest = asOf.year, prior = years.filter((y) => y < latest).slice(-1)[0], prior2 = years.filter((y) => y < latest).slice(-2)[0];
   const mi = f.metric === 'charges' ? 1 : 0, isCh = mi === 1, fmt = isCh ? volShort : volInt;
@@ -3443,10 +3476,10 @@ function viewScorecard(volId) {
   const curC = ytd(latest, 0), prevC = prior ? ytd(prior, 0) : 0, curCh = ytd(latest, 1), prevCh = prior ? ytd(prior, 1) : 0;
   const apc = curC ? curCh / curC : 0, apcPrev = prevC ? prevCh / prevC : 0;
   const active = m[latest] ? m[latest].slice(0, AM).filter((a) => a[0] > 0).length : 0;
-  const who = rec ? volDisplayName(rec) : 'All surgeons';
+  const who = rec ? volDisplayName(rec) : specSel ? `${specSel} (${scope.length} surgeon${scope.length === 1 ? '' : 's'})` : 'All surgeons';
   const unit = isCh ? 'in gross charges' : 'procedure cases';
-  const bySpec = {}; recs.forEach((r) => { (bySpec[r.specialty || 'Other'] = bySpec[r.specialty || 'Other'] || []).push(r); });
-  const options = `<option value="">All surgeons (combined)</option>` + Object.keys(bySpec).sort().map((sp) => `<optgroup label="${esc(sp)}">${bySpec[sp].sort((a, b) => volDisplayName(a).localeCompare(volDisplayName(b))).map((r) => `<option value="${r.id}" ${rec && rec.id === r.id ? 'selected' : ''}>${esc(volDisplayName(r))}</option>`).join('')}</optgroup>`).join('');
+  const specs = Object.keys(bySpec).sort((a, b) => (a === 'Not specified') - (b === 'Not specified') || a.localeCompare(b));
+  const comboOpts = [{ v: '', l: 'All surgeons' }, ...specs.map((sp) => ({ v: 'spec:' + sp, l: `All ${sp} (${bySpec[sp].length})`, g: 'By specialty' })), ...specs.flatMap((sp) => bySpec[sp].slice().sort((a, b) => volDisplayName(a).localeCompare(volDisplayName(b))).map((r) => ({ v: r.id, l: volDisplayName(r), g: sp })))];
   const p = rec ? volPhysician(rec) : null;
   const sentence = `<b>${esc(who)}</b>${p ? ` <a href="#/physician/${p.id}" class="small">(open physician page)</a>` : ''}: <b>${fmt(cur)}</b> ${unit} in ${latest} through week ${AW}${asOf.date ? ` (${fmtDate(asOf.date)})` : ''}`
     + (prior ? (prev ? `, <b class="${volCls(cur - prev)}">${volSigned(cur - prev, fmt)} (${volPctText(volPct(cur, prev))})</b> compared with the same weeks of ${prior}` : `; no ${isCh ? 'charges' : 'cases'} were recorded in the same weeks of ${prior}`) : '')
@@ -3479,10 +3512,10 @@ function viewScorecard(volId) {
   return head + `
     <section class="card no-print">
       <div class="filters" style="display:flex;flex-wrap:wrap;gap:14px 22px;align-items:flex-end">
-        <label class="field" style="flex:1 1 260px"><span class="field-label">Surgeon</span><select data-change="sx-surg" aria-label="Surgeon" style="width:100%">${options}</select></label>
+        <div class="field" style="flex:1 1 300px"><span class="field-label">Surgeon or specialty</span>${comboHTML('sx-surg', comboOpts, ui.sx.vol, 'Type a name or specialty, or pick from the list')}</div>
         <div class="field"><span class="field-label">Show</span><div class="toggle"><button type="button" class="${!isCh ? 'on' : ''}" data-act="sx-metric" data-v="cases">Case volume</button><button type="button" class="${isCh ? 'on' : ''}" data-act="sx-metric" data-v="charges">Gross charges</button></div></div>
         <div class="field"><span class="field-label">Weekly line</span><div class="toggle"><button type="button" class="${f.smooth === 4 ? 'on' : ''}" data-act="sx-smooth" data-v="4">4-week average</button><button type="button" class="${f.smooth === 1 ? 'on' : ''}" data-act="sx-smooth" data-v="1">Each week</button></div></div>
-        <div class="field"><span class="field-label">Room types</span><div style="display:flex;gap:6px;flex-wrap:wrap">${VOL_ROOMS.map(([k, l]) => `<button type="button" class="chip ${rooms[k] ? 'on' : ''}" data-act="sx-room" data-v="${k}">${l}</button>`).join('')}</div></div>
+        <div class="field"><span class="field-label">Service lines</span><div style="display:flex;gap:6px;flex-wrap:wrap">${volRoomsPresent().map((k) => `<button type="button" class="chip ${rooms[k] !== false ? 'on' : ''}" data-act="sx-room" data-v="${k}">${VOL_ROOM_LABEL[k]}</button>`).join('')}</div></div>
       </div>
     </section>
     <p style="font-size:17px;line-height:1.5;margin:18px 0 14px;max-width:1100px">${sentence}</p>
@@ -3491,23 +3524,37 @@ function viewScorecard(volId) {
       <section class="card"><div class="card-head"><h2>${isCh ? 'Gross charges' : 'Cases'} per week${f.smooth > 1 ? ' (4-week average)' : ''}</h2><span class="hint">Week 1 begins Jan 1</span></div>${volLegend(years)}${volLineSVG(years, lineData, axisFmt, `${isCh ? 'Gross charges' : 'Cases'} per week by year for ${who}`)}</section>
       <section class="card"><div class="card-head"><h2>${isCh ? 'Gross charges' : 'Cases'} per month</h2></div>${volLegend(years)}${volBarSVG(years, barData, axisFmt, `${isCh ? 'Gross charges' : 'Cases'} per month by year for ${who}`)}</section>
     </div>
+    <div class="grid2" style="margin-top:18px">
+      <section class="card"><div class="card-head"><h2>By service line</h2><span class="hint">${latest} weeks 1–${AW} vs ${prior || 'prior year'}</span></div>
+        <div class="table-wrap"><table class="breakdown"><thead><tr><th>Service line</th><th class="num">Cases</th><th class="num">Change</th><th class="num">Charges</th><th class="num">Share</th></tr></thead><tbody>
+        ${volRoomsPresent().map((k) => { const only = {}; volRoomsPresent().forEach((x) => { only[x] = x === k; }); const a = volAgg(scope, only); const y = (yr, i) => (a.w[yr] ? a.w[yr].slice(0, AW).reduce((s0, q) => s0 + q[i], 0) : 0); const c = y(latest, 0), pc = prior ? y(prior, 0) : 0, ch = y(latest, 1); return c || pc ? `<tr class="${rooms[k] === false ? 'muted' : ''}"><td><b>${esc(VOL_ROOM_LABEL[k])}</b>${rooms[k] === false ? ' <span class="small muted">(turned off above)</span>' : ''}</td><td class="num">${volInt(c)}</td><td class="num ${volCls(c - pc)}">${prior ? volSigned(c - pc) + ` (${volPctText(volPct(c, pc))})` : '—'}</td><td class="num">${volShort(ch)}</td><td class="num">${curC ? imgPctText(c, curC) : '—'}</td></tr>` : ''; }).join('')}
+        </tbody></table></div>
+        <p class="help" style="margin:8px 0 0">Service lines follow the room the case was done in. Turn a line on or off with the buttons at the top.</p>
+      </section>
+      ${rec ? '' : `<section class="card"><div class="card-head"><h2>By specialty</h2><span class="hint">click a row to see those surgeons</span></div>
+        <div class="table-wrap"><table class="breakdown"><thead><tr><th>Specialty</th><th class="num">Surgeons</th><th class="num">Cases</th><th class="num">Change</th><th class="num">Charges</th></tr></thead><tbody>
+        ${specs.filter((sp) => !specSel || sp === specSel).map((sp) => { const a = volAgg(bySpec[sp], rooms); const y = (yr, i) => (a.w[yr] ? a.w[yr].slice(0, AW).reduce((s0, q) => s0 + q[i], 0) : 0); const c = y(latest, 0), pc = prior ? y(prior, 0) : 0, ch = y(latest, 1); return { sp, c, pc, ch }; }).sort((x, z) => z.c - x.c).map(({ sp, c, pc, ch }) => `<tr class="clickable" data-act="sx-pick" data-v="${esc('spec:' + sp)}"><td><b>${esc(sp)}</b></td><td class="num">${bySpec[sp].length}</td><td class="num">${volInt(c)}</td><td class="num ${volCls(c - pc)}">${prior ? volSigned(c - pc) + ` (${volPctText(volPct(c, pc))})` : '—'}</td><td class="num">${volShort(ch)}</td></tr>`).join('')}
+        </tbody></table></div>
+        <p class="help" style="margin:8px 0 0">Specialty comes from the physician record when the surgeon is matched to one; tidy spellings up in Settings.</p>
+      </section>`}
+    </div>
     <section class="card" style="margin-top:18px">
       <div class="card-head"><h2>By period</h2><span class="hint">Cases, gross charges and the change from ${prior || 'the prior year'}</span></div>
       <div class="table-wrap"><table class="breakdown"><thead><tr><th>Period</th>${years.map((y) => `<th class="num">${y} cases</th>`).join('')}<th class="num">Δ cases</th>${years.map((y) => `<th class="num">${y} charges</th>`).join('')}<th class="num">Δ charges</th><th class="num">${latest} avg charge / case</th></tr></thead><tbody>${rows}</tbody></table></div>
-      <p class="help" style="margin:10px 0 0">Rooms included: ${VOL_ROOMS.filter(([k]) => rooms[k]).map(([, l]) => l).join(', ')}. A case is an encounter with recorded room time, dated by admit date (discharge date when admit is blank). Gross charges are the account's total charge amount, not what was collected. "Same weeks" compares like periods; the latest year's most recent weeks may still have charges posting.${sources ? ` Sources — ${sources}.` : ''}${meta.importedAt ? ` Last uploaded ${fmtTS(meta.importedAt)} by ${esc(meta.importedBy || '')}.` : ''}</p>
+      <p class="help" style="margin:10px 0 0">Service lines included: ${volRoomsPresent().filter((k) => rooms[k] !== false).map((k) => VOL_ROOM_LABEL[k]).join(', ')}. A case is an encounter with recorded room time, dated by admit date (discharge date when admit is blank). Gross charges are the account's total charge amount, not what was collected. "Same weeks" compares like periods; the latest year's most recent weeks may still have charges posting.${sources ? ` Sources — ${sources}.` : ''}${meta.importedAt ? ` Last uploaded ${fmtTS(meta.importedAt)} by ${esc(meta.importedBy || '')}.` : ''}</p>
     </section>`;
 }
 /* Card on a physician's page. */
 function physicianVolumeCardHTML(p) {
   const rec = volForPhysician(p); if (!rec) return '';
-  const { years, w, m } = volAgg(rec, { OR: true, SC: true, MPR: true, OTH: true });
+  const { years, w, m } = volAgg(rec, null);
   const asOf = volAsOf(); if (!asOf || !years.length) return '';
   const latest = asOf.year, prior = years.filter((y) => y < latest).slice(-1)[0];
   const ytd = (y, k) => (w[y] ? w[y].slice(0, asOf.week).reduce((s, a) => s + a[k], 0) : 0);
   const c = ytd(latest, 0), pc = prior ? ytd(prior, 0) : 0, ch = ytd(latest, 1), pch = prior ? ytd(prior, 1) : 0;
   const barData = {}; years.forEach((y) => { barData[y] = m[y].map((a, i) => (y === latest && i + 1 > asOf.month ? null : a[0])); });
   return `<section class="card">
-      <div class="card-head"><h2>Surgical volume &amp; charges</h2><a href="#/reports/surgeons/${rec.id}">Open the surgical volume report</a></div>
+      <div class="card-head"><h2>Surgical volume &amp; charges</h2><a href="#/reports/surgeons/${encodeURIComponent(rec.id)}">Open the surgical volume report</a></div>
       <div class="kpis" style="grid-template-columns:repeat(auto-fit,minmax(130px,1fr));margin-bottom:12px">
         <div class="kpi"><div class="label">Cases ${latest}, weeks 1–${asOf.week}</div><div class="value">${volInt(c)}</div>${prior ? `<span class="small ${volCls(c - pc)}">${volSigned(c - pc)} (${volPctText(volPct(c, pc))}) vs ${prior}</span>` : ''}</div>
         <div class="kpi"><div class="label">Gross charges ${latest}</div><div class="value" style="font-size:24px">${volShort(ch)}</div>${prior ? `<span class="small ${volCls(ch - pch)}">${volSigned(ch - pch, volShort)} (${volPctText(volPct(ch, pch))}) vs ${prior}</span>` : ''}</div>
@@ -3648,7 +3695,7 @@ const IMG_MODS = ['X-Ray', 'MRI', 'CT Scan', 'Ultrasound', 'Interventional Radio
 const IMG_COLORS = { 'X-Ray': '#2a78d6', 'MRI': '#eb6834', 'CT Scan': '#1baf7a', 'Ultrasound': '#eda100', 'Interventional Radiology': '#e87ba4', 'Mammography': '#008300', 'DEXA': '#6250d6', 'Fluoroscopy': '#e34948', 'Other': '#898781' };
 const IMG_CRED = /^(MD|DO|PA-?C?|NP|FNP(-C|-BC)?|ARNP|APRN|CRNA|DC|DPM|DDS|DMD|PHD|OD|PT|DPT|CNM|MPAS|RN|DNP(-C)?|ANP|PMHNP|ACNP|NP-C|CNP|LPN|MSN|BSN|MBBS|FACS|FACC|FAAP|CPNP|CCC-SLP)$/i;
 function imgModality(c) { const t = String(c || '').trim(); const hit = IMG_MODS.find((m) => m.toLowerCase() === t.toLowerCase()); if (hit) return hit; const l = t.toLowerCase(); return /x-?ray|xr\b/.test(l) ? 'X-Ray' : /mri|magnetic/.test(l) ? 'MRI' : /\bct\b/.test(l) ? 'CT Scan' : /ultra|sono/.test(l) ? 'Ultrasound' : /interv/.test(l) ? 'Interventional Radiology' : /mammo/.test(l) ? 'Mammography' : /dexa|bone dens/.test(l) ? 'DEXA' : /fluoro/.test(l) ? 'Fluoroscopy' : 'Other'; }
-function imgSite(s) { const l = String(s || '').toLowerCase(); return l.startsWith('northwest specialty') ? 'Hospital' : /axis/.test(l) ? 'Axis Spine Center' : /breast/.test(l) ? 'Breast Imaging Center' : /urgent/.test(l) ? 'Urgent Care' : (String(s || '').trim() || 'Other'); }
+function imgSite(s) { const t = String(s || '').trim(), l = t.toLowerCase(); if (l.startsWith('northwest specialty')) return 'Hospital'; if (/axis/.test(l)) return 'Axis Spine Center'; if (/breast/.test(l)) return 'Breast Imaging Center'; if (/urgent/.test(l)) return 'Urgent Care'; return (t.length === 25 && /\sCente$/.test(t) ? t + 'r' : t) || 'Other'; }
 /* Names arrive as "First M Last, MD" or "Last,First DO". Returns first, last, credentials and a display form. */
 function imgNameParts(raw) {
   const s = String(raw || '').trim(); if (!s) return null;
@@ -3733,7 +3780,7 @@ function viewReportsReferrals() {
 }
 /* ---------- The imaging referrals page ---------- */
 function viewImaging(recId) {
-  const recs = imgRecords(), f = ui.im;
+  const recs = imgRecords(), f = ui.im; recId = recId ? decodeURIComponent(recId) : '';
   const head = `<div class="page-head">
       <div><h1>Imaging referrals</h1><p class="lead">Who orders imaging at NWSH facilities, by month, modality and facility.</p></div>
       <div class="actions no-print">
@@ -3770,12 +3817,13 @@ function viewImaging(recId) {
     { l: 'Most ordered', v: topMod ? esc(topMod[0]) : '—', c: topMod ? `${volInt(topMod[1])} exams · ${imgPctText(topMod[1], now.n)}` : '' },
   ];
   // referrer ranking for this period
-  const ranked = recs.map((r) => { const s = imgSum([r], months), b = before ? imgSum([r], per.prior) : null; const tm = Object.entries(s.byMod).sort((x, y) => y[1] - x[1])[0]; return { r, n: s.n, c: s.c, b: b ? b.n : null, top: tm ? tm[0] : '' }; }).filter((x) => x.n > 0).sort((a, b) => b.n - a.n);
+  const rank = allMods.includes(f.rank) ? f.rank : '';
+  const ranked = recs.map((r) => { const s = imgSum([r], months), b = before ? imgSum([r], per.prior) : null; const tm = Object.entries(s.byMod).sort((x, y) => y[1] - x[1])[0]; const n = rank ? (s.byMod[rank] || 0) : s.n; return { r, n, all: s.n, c: s.c, b: b ? (rank ? (b.byMod[rank] || 0) : b.n) : null, top: tm ? tm[0] : '' }; }).filter((x) => x.n > 0).sort((a, b) => b.n - a.n);
   const shown = f.showAll ? ranked : ranked.slice(0, 25);
   const bySpec = {}; recs.forEach((r) => { const ph = imgPhysician(r); const k = ph ? (ph.specialty || 'No specialty on file') : 'Not in the physician list'; (bySpec[k] = bySpec[k] || []).push(r); });
   const total = {}; recs.forEach((r) => { total[r.id] = r.series.reduce((a, e) => a + num(e.n), 0); });
   const groups = Object.keys(bySpec).sort((a, b) => (a === 'Not in the physician list') - (b === 'Not in the physician list') || a.localeCompare(b));
-  const options = `<option value="">All referring providers</option>` + groups.map((g) => `<optgroup label="${esc(g)}">${bySpec[g].sort((a, b) => total[b.id] - total[a.id]).slice(0, g === 'Not in the physician list' ? 300 : 1000).map((r) => `<option value="${r.id}" ${rec && rec.id === r.id ? 'selected' : ''}>${esc(imgDisplayName(r))} (${volInt(total[r.id])})</option>`).join('')}</optgroup>`).join('');
+  const comboOpts = [{ v: '', l: 'All referring providers' }, ...groups.flatMap((g) => bySpec[g].sort((a, b) => total[b.id] - total[a.id]).map((r) => ({ v: r.id, l: `${imgDisplayName(r)} (${volInt(total[r.id])})`, g })))];
   const periods = [['3', 'Last 3 months'], ['6', 'Last 6 months'], ['12', 'Last 12 months'], ['ytd', 'This year to date'], ['all', 'Everything loaded']];
   const meta = imgMeta() || {};
   const modItems = IMG_MODS.filter((m) => now.byMod[m]).map((m) => ({ label: m, v: now.byMod[m], color: IMG_COLORS[m] }));
@@ -3783,8 +3831,9 @@ function viewImaging(recId) {
   return head + `
     <section class="card no-print">
       <div class="filters" style="display:flex;flex-wrap:wrap;gap:14px 22px;align-items:flex-end">
-        <label class="field" style="flex:1 1 300px"><span class="field-label">Referring provider</span><select data-change="im-ref" aria-label="Referring provider" style="width:100%">${options}</select></label>
+        <div class="field" style="flex:1 1 320px"><span class="field-label">Referring provider</span>${comboHTML('im-ref', comboOpts, f.id, 'Type a name or specialty, or pick from the list')}</div>
         <label class="field"><span class="field-label">Period</span><select data-change="im-period" aria-label="Period">${periods.map(([k, l]) => `<option value="${k}" ${f.period === k ? 'selected' : ''}>${l}</option>`).join('')}</select></label>
+        ${rec ? '' : `<label class="field"><span class="field-label">Rank providers by</span><select data-change="im-rank" aria-label="Rank providers by"><option value="">All exams</option>${allMods.map((m0) => `<option value="${esc(m0)}" ${rank === m0 ? 'selected' : ''}>${esc(m0)}</option>`).join('')}</select></label>`}
         <div class="field"><span class="field-label">Modalities</span><div style="display:flex;gap:6px;flex-wrap:wrap">${allMods.map((m) => `<button type="button" class="chip ${f.mods[m] !== false ? 'on' : ''}" data-act="im-mod" data-v="${esc(m)}"><i style="display:inline-block;width:10px;height:10px;border-radius:3px;background:${IMG_COLORS[m]}"></i>${esc(m)}</button>`).join('')}</div></div>
         <div class="field"><span class="field-label">Facility</span><div style="display:flex;gap:6px;flex-wrap:wrap">${allSites.map((s) => `<button type="button" class="chip ${f.sites[s] !== false ? 'on' : ''}" data-act="im-site" data-v="${esc(s)}">${esc(s)}</button>`).join('')}</div></div>
       </div>
@@ -3793,15 +3842,15 @@ function viewImaging(recId) {
     <div class="kpis" style="margin-bottom:18px">${kpis.map((k) => `<div class="kpi ${k.red ? 'red' : ''}"><div class="label">${k.l}</div><div class="value" style="font-size:26px">${k.v}</div>${k.c ? `<span class="small muted">${k.c}</span>` : ''}</div>`).join('')}</div>
     <div class="grid2" style="margin-top:0">
       <section class="card"><div class="card-head"><h2>Exams per month</h2><span class="hint">by modality</span></div>${imgLegend(modsOn)}${imgStackSVG(months, now.byMonth, `Imaging exams per month by modality for ${who}`)}</section>
-      <section class="card"><div class="card-head"><h2>${rec ? 'By modality' : 'Top referring providers'}</h2><span class="hint">${esc(per.label)}</span></div>
+      <section class="card"><div class="card-head"><h2>${rec ? 'By modality' : `Top referring providers${rank ? ` — ${esc(rank)}` : ''}`}</h2><span class="hint">${esc(per.label)}</span></div>
         ${rec ? imgHBarSVG(modItems, '#2a78d6', `Exams by modality for ${who}`) + (siteItems.length > 1 ? `<h3 style="margin:14px 0 6px;font-size:14px;color:var(--muted)">By facility</h3>` + imgHBarSVG(siteItems, '#2a78d6', `Exams by facility for ${who}`) : '')
-          : imgHBarSVG(ranked.slice(0, 12).map((x) => ({ label: imgDisplayName(x.r), v: x.n, sub: x.top })), '#2a78d6', 'Top referring providers by exams ordered')}
+          : imgHBarSVG(ranked.slice(0, 12).map((x) => ({ label: imgDisplayName(x.r), v: x.n, sub: rank ? `${x.all} exams in all` : x.top })), rank ? IMG_COLORS[rank] : '#2a78d6', `Top referring providers by ${rank || 'exams'} ordered`)}
       </section>
     </div>
     ${rec ? '' : `<section class="card" style="margin-top:18px">
-      <div class="card-head"><h2>Referring providers</h2><span class="hint">${ranked.length} with exams ${esc(per.label)} · click a row to see one provider</span></div>
-      <div class="table-wrap"><table class="breakdown"><thead><tr><th>Referring provider</th><th>Physician record</th><th class="num">Exams</th>${before ? '<th class="num">Change</th>' : ''}<th class="num">Share</th><th class="num">Cancelled</th><th>Most ordered</th></tr></thead>
-        <tbody>${shown.map((x) => { const ph = imgPhysician(x.r); const dd = x.b !== null ? x.n - x.b : null; return `<tr class="clickable" data-act="im-pick" data-id="${x.r.id}"><td><b>${esc(imgDisplayName(x.r))}</b></td><td>${ph ? `<a href="#/physician/${ph.id}">${esc(ph.specialty || 'Open')}</a>` : '<span class="muted">Not in the physician list</span>'}</td><td class="num"><b>${volInt(x.n)}</b></td>${before ? `<td class="num ${volCls(dd)}">${dd === null ? '—' : volSigned(dd)}</td>` : ''}<td class="num">${imgPctText(x.n, now.n)}</td><td class="num ${x.n && x.c / x.n > 0.12 ? 'red' : ''}">${imgPctText(x.c, x.n)}</td><td>${esc(x.top)}</td></tr>`; }).join('')}</tbody></table></div>
+      <div class="card-head"><h2>Referring providers${rank ? ` — ranked by ${esc(rank)}` : ''}</h2><span class="hint">${ranked.length} with ${rank ? esc(rank) + ' ' : ''}exams ${esc(per.label)} · click a row to see one provider</span></div>
+      <div class="table-wrap"><table class="breakdown"><thead><tr><th>Referring provider</th><th>Physician record</th><th class="num">${rank ? esc(rank) + ' exams' : 'Exams'}</th>${before ? '<th class="num">Change</th>' : ''}${rank ? '<th class="num">All exams</th>' : ''}<th class="num">Share${rank ? ' of ' + esc(rank) : ''}</th><th class="num">Cancelled</th><th>Most ordered</th></tr></thead>
+        <tbody>${shown.map((x) => { const ph = imgPhysician(x.r); const dd = x.b !== null ? x.n - x.b : null; return `<tr class="clickable" data-act="im-pick" data-id="${x.r.id}"><td><b>${esc(imgDisplayName(x.r))}</b></td><td>${ph ? `<a href="#/physician/${ph.id}">${esc(ph.specialty || 'Open')}</a>` : '<span class="muted">Not in the physician list</span>'}</td><td class="num"><b>${volInt(x.n)}</b></td>${before ? `<td class="num ${volCls(dd)}">${dd === null ? '—' : volSigned(dd)}</td>` : ''}${rank ? `<td class="num">${volInt(x.all)}</td>` : ''}<td class="num">${imgPctText(x.n, rank ? (now.byMod[rank] || 0) : now.n)}</td><td class="num ${x.all && x.c / x.all > 0.12 ? 'red' : ''}">${imgPctText(x.c, x.all)}</td><td>${esc(x.top)}</td></tr>`; }).join('')}</tbody></table></div>
       ${ranked.length > 25 ? `<p class="help" style="margin:8px 0 0"><button class="btn sm link" data-act="im-all">${f.showAll ? 'Show the top 25' : `Show all ${ranked.length}`}</button></p>` : ''}
     </section>`}
     <section class="card" style="margin-top:18px">
@@ -3824,7 +3873,7 @@ function physicianImagingCardHTML(p) {
   const d = sPrev ? s3.n - sPrev.n : null;
   const mods = IMG_MODS.filter((m) => s.byMod[m]);
   return `<section class="card">
-      <div class="card-head"><h2>Imaging referrals to NWSH</h2><a href="#/reports/imaging/${rec.id}">Open the imaging report</a></div>
+      <div class="card-head"><h2>Imaging referrals to NWSH</h2><a href="#/reports/imaging/${encodeURIComponent(rec.id)}">Open the imaging report</a></div>
       <div class="kpis" style="grid-template-columns:repeat(auto-fit,minmax(130px,1fr));margin-bottom:12px">
         <div class="kpi"><div class="label">Exams, last ${months.length} month${months.length === 1 ? '' : 's'}</div><div class="value">${volInt(s.n)}</div><span class="small muted">${fmtMonth(months[0])} to ${fmtMonth(months[months.length - 1])}</span></div>
         <div class="kpi"><div class="label">Last 3 months${esc(imgPartialNote())}</div><div class="value">${volInt(s3.n)}</div>${sPrev ? `<span class="small ${volCls(d)}">${volSigned(d)} (${volPctText(volPct(s3.n, sPrev.n))}) vs the 3 months before</span>` : ''}</div>
@@ -3879,7 +3928,7 @@ function imgBuildFromExport(rows, fileName) {
 }
 function imgParseJSON(text) {
   const d = JSON.parse(text); const recs = Array.isArray(d) ? d : d.records; if (!Array.isArray(recs)) throw new Error('this is not an imaging referrals data file');
-  const records = recs.filter((r) => r && r.referrer && Array.isArray(r.series)).map((r) => ({ referrer: String(r.referrer), series: r.series.filter((e) => e && typeof e.p === 'string').map((e) => ({ p: e.p.slice(0, 7), m: imgModality(e.m), s: String(e.s || 'Other'), n: num(e.n), r: num(e.r), c: num(e.c) })) }));
+  const records = recs.filter((r) => r && r.referrer && Array.isArray(r.series)).map((r) => ({ referrer: String(r.referrer), series: r.series.filter((e) => e && typeof e.p === 'string').map((e) => ({ p: e.p.slice(0, 7), m: imgModality(e.m), s: imgSite(e.s), n: num(e.n), r: num(e.r), c: num(e.c) })) }));
   const months = [...new Set(records.flatMap((r) => r.series.map((e) => e.p)))].sort(); const meta = d.meta || {};
   return { records, months, from: meta.from || '', asOf: meta.asOf || '', sources: meta.sources || null, kept: records.reduce((a, r) => a + r.series.reduce((x, e) => x + e.n, 0), 0), cancelled: records.reduce((a, r) => a + r.series.reduce((x, e) => x + e.c, 0), 0), skipped: 0, testRows: 0, total: null, source: `imaging data file (uploaded ${todayISO()})` };
 }
@@ -3970,6 +4019,109 @@ function mergePhysicians(fromId, intoId) {
   saveDB(); toast(`Merged into ${physName(b)}`); location.hash = '#/physician/' + b.id; rerender();
 }
 
+/* ===================== Searchable drop-down =====================
+   A text box that filters a long list as you type. options: [{ v, l, g }] (value, label, optional group).
+   A choice reaches the app through comboPick(name, value). */
+const comboData = {};
+function comboHTML(name, options, value, placeholder) {
+  comboData[name] = options;
+  const cur = options.find((o) => o.v === value);
+  return `<div class="combo" data-combo="${name}"><input type="text" class="combo-input" data-combo-input="${name}" value="${esc(cur ? cur.l : '')}" placeholder="${esc(placeholder)}" autocomplete="off" spellcheck="false" aria-label="${esc(placeholder)}">${value ? `<button type="button" class="combo-clear" data-combo-clear="${name}" aria-label="Clear" title="Clear">×</button>` : ''}<div class="combo-list" data-combo-list="${name}" hidden></div></div>`;
+}
+function comboRender(name, q) {
+  const box = document.querySelector(`[data-combo-list="${name}"]`); if (!box) return;
+  const words = String(q || '').toLowerCase().split(/\s+/).filter(Boolean);
+  const starts = (o) => words.length && words.every((w) => o.l.toLowerCase().split(/[\s,()]+/).some((t) => t.startsWith(w)));
+  const opts = (comboData[name] || []).filter((o) => !words.length || words.every((w) => o.l.toLowerCase().includes(w) || (o.g || '').toLowerCase().includes(w))).sort((a, b) => (starts(b) ? 1 : 0) - (starts(a) ? 1 : 0));
+  const shown = opts.slice(0, 80); let g = null, html = '';
+  shown.forEach((o, i) => { if (o.g !== g) { g = o.g; if (g) html += `<div class="combo-group">${esc(g)}</div>`; } html += `<div class="combo-item ${i === 0 ? 'hl' : ''}" data-combo-pick="${name}" data-v="${esc(o.v)}">${esc(o.l)}${o.g && words.length ? ` <span class="muted small">· ${esc(o.g)}</span>` : ''}</div>`; });
+  box.innerHTML = (html || '<div class="combo-empty">No matches</div>') + (opts.length > 80 ? `<div class="combo-empty">${opts.length - 80} more — keep typing to narrow it down</div>` : '');
+  box.hidden = false;
+}
+function comboClose(name) { const box = document.querySelector(`[data-combo-list="${name}"]`); if (box) box.hidden = true; }
+function comboPick(name, value) {
+  const o = (comboData[name] || []).find((x) => x.v === value); const input = document.querySelector(`[data-combo-input="${name}"]`); if (input) input.value = o ? o.l : '';
+  comboClose(name);
+  if (name === 'sx-surg') pickSurgeon(value); else if (name === 'im-ref') pickReferrer(value);
+}
+document.addEventListener('input', (e) => { const n = e.target.dataset && e.target.dataset.comboInput; if (n) comboRender(n, e.target.value); });
+document.addEventListener('focusin', (e) => { const n = e.target.dataset && e.target.dataset.comboInput; if (n) { e.target.select(); comboRender(n, ''); } });
+document.addEventListener('keydown', (e) => {
+  const n = e.target.dataset && e.target.dataset.comboInput; if (!n) return;
+  const box = document.querySelector(`[data-combo-list="${n}"]`);
+  if (!box || box.hidden) { if (e.key === 'ArrowDown') comboRender(n, e.target.value); return; }
+  const items = [...box.querySelectorAll('.combo-item')]; let i = items.findIndex((x) => x.classList.contains('hl'));
+  if (e.key === 'ArrowDown' || e.key === 'ArrowUp') { e.preventDefault(); i = e.key === 'ArrowDown' ? Math.min(items.length - 1, i + 1) : Math.max(0, i - 1); items.forEach((x, k) => x.classList.toggle('hl', k === i)); if (items[i]) items[i].scrollIntoView({ block: 'nearest' }); }
+  else if (e.key === 'Enter') { e.preventDefault(); if (items[i]) comboPick(n, items[i].dataset.v); }
+  else if (e.key === 'Escape') comboClose(n);
+});
+document.addEventListener('click', (e) => {
+  const pick = e.target.closest('[data-combo-pick]'); if (pick) { comboPick(pick.dataset.comboPick, pick.dataset.v); return; }
+  const clr = e.target.closest('[data-combo-clear]'); if (clr) { comboPick(clr.dataset.comboClear, ''); return; }
+  if (!e.target.closest('.combo')) $$('.combo-list').forEach((b) => { b.hidden = true; });
+});
+function pickSurgeon(v) { ui.sx.vol = v; const h = v ? '#/reports/surgeons/' + encodeURIComponent(v) : '#/reports/surgeons'; if (location.hash === h) rerender(); else location.hash = h; }
+function pickReferrer(v) { ui.im.id = v; const h = v ? '#/reports/imaging/' + encodeURIComponent(v) : '#/reports/imaging'; if (location.hash === h) rerender(); else location.hash = h; }
+
+/* ===================== Tidy up names =====================
+   Finds different spellings of the same specialty, city or practice ("Orthopaedics", "orthopedics", "Orthopedic")
+   and merges them, and keeps new entries in line with spellings already on file. */
+const NAME_FIELDS = { specialty: { label: 'Specialties' }, city: { label: 'Cities' }, practice: { label: 'Practices' } };
+function nameGroupKey(field, s) {
+  let k = String(s || '').toLowerCase().replace(/&/g, ' and ').replace(/[^a-z0-9 ]+/g, ' ').replace(/\s+/g, ' ').trim();
+  if (field === 'specialty') k = k.replace(/paed/g, 'ped').replace(/orthopaedic/g, 'orthopedic').replace(/\bob ?gyn\b/, 'obstetrics gynecology').replace(/^ent$|\bent\b/, 'otolaryngology').replace(/\b(surgery|surgeon|surgeons|medicine|dept|department|service|services|specialist|specialists|clinic|group|center|centre)\b/g, ' ');
+  if (field === 'city') k = k.replace(/\bcda\b/, 'coeur d alene').replace(/\bcoeur d ?alene\b/, 'coeur d alene').replace(/\bspokane valley\b/, 'spokane valley');
+  if (field === 'practice') k = k.replace(/\b(llc|pllc|inc|pc|ps|pa|ltd|llp|the|of)\b/g, ' ');
+  return k.split(/\s+/).filter(Boolean).map((w) => (w.length > 3 ? w.replace(/ies$/, 'y').replace(/s$/, '') : w)).join(' ');
+}
+function editDistance(a, b) { const m = a.length, n = b.length; if (!m) return n; if (!n) return m; let prev = Array.from({ length: n + 1 }, (_, j) => j); for (let i = 1; i <= m; i++) { const cur = [i]; for (let j = 1; j <= n; j++) cur[j] = Math.min(prev[j] + 1, cur[j - 1] + 1, prev[j - 1] + (a[i - 1] === b[j - 1] ? 0 : 1)); prev = cur; } return prev[n]; }
+function nameValues(field) {
+  const counts = {};
+  db.physicians.forEach((p) => { const v = String(p[field] || '').trim(); if (v) counts[v] = (counts[v] || 0) + 1; });
+  if (field === 'specialty') db.clinics.forEach((c) => (c.specialties || []).forEach((v) => { v = String(v || '').trim(); if (v) counts[v] = (counts[v] || 0) + 1; }));
+  if (field === 'city') db.clinics.forEach((c) => { const v = String(c.city || '').trim(); if (v) counts[v] = (counts[v] || 0) + 1; });
+  return counts;
+}
+/* Groups of spellings that look like the same thing: same key, or keys a letter or two apart. */
+function tidyGroups(field) {
+  const counts = nameValues(field); const byKey = {};
+  Object.entries(counts).forEach(([name, n]) => { const k = nameGroupKey(field, name); (byKey[k] = byKey[k] || []).push({ name, n }); });
+  const keys = Object.keys(byKey); const parent = {}; keys.forEach((k) => { parent[k] = k; });
+  const find = (k) => (parent[k] === k ? k : (parent[k] = find(parent[k])));
+  for (let i = 0; i < keys.length; i++) for (let j = i + 1; j < keys.length; j++) { const a = keys[i], b = keys[j]; if (a.length >= 6 && b.length >= 6 && Math.abs(a.length - b.length) <= 2 && editDistance(a, b) <= (a.length >= 9 ? 2 : 1)) parent[find(a)] = find(b); }
+  const groups = {}; keys.forEach((k) => { const r = find(k); (groups[r] = groups[r] || []).push(...byKey[k]); });
+  return Object.values(groups).filter((g) => g.length > 1).map((g) => { g.sort((a, b) => b.n - a.n || a.name.localeCompare(b.name)); return { members: g, suggested: g[0].name, total: g.reduce((a, x) => a + x.n, 0) }; }).sort((a, b) => b.total - a.total);
+}
+/* The spelling already on file for a new entry, so "orthopedics" typed on the form becomes the existing "Orthopedic Surgery" only when it is the same key. */
+function canonLabel(field, s) {
+  s = String(s || '').trim(); if (!s) return s;
+  const key = nameGroupKey(field, s); if (!key) return s;
+  const counts = nameValues(field); let best = null;
+  Object.entries(counts).forEach(([name, n]) => { if (name !== s && nameGroupKey(field, name) === key && (!best || n > best.n)) best = { name, n }; });
+  return best && best.n >= (counts[s] || 0) ? best.name : s;
+}
+function tidyApply(field, names, canonical) {
+  canonical = String(canonical || '').trim(); if (!canonical) return 0;
+  const set = new Set(names.filter((x) => x !== canonical)); if (!set.size) return 0; let n = 0;
+  db.physicians.forEach((p) => { if (set.has(String(p[field] || '').trim())) { p[field] = canonical; n++; } });
+  if (field === 'specialty') { db.clinics.forEach((c) => { if (Array.isArray(c.specialties) && c.specialties.some((v) => set.has(v))) { c.specialties = [...new Set(c.specialties.map((v) => (set.has(v) ? canonical : v)))]; n++; } }); db.settings.specialties = [...new Set((db.settings.specialties || []).map((v) => (set.has(v) ? canonical : v)))].sort((a, b) => a.localeCompare(b)); }
+  if (field === 'city') db.clinics.forEach((c) => { if (set.has(String(c.city || '').trim())) { c.city = canonical; n++; } });
+  return n;
+}
+function tidyCardHTML() {
+  const field = ui.tidy.field, groups = tidyGroups(field), counts = nameValues(field), all = Object.keys(counts).sort((a, b) => a.localeCompare(b));
+  return `<div class="card-head"><h2>Tidy up names</h2><span class="hint">Merge different spellings of the same thing</span></div>
+    <div class="filters" style="margin-bottom:10px"><div class="field"><span class="field-label">Look at</span><select data-change="tidy-field">${Object.entries(NAME_FIELDS).map(([k, v]) => `<option value="${k}" ${field === k ? 'selected' : ''}>${v.label}</option>`).join('')}</select></div><div class="field" style="align-self:end"><span class="help">${all.length} different ${NAME_FIELDS[field].label.toLowerCase()} on file · ${groups.length} look like duplicates</span></div></div>
+    ${groups.length ? `<ul class="list" id="tidy-groups">${groups.map((g, i) => `<li style="display:block"><div style="display:flex;gap:10px;flex-wrap:wrap;align-items:center;justify-content:space-between">
+        <div><b>${g.members.map((m) => `${esc(m.name)} <span class="muted">(${m.n})</span>`).join('</b> · <b>')}</b></div>
+        <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap"><span class="small muted">Make them all:</span><input type="text" value="${esc(g.suggested)}" data-tidy-input="${i}" list="tidy-opts-${i}" style="min-width:220px"><datalist id="tidy-opts-${i}">${g.members.map((m) => `<option value="${esc(m.name)}">`).join('')}</datalist><button class="btn sm primary" data-act="tidy-apply" data-i="${i}">Merge</button></div>
+      </div></li>`).join('')}</ul>
+      <p style="margin:10px 0 0"><button class="btn" data-act="tidy-apply-all">Merge all ${groups.length} as suggested</button></p>` : `<p class="empty">No duplicate-looking ${NAME_FIELDS[field].label.toLowerCase()} found.</p>`}
+    <h3 style="margin:18px 0 6px">Merge any two by hand</h3>
+    <div class="filters" style="align-items:end"><div class="field"><span class="field-label">Change every</span><select data-change="tidy-from" id="tidy-from"><option value="">Pick one…</option>${all.map((v) => `<option value="${esc(v)}" ${ui.tidy.from === v ? 'selected' : ''}>${esc(v)} (${counts[v]})</option>`).join('')}</select></div><div class="field"><span class="field-label">into</span><select data-change="tidy-into" id="tidy-into"><option value="">Pick one…</option>${all.map((v) => `<option value="${esc(v)}" ${ui.tidy.into === v ? 'selected' : ''}>${esc(v)}</option>`).join('')}</select></div><div class="field"><span class="field-label">&nbsp;</span><button class="btn" data-act="tidy-merge-two">Merge</button></div></div>
+    <p class="help" style="margin-top:10px">New entries typed on the physician form or uploaded from a spreadsheet are matched to spellings already on file, so duplicates stop creeping back in.</p>`;
+}
+
 /* ===================== Event delegation ===================== */
 const actions = {
   logout: () => logout(),
@@ -3987,6 +4139,9 @@ const actions = {
   },
   'clin-more': () => { ui.clin.limit = (ui.clin.limit || 100) + 200; rerender(); },
   'edit-physician': (el) => { const p = getPhys(el.dataset.id); openModal({ title: 'Edit ' + physName(p), body: physicianFormHTML(p), submitLabel: 'Save changes', onSubmit: () => savePhysicianFromForm($('#phys-form')) }); },
+  'tidy-apply': (el) => { const g = tidyGroups(ui.tidy.field)[+el.dataset.i]; if (!g) return; const inp = document.querySelector(`[data-tidy-input="${el.dataset.i}"]`); const n = tidyApply(ui.tidy.field, g.members.map((m) => m.name), inp ? inp.value : g.suggested); saveDB(); toast(`${n} record${n === 1 ? '' : 's'} updated`); rerender(); },
+  'tidy-apply-all': () => { const groups = tidyGroups(ui.tidy.field); let n = 0; groups.forEach((g, i) => { const inp = document.querySelector(`[data-tidy-input="${i}"]`); n += tidyApply(ui.tidy.field, g.members.map((m) => m.name), inp ? inp.value : g.suggested); }); saveDB(); toast(`${groups.length} group${groups.length === 1 ? '' : 's'} merged, ${n} record${n === 1 ? '' : 's'} updated`); rerender(); },
+  'tidy-merge-two': () => { const f = ui.tidy; if (!f.from || !f.into || f.from === f.into) { toast('Pick two different names.', 'err'); return; } const n = tidyApply(f.field, [f.from], f.into); f.from = ''; f.into = ''; saveDB(); toast(`${n} record${n === 1 ? '' : 's'} updated`); rerender(); },
   'merge-physician': (el) => {
     const p = getPhys(el.dataset.id); if (!p) return;
     const others = db.physicians.filter((x) => x.id !== p.id).sort((a, b) => physSortName(a).localeCompare(physSortName(b)));
@@ -4242,12 +4397,13 @@ const actions = {
   'export-imaging': () => exportImaging(),
   'im-mod': (el) => { const k = el.dataset.v, on = IMG_MODS.filter((m) => ui.im.mods[m] !== false); if (ui.im.mods[k] !== false && on.length === 1) { toast('Keep at least one modality on.'); return; } ui.im.mods[k] = ui.im.mods[k] === false ? true : false; rerender(); },
   'im-site': (el) => { const k = el.dataset.v; ui.im.sites[k] = ui.im.sites[k] === false ? true : false; rerender(); },
-  'im-pick': (el) => { location.hash = '#/reports/imaging/' + el.dataset.id; },
+  'im-pick': (el) => pickReferrer(el.dataset.id),
   'im-all': () => { ui.im.showAll = !ui.im.showAll; rerender(); },
   'export-volumes': () => exportVolumes(),
   'sx-metric': (el) => { ui.sx.metric = el.dataset.v; rerender(); },
+  'sx-pick': (el) => pickSurgeon(el.dataset.v),
   'sx-smooth': (el) => { ui.sx.smooth = +el.dataset.v; rerender(); },
-  'sx-room': (el) => { const k = el.dataset.v, on = Object.keys(ui.sx.rooms).filter((r) => ui.sx.rooms[r]); if (ui.sx.rooms[k] && on.length === 1) { toast('Keep at least one room type on.'); return; } ui.sx.rooms[k] = !ui.sx.rooms[k]; rerender(); },
+  'sx-room': (el) => { const k = el.dataset.v, present = volRoomsPresent(), on = present.filter((r) => ui.sx.rooms[r] !== false); if (ui.sx.rooms[k] !== false && on.length === 1) { toast('Keep at least one service line on.'); return; } ui.sx.rooms[k] = ui.sx.rooms[k] === false ? true : false; rerender(); },
   'export-contacts-csv': () => exportContactsCSV(),
   'clear-all': () => confirmBox(`Erase <b>all</b> physicians, contacts, referrals and attachments ${MODE === 'server' ? 'in the shared database' : 'stored in this browser'}? Export a backup first if you might need them.`, async () => {
     if (MODE === 'server') {
@@ -4374,9 +4530,14 @@ document.addEventListener('change', (e) => {
     case 'rep-from': ui.rep.from = t.value; rerender(); break;
     case 'rep-to': ui.rep.to = t.value; rerender(); break;
     case 'rep-compare': ui.rep.compare = t.value; rerender(); break;
-    case 'im-ref': ui.im.id = t.value; location.hash = t.value ? '#/reports/imaging/' + t.value : '#/reports/imaging'; if (!t.value) rerender(); break;
+
     case 'im-period': ui.im.period = t.value; rerender(); break;
-    case 'sx-surg': ui.sx.vol = t.value; location.hash = t.value ? '#/reports/surgeons/' + t.value : '#/reports/surgeons'; if (!t.value) rerender(); break;
+
+    case 'tidy-field': ui.tidy.field = t.value; ui.tidy.from = ''; ui.tidy.into = ''; rerender(); break;
+    case 'tidy-from': ui.tidy.from = t.value; break;
+    case 'tidy-into': ui.tidy.into = t.value; break;
+    case 'im-rank': ui.im.rank = t.value; rerender(); break;
+    case 'idle-minutes': { const v = Math.min(1440, Math.max(15, Math.round(num(t.value)) || 240)); db.settings.idleMinutes = v; t.value = v; saveDB(); toast('Saved'); rerender(); break; }
     case 'risk-days': { const v = Math.max(1, Math.round(num(t.value)) || 14); db.settings.riskDays = v; t.value = v; saveDB(); toast('Saved'); updateNavCount(); break; }
     case 'team-name': { const v = t.value.trim(); if (v) { db.settings.team[+t.dataset.i] = v; saveDB(); toast('Saved'); } break; }
   }
