@@ -3622,6 +3622,19 @@ function volParseJSON(text) {
   const meta = (d.meta || {});
   return { records, years, asOf: meta.asOf || '', sources: meta.sources || null, kept: records.reduce((s, r) => s + r.series.filter((x) => x.period[5] !== 'W').reduce((a, x) => a + x.cases, 0), 0), total: null, source: `scorecard data file (uploaded ${todayISO()})` };
 }
+/* The stretch of dates a file covers. Stored weeks and months inside it are replaced by the file; everything outside is kept. */
+function volSpan(parsed) {
+  const months = [...new Set(parsed.records.flatMap((r) => r.series.filter((x) => x.period[5] !== 'W').map((x) => x.period)))].sort();
+  if (!months.length && !parsed.minDate) return null;
+  let from = parsed.minDate || months[0] + '-01', to = parsed.asOf || '';
+  const lastMonth = months.length ? months[months.length - 1] : '';
+  if (!to || (lastMonth && lastMonth > to.slice(0, 7))) to = lastMonth + '-' + String(new Date(+lastMonth.slice(0, 4), +lastMonth.slice(5, 7), 0).getDate()).padStart(2, '0');
+  const wk = (iso) => `${iso.slice(0, 4)}-W${String(volWeekOf(iso)).padStart(2, '0')}`;
+  const m0 = from.slice(0, 7), m1 = to.slice(0, 7), w0 = wk(from), w1 = wk(to);
+  const covers = (period) => (period[5] === 'W' ? period >= w0 && period <= w1 : period >= m0 && period <= m1);
+  const label = m0 === m1 ? fmtMonth(m0) : `${fmtMonth(m0)} to ${fmtMonth(m1)}`;
+  return { from, to, m0, m1, covers, label, key: m0 === m1 ? m0 : `${m0} to ${m1}` };
+}
 function volSlug(name) { return 'vol_' + name.toLowerCase().replace(/[^a-z0-9]+/g, '_').replace(/^_|_$/g, '').slice(0, 56); }
 async function importVolumes(file) {
   if (!isAdmin()) { toast('Only the administrator can upload surgeon volumes.', 'err'); return; }
@@ -3632,35 +3645,42 @@ async function importVolumes(file) {
     else { toast('Reading the spreadsheet…'); parsed = volBuildFromCases(await readSpreadsheetRows(file), file.name); }
   } catch (e) { toast('That file could not be read: ' + (e && e.message ? e.message : e), 'err'); return; }
   if (!parsed.records.length) { toast('No surgeon cases were found in that file. Use the PowerBI case export with Physician Name, Admit Date, Operating Room, Operating Minutes and Charge Amt columns.', 'err'); return; }
-  const existing = volRecords(), fileYears = new Set(parsed.years);
+  const existing = volRecords(), span = volSpan(parsed), meta = volMeta();
+  if (!span) { toast('No dated cases were found in that file.', 'err'); return; }
   const matched = parsed.records.filter((r) => volMatchPhysician(r.surgeon)).length;
   const newNames = parsed.records.filter((r) => !existing.some((e) => e.surgeon === r.surgeon)).length;
-  const kept = existing.filter((e) => e.series.some((s) => !fileYears.has(s.period.slice(0, 4)))).length;
+  const kept = existing.filter((e) => e.series.some((s) => !span.covers(s.period))).length;
+  const notes = [];
+  if (parsed.minDate && parsed.minDate.slice(8) !== '01') notes.push(`This file starts on ${fmtDate(parsed.minDate)}, so ${fmtMonth(span.m0)} will only hold cases from that day on. Export whole months when you can.`);
+  if (meta && meta.asOf && parsed.minDate && parsed.minDate > meta.asOf) { const next = new Date(meta.asOf + 'T00:00:00'); next.setDate(next.getDate() + 1); const nextISO = next.toISOString().slice(0, 10); if (nextISO < parsed.minDate) notes.push(`Stored data runs through ${fmtDate(meta.asOf)} and this file starts ${fmtDate(parsed.minDate)}; ${fmtDate(nextISO)} to ${fmtDate(new Date(new Date(parsed.minDate + 'T00:00:00').getTime() - 86400000).toISOString().slice(0, 10))} will still be missing. Export from ${fmtDate(nextISO)} (or the whole year) to close the gap.`); }
+  if (meta && meta.asOf && parsed.asOf && parsed.asOf < meta.asOf && span.covers(meta.asOf.slice(0, 7))) notes.push(`This file ends ${fmtDate(parsed.asOf)}, earlier than the ${fmtDate(meta.asOf)} already stored, and will replace ${fmtMonth(parsed.asOf.slice(0, 7))} with its shorter count.`);
   const top = parsed.records.map((r) => ({ r, n: r.series.filter((s) => s.period[5] !== 'W').reduce((a, s) => a + s.cases, 0), ch: r.series.filter((s) => s.period[5] !== 'W').reduce((a, s) => a + s.charges, 0) })).sort((a, b) => b.n - a.n);
   const body = `
     <p>${parsed.total !== null ? `<b>${volInt(parsed.total)}</b> rows read, <b>${volInt(parsed.kept)}</b> procedure cases kept` : `<b>${volInt(parsed.kept)}</b> procedure cases`} for <b>${parsed.records.length}</b> surgeon${parsed.records.length === 1 ? '' : 's'}${parsed.minDate ? `, ${fmtDate(parsed.minDate)} to ${fmtDate(parsed.asOf)}` : parsed.asOf ? `, through ${fmtDate(parsed.asOf)}` : ''}.</p>
     <ul class="list small" style="margin:10px 0">
-      <li><span>Years in this file (these replace what is stored for the same years)</span><b>${parsed.years.join(', ')}</b></li>
+      <li><span>Period in this file (replaces what is stored for the same weeks and months; other months are kept)</span><b>${esc(span.label)}</b></li>
       <li><span>Surgeons matched to a physician record</span><b>${matched} of ${parsed.records.length}</b></li>
       <li><span>Surgeons not seen before</span><b>${newNames}</b></li>
-      ${existing.length ? `<li><span>Stored surgeons keeping numbers from other years</span><b>${kept}</b></li>` : ''}
+      ${existing.length ? `<li><span>Stored surgeons keeping numbers from outside this period</span><b>${kept}</b></li>` : ''}
       ${parsed.noRoomTime ? `<li><span class="muted">Rows without room time (clinic and other encounters), not counted</span><span class="muted">${volInt(parsed.noRoomTime)}</span></li>` : ''}
       ${parsed.dups ? `<li><span class="muted">Duplicate account rows skipped</span><span class="muted">${volInt(parsed.dups)}</span></li>` : ''}
       ${parsed.skipped ? `<li><span class="muted">Rows skipped (no surgeon name or no date)</span><span class="muted">${volInt(parsed.skipped)}</span></li>` : ''}
     </ul>
+    ${notes.length ? `<div class="notice" style="margin:10px 0;display:block">${notes.map((n) => `<p style="margin:4px 0">${esc(n)}</p>`).join('')}</div>` : ''}
     <h3>Largest by case count</h3>
     <ul class="list small" style="max-height:220px;overflow:auto">${top.slice(0, 12).map(({ r, n, ch }) => { const p = volMatchPhysician(r.surgeon); return `<li><span><b>${esc(volTitle(r.surgeon))}</b> <span class="muted">· ${esc(r.specialty)}${p ? '' : ' · no physician record'}</span></span><span class="nowrap">${volInt(n)} cases · ${volShort(ch)}</span></li>`; }).join('')}</ul>
     ${existing.length ? `<label class="check" style="display:flex;gap:10px;align-items:center;margin-top:14px"><input type="checkbox" id="vol-replace-all"> <span>Remove everything stored before, including other years</span></label>` : ''}
     <p class="help" style="margin-top:12px">Only surgeon-level totals by week and month are stored. Nothing about individual patients leaves this browser.</p>`;
   openModal({
     title: 'Upload surgeon scorecard — review before saving', body,
-    submitLabel: `Save ${parsed.years.join(', ')} for ${parsed.records.length} surgeon${parsed.records.length === 1 ? '' : 's'}`,
+    submitLabel: `Save ${span.label} for ${parsed.records.length} surgeon${parsed.records.length === 1 ? '' : 's'}`,
     onSubmit: () => { applyVolumeImport(parsed, !!($('#vol-replace-all') && $('#vol-replace-all').checked)); return true; },
   });
 }
 function applyVolumeImport(parsed, replaceAll) {
-  const fileYears = new Set(parsed.years), meta = volMeta() || { id: 'meta', sources: {} };
-  let recs = replaceAll ? [] : volRecords().map((r) => ({ ...r, series: r.series.filter((s) => !fileYears.has(s.period.slice(0, 4))) }));
+  const span = volSpan(parsed), meta = volMeta() || { id: 'meta', sources: {} };
+  if (!span) { toast('No dated cases were found in that file.', 'err'); return; }
+  let recs = replaceAll ? [] : volRecords().map((r) => ({ ...r, series: r.series.filter((s) => !span.covers(s.period)) }));
   parsed.records.forEach((nr) => {
     let rec = recs.find((r) => r.surgeon === nr.surgeon);
     if (!rec) { rec = { id: volSlug(nr.surgeon), physicianId: '', surgeon: nr.surgeon, specialty: nr.specialty, series: [] }; recs.push(rec); }
@@ -3670,11 +3690,14 @@ function applyVolumeImport(parsed, replaceAll) {
   recs = recs.filter((r) => r.series.length);
   recs.forEach((r) => { const p = volMatchPhysician(r.surgeon); if (p) r.physicianId = p.id; r.updatedAt = nowISO(); r.updatedBy = session.name; });
   meta.sources = replaceAll ? {} : (meta.sources || {});
-  if (parsed.sources) Object.assign(meta.sources, parsed.sources); else parsed.years.forEach((y) => { meta.sources[y] = parsed.source; });
-  if (parsed.asOf && (!meta.asOf || parsed.asOf > meta.asOf || replaceAll)) meta.asOf = parsed.asOf;
+  /* drop source notes for stretches this file fully covers (a note keyed "2026" or "2026-10 to 2026-11") */
+  Object.keys(meta.sources).forEach((k) => { const m = k.match(/^(\d{4}(?:-\d{2})?)(?: to (\d{4}(?:-\d{2})?))?$/); if (!m) return; const a = m[1].length === 4 ? m[1] + '-01' : m[1], b = (m[2] || m[1]).length === 4 ? (m[2] || m[1]) + '-12' : (m[2] || m[1]); if (a >= span.m0 && b <= span.m1) delete meta.sources[k]; });
+  if (parsed.sources) Object.assign(meta.sources, parsed.sources); else meta.sources[span.key] = parsed.source;
+  if (parsed.asOf && (!meta.asOf || parsed.asOf > span.to || replaceAll)) meta.asOf = parsed.asOf;
+  else if (!meta.asOf || span.to > meta.asOf || replaceAll) meta.asOf = span.to;
   meta.importedAt = nowISO(); meta.importedBy = session.name;
   db.volumes = [meta, ...recs];
-  saveDB(); toast(`Surgeon scorecard saved — ${recs.length} surgeons, ${parsed.years.join(', ')}`);
+  saveDB(); toast(`Surgeon scorecard saved — ${recs.length} surgeons, ${span.label}`);
   if (!location.hash.startsWith('#/reports/surgeons')) location.hash = '#/reports/surgeons'; else rerender();
 }
 function exportVolumes() {

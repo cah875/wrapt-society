@@ -9,5 +9,5 @@ They are not part of the web folder — do not copy this folder to the server.
 
 The same upload button also accepts the PowerBI case export (.xlsx or .csv) with the columns
 Physician Name, Admit Date (or Discharge Date), Operating Room, Operating Minutes, Charge Amt and
-Account Number. Rows without room time are ignored; the years in the file replace what is stored for
-those years and other years are kept. The **Download data file** button writes a file in this same format.
+Account Number. Rows without room time are ignored. The weeks and months the file covers replace what is stored for them and
+everything outside that stretch is kept, so a monthly export adds to earlier uploads. The **Download data file** button writes a file in this same format.

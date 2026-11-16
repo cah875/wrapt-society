@@ -65,7 +65,9 @@ summary compares the latest year with the same weeks of earlier years; the table
 same-weeks total and full year. Each matched physician's page gets a "Surgical volume & charges" card.
 - **Upload surgeon scorecard** (administrator, on the Scorecard page or in Settings) reads the PowerBI case
   export (.xlsx or .csv) or a scorecard data file (.json) in the browser, shows what will change, and saves
-  surgeon-level totals only. The years in the file replace what is stored for those years; other years stay.
+  surgeon-level totals only. The weeks and months the file covers replace what is stored for them; everything outside
+  that stretch stays, so a monthly export can be added on top of earlier ones. Export whole months, starting the day
+  after the stored data ends (the review step points out any gap or partial month).
 - **Download data file** writes the stored totals back out as a .json that can be uploaded again or kept as a
   backup. The starting file is in `imports/`.
 
