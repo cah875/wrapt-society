@@ -3353,7 +3353,7 @@ function loadSample() {
    period is "YYYY-Www" (week 1 begins Jan 1, seven-day blocks) or "YYYY-MM". roomType is OR, SC, MPR or OTH.
    One extra record with id "meta" keeps the as-of date and where each year's numbers came from.
    Surgeon-level totals only — nothing about individual patients is stored.                       */
-const VOL_ROOMS = [['OR', 'Operating rooms 1–10'], ['SC', 'Surgery center 11–12'], ['MPR', 'Pain & procedure rooms'], ['ENDO', 'Endoscopy'], ['IR', 'Interventional radiology'], ['AXIS', 'Axis Spine Center'], ['OTH', 'Endo / Axis / IR (older uploads)']];
+const VOL_ROOMS = [['OR', 'Operating rooms 1–10'], ['SC', 'Surgery center 11–12'], ['MPR', 'Pain & procedure rooms'], ['ENDO', 'Endoscopy'], ['IR', 'Interventional radiology'], ['AXIS', 'Axis Spine Center'], ['OTH', 'Other rooms & older uploads']];
 const VOL_ROOM_LABEL = Object.fromEntries(VOL_ROOMS);
 const VOL_MONTHS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
 function volRoomType(room) {
@@ -3529,7 +3529,7 @@ function viewScorecard(volId) {
         <div class="table-wrap"><table class="breakdown"><thead><tr><th>Service line</th><th class="num">Cases</th><th class="num">Change</th><th class="num">Charges</th><th class="num">Share</th></tr></thead><tbody>
         ${volRoomsPresent().map((k) => { const only = {}; volRoomsPresent().forEach((x) => { only[x] = x === k; }); const a = volAgg(scope, only); const y = (yr, i) => (a.w[yr] ? a.w[yr].slice(0, AW).reduce((s0, q) => s0 + q[i], 0) : 0); const c = y(latest, 0), pc = prior ? y(prior, 0) : 0, ch = y(latest, 1); return c || pc ? `<tr class="${rooms[k] === false ? 'muted' : ''}"><td><b>${esc(VOL_ROOM_LABEL[k])}</b>${rooms[k] === false ? ' <span class="small muted">(turned off above)</span>' : ''}</td><td class="num">${volInt(c)}</td><td class="num ${volCls(c - pc)}">${prior ? volSigned(c - pc) + ` (${volPctText(volPct(c, pc))})` : '—'}</td><td class="num">${volShort(ch)}</td><td class="num">${curC ? imgPctText(c, curC) : '—'}</td></tr>` : ''; }).join('')}
         </tbody></table></div>
-        <p class="help" style="margin:8px 0 0">Service lines follow the room the case was done in. Turn a line on or off with the buttons at the top.</p>
+        <p class="help" style="margin:8px 0 0">Service lines follow the room the case was done in. Turn a line on or off with the buttons at the top. Uploads that did not carry room names (the 2024–2025 snapshot) sit under “Other rooms &amp; older uploads”, so year-over-year changes by line only mean something once both years were uploaded with rooms.</p>
       </section>
       ${rec ? '' : `<section class="card"><div class="card-head"><h2>By specialty</h2><span class="hint">click a row to see those surgeons</span></div>
         <div class="table-wrap"><table class="breakdown"><thead><tr><th>Specialty</th><th class="num">Surgeons</th><th class="num">Cases</th><th class="num">Change</th><th class="num">Charges</th></tr></thead><tbody>
@@ -3593,19 +3593,23 @@ function volBuildFromCases(rows, fileName) {
   if (!('name' in ix)) throw new Error('no "Physician Name" column was found');
   if (!('admit' in ix) && !('discharge' in ix) && !('month' in ix)) throw new Error('no "Admit Date" column was found');
   const W = {}, M = {}, spec = {}, seen = new Set(); let kept = 0, skipped = 0, noRoomTime = 0, dups = 0, minDate = '', maxDate = '';
+  /* first pass: the last real (day-level) date in the file, so rows that only carry a month are never dated past it */
+  let lastReal = '';
+  if ('month' in ix) for (let r = 1; r < rows.length; r++) { const row = rows[r]; const d = volCellDate('admit' in ix ? row[ix.admit] : '') || volCellDate('discharge' in ix ? row[ix.discharge] : ''); if (d > lastReal) lastReal = d; }
   for (let r = 1; r < rows.length; r++) {
     const row = rows[r]; const g = (k) => (k in ix ? row[ix[k]] : '');
     const name = String(g('name') || '').trim().toUpperCase().replace(/\s+/g, ' ');
     if (!name || /^UNKNOWN/.test(name)) { skipped++; continue; }
     if ('minutes' in ix && !(num(g('minutes')) > 0)) { noRoomTime++; continue; }
     const acct = String(g('account') || g('case') || '').trim(); if (acct) { if (seen.has(acct)) { dups++; continue; } seen.add(acct); }
-    const date = volCellDate(g('admit')) || volCellDate(g('discharge')) || volCellDate(g('month'));
+    let date = volCellDate(g('admit')) || volCellDate(g('discharge')), monthOnly = false;
+    if (!date) { date = volCellDate(g('month')); monthOnly = true; if (date && lastReal && date.slice(0, 7) === lastReal.slice(0, 7) && date > lastReal) date = lastReal; }
     if (!date) { skipped++; continue; }
     const rt = volRoomType(g('room')), ch = num(g('charges')), y = date.slice(0, 4);
     const kw = `${name}\u0001${y}-W${String(volWeekOf(date)).padStart(2, '0')}\u0001${rt}`, km = `${name}\u0001${date.slice(0, 7)}\u0001${rt}`;
     (W[kw] = W[kw] || [0, 0])[0]++; W[kw][1] += ch; (M[km] = M[km] || [0, 0])[0]++; M[km][1] += ch;
     const sp = String(g('specialty') || '').trim(); if (sp) { (spec[name] = spec[name] || {})[sp] = (spec[name][sp] || 0) + 1; }
-    kept++; if (!minDate || date < minDate) minDate = date; if (date > maxDate) maxDate = date;
+    kept++; if (!monthOnly || !lastReal) { if (!minDate || date < minDate) minDate = date; if (date > maxDate) maxDate = date; }
   }
   const recs = {};
   const add = (store) => Object.entries(store).forEach(([k, v]) => { const [name, period, rt] = k.split('\u0001'); const rec = recs[name] = recs[name] || { surgeon: name, specialty: '', series: [] }; rec.series.push({ period, cases: v[0], charges: Math.round(v[1]), roomType: rt }); });
@@ -3651,7 +3655,7 @@ async function importVolumes(file) {
   const newNames = parsed.records.filter((r) => !existing.some((e) => e.surgeon === r.surgeon)).length;
   const kept = existing.filter((e) => e.series.some((s) => !span.covers(s.period))).length;
   const notes = [];
-  if (parsed.minDate && parsed.minDate.slice(8) !== '01') notes.push(`This file starts on ${fmtDate(parsed.minDate)}, so ${fmtMonth(span.m0)} will only hold cases from that day on. Export whole months when you can.`);
+  if (parsed.minDate && +parsed.minDate.slice(8) > 5) notes.push(`This file starts on ${fmtDate(parsed.minDate)}, so ${fmtMonth(span.m0)} will only hold cases from that day on. Export whole months when you can.`);
   if (meta && meta.asOf && parsed.minDate && parsed.minDate > meta.asOf) { const next = new Date(meta.asOf + 'T00:00:00'); next.setDate(next.getDate() + 1); const nextISO = next.toISOString().slice(0, 10); if (nextISO < parsed.minDate) notes.push(`Stored data runs through ${fmtDate(meta.asOf)} and this file starts ${fmtDate(parsed.minDate)}; ${fmtDate(nextISO)} to ${fmtDate(new Date(new Date(parsed.minDate + 'T00:00:00').getTime() - 86400000).toISOString().slice(0, 10))} will still be missing. Export from ${fmtDate(nextISO)} (or the whole year) to close the gap.`); }
   if (meta && meta.asOf && parsed.asOf && parsed.asOf < meta.asOf && span.covers(meta.asOf.slice(0, 7))) notes.push(`This file ends ${fmtDate(parsed.asOf)}, earlier than the ${fmtDate(meta.asOf)} already stored, and will replace ${fmtMonth(parsed.asOf.slice(0, 7))} with its shorter count.`);
   const top = parsed.records.map((r) => ({ r, n: r.series.filter((s) => s.period[5] !== 'W').reduce((a, s) => a + s.cases, 0), ch: r.series.filter((s) => s.period[5] !== 'W').reduce((a, s) => a + s.charges, 0) })).sort((a, b) => b.n - a.n);
@@ -3691,7 +3695,8 @@ function applyVolumeImport(parsed, replaceAll) {
   recs.forEach((r) => { const p = volMatchPhysician(r.surgeon); if (p) r.physicianId = p.id; r.updatedAt = nowISO(); r.updatedBy = session.name; });
   meta.sources = replaceAll ? {} : (meta.sources || {});
   /* drop source notes for stretches this file fully covers (a note keyed "2026" or "2026-10 to 2026-11") */
-  Object.keys(meta.sources).forEach((k) => { const m = k.match(/^(\d{4}(?:-\d{2})?)(?: to (\d{4}(?:-\d{2})?))?$/); if (!m) return; const a = m[1].length === 4 ? m[1] + '-01' : m[1], b = (m[2] || m[1]).length === 4 ? (m[2] || m[1]) + '-12' : (m[2] || m[1]); if (a >= span.m0 && b <= span.m1) delete meta.sources[k]; });
+  const capMonth = ((parsed.asOf || '') > (meta.asOf || '') ? parsed.asOf : meta.asOf || span.to).slice(0, 7);
+  Object.keys(meta.sources).forEach((k) => { const m = k.match(/^(\d{4}(?:-\d{2})?)(?: to (\d{4}(?:-\d{2})?))?$/); if (!m) return; const a = m[1].length === 4 ? m[1] + '-01' : m[1]; let b = (m[2] || m[1]).length === 4 ? (m[2] || m[1]) + '-12' : (m[2] || m[1]); if (b > capMonth) b = capMonth; if (a >= span.m0 && b <= span.m1) delete meta.sources[k]; });
   if (parsed.sources) Object.assign(meta.sources, parsed.sources); else meta.sources[span.key] = parsed.source;
   if (parsed.asOf && (!meta.asOf || parsed.asOf > span.to || replaceAll)) meta.asOf = parsed.asOf;
   else if (!meta.asOf || span.to > meta.asOf || replaceAll) meta.asOf = span.to;
