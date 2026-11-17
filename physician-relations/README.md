@@ -83,6 +83,23 @@ referrals to NWSH" card on their page, and the physicians list can sort by imagi
   The months in the file replace what is stored for those months; other months stay.
 - **Download data file** writes the stored counts as a .json that can be uploaded again.
 
+**Reports → Clinic financials** — upload the monthly *NWSH Departmental Operating Statements* workbook (.xlsm) and
+DocDock reads every department tab (33001 Internal Medicine through 88100 Inland Shoulder Clinic, imaging included;
+hospital departments optional). For each department it keeps visits, gross and net revenue, allowances, every expense
+category with its GL lines, EBITDA, fixed and variable cost, break-even volume and staffing hours, by month, with the
+budget and the prior year. The overview ranks departments by EBITDA and by how much of break-even volume they reach;
+a department page tells the story in a sentence, charts visits against break-even, revenue against expenses, the
+expense mix and fixed vs variable cost, shows the statement by month (actual, budget, prior year or variances, with
+GL drill-down) and has a what-if panel: change revenue per visit, variable cost per visit, fixed cost or clinic days
+and see the break-even volume and gap recalculate. Everyone with a login can open it.
+
+**Reports → Provider billing** — upload the Meditech *Performing Provider RVU* report (.txt), one month at a time.
+Only totals by performing provider, visit location, month and CPT are stored (encounters, units, work RVUs, charges,
+payments); patient names and account numbers never leave the browser. Filter by location, provider and month; see
+E/M level mix, wRVU per encounter, collections and every code billed. Locations are tied to their department tab,
+so a department's financial page also shows billing by provider, and a matched physician's page gets a
+"Billing & RVUs" card.
+
 **Searchable pickers** — the surgeon and referring-provider boxes on the reports filter as you type; arrow keys
 and Enter pick, the × clears. The surgical volume report can be scoped to a whole specialty ("All Orthopedics")
 and broken out by service line (operating rooms, surgery center, pain and procedure rooms, endoscopy,
