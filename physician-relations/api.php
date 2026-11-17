@@ -41,7 +41,7 @@ $secure = !empty($_SERVER['HTTPS']) && $_SERVER['HTTPS'] !== 'off';
 session_name('nwshpr');
 session_set_cookie_params(['lifetime' => 0, 'path' => '/', 'secure' => $secure, 'httponly' => true, 'samesite' => 'Lax']);
 /* The sign-out timer: the value set in Settings (settings/main → idleMinutes) when there is one, else config.php. */
-function idleMinutes(): int { global $CFG; static $v = null; if ($v !== null) return $v; $v = max(5, (int)$CFG['idle_minutes']); try { $row = store()->get('settings', 'main'); $m = (int)($row['idleMinutes'] ?? 0); if ($m >= 15 && $m <= 1440) $v = $m; } catch (Throwable $e) {} return $v; }
+function idleMinutes(): int { global $CFG; static $v = null; if ($v !== null) return $v; $v = max(240, (int)$CFG['idle_minutes']); try { $row = store()->get('settings', 'main'); $m = (int)($row['idleMinutes'] ?? 0); if ($m >= 15 && $m <= 1440) $v = $m; } catch (Throwable $e) {} return $v; }
 ini_set('session.gc_maxlifetime', (string)(idleMinutes() * 60 * 2));
 session_start();
 

@@ -784,7 +784,8 @@ async function pushOps() {
       } catch (e) {
         pendingOps.unshift(...batch);
         setSaveState('error');
-        toast('Could not save to the server: ' + e.message + ' — your change is kept and will be retried.', 'err');
+        const newCols = batch.some((o) => o.collection === 'financials' || o.collection === 'charges');
+        toast(newCols && /bad request/i.test(e.message || '') ? 'The server could not store clinic financials or provider billing. Upload lib.php and api.php from the latest site zip to the web folder, then try again.' : 'Could not save to the server: ' + e.message + ' — your change is kept and will be retried.', 'err');
         break;
       }
     }
