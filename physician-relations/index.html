@@ -1236,7 +1236,9 @@ function route() {
   }
   window.scrollTo(0, 0);
 }
-function rerender() { refGen++; const y = window.scrollY; route(); window.scrollTo(0, y); }
+function rerender() { refGen++; const y = window.scrollY; routeSafe(); window.scrollTo(0, y); }
+/* If a page fails to draw, say so on the page instead of leaving the old one up. */
+function routeSafe() { try { route(); } catch (e) { console.error(e); const main = $('#view'); if (main) main.innerHTML = `<div class="card empty"><p style="margin:0 0 8px;font-size:17px"><b>This page could not be shown.</b></p><p class="muted" style="max-width:640px;margin:0 auto">${esc(e && e.message ? e.message : String(e))}</p><p style="margin-top:12px"><a class="btn" href="#/">Back to Home</a></p></div>`; } }
 function updateNavCount() {
   const n = openFollowups().filter((c) => fuState(c) === 'over').length + db.tasks.filter((t) => taskState(t) === 'over').length;
   const el = $('#nav-fu-count');
@@ -1245,7 +1247,7 @@ function updateNavCount() {
   const el2 = $('#nav-ref-count');
   el2.hidden = !m; el2.textContent = m;
 }
-window.addEventListener('hashchange', route);
+window.addEventListener('hashchange', routeSafe);
 document.addEventListener('keydown', (e) => { if (e.key === 'Enter' && e.target && e.target.id === 'patient-mrn') { e.preventDefault(); actions['patient-go'](e.target, e); } });
 
 /* ===================== View: Home ===================== */
@@ -2869,7 +2871,7 @@ function viewSettings() {
           <div><button class="btn" type="submit">Save list</button></div>
         </form>
       </section>
-      ${isAdmin() ? `<section class="card" style="grid-column:1 / -1">${tidyCardHTML()}</section>` : ''}
+      ${isAdmin() ? `<section class="card" style="grid-column:1 / -1">${(() => { try { return tidyCardHTML(); } catch (e) { console.error('tidy', e); return `<h2>Tidy up names</h2><p class="muted">This tool could not read the current records (${esc(e && e.message || e)}). The rest of Settings works normally.</p>`; } })()}</section>` : ''}
     </div>
 
     <div class="grid2">
@@ -4756,7 +4758,7 @@ function editDistance(a, b) { const m = a.length, n = b.length; if (!m) return n
 function nameValues(field) {
   const counts = {};
   db.physicians.forEach((p) => { const v = String(p[field] || '').trim(); if (v) counts[v] = (counts[v] || 0) + 1; });
-  if (field === 'specialty') db.clinics.forEach((c) => (c.specialties || []).forEach((v) => { v = String(v || '').trim(); if (v) counts[v] = (counts[v] || 0) + 1; }));
+  if (field === 'specialty') db.clinics.forEach((c) => clinicSpecList(c).forEach((v) => { counts[v] = (counts[v] || 0) + 1; }));
   if (field === 'city') db.clinics.forEach((c) => { const v = String(c.city || '').trim(); if (v) counts[v] = (counts[v] || 0) + 1; });
   return counts;
 }
@@ -4778,11 +4780,13 @@ function canonLabel(field, s) {
   Object.entries(counts).forEach(([name, n]) => { if (name !== s && nameGroupKey(field, name) === key && (!best || n > best.n)) best = { name, n }; });
   return best && best.n >= (counts[s] || 0) ? best.name : s;
 }
+/* A clinic's specialties are free text ("Orthopedics, Spine"); older records may hold a list. */
+function clinicSpecList(c) { const v = c && c.specialties; if (Array.isArray(v)) return v.map((x) => String(x || '').trim()).filter(Boolean); return String(v || '').split(/\s*[,;\n]\s*/).map((x) => x.trim()).filter(Boolean); }
 function tidyApply(field, names, canonical) {
   canonical = String(canonical || '').trim(); if (!canonical) return 0;
   const set = new Set(names.filter((x) => x !== canonical)); if (!set.size) return 0; let n = 0;
   db.physicians.forEach((p) => { if (set.has(String(p[field] || '').trim())) { p[field] = canonical; n++; } });
-  if (field === 'specialty') { db.clinics.forEach((c) => { if (Array.isArray(c.specialties) && c.specialties.some((v) => set.has(v))) { c.specialties = [...new Set(c.specialties.map((v) => (set.has(v) ? canonical : v)))]; n++; } }); db.settings.specialties = [...new Set((db.settings.specialties || []).map((v) => (set.has(v) ? canonical : v)))].sort((a, b) => a.localeCompare(b)); }
+  if (field === 'specialty') { db.clinics.forEach((c) => { const list = clinicSpecList(c); if (list.some((v) => set.has(v))) { const next = [...new Set(list.map((v) => (set.has(v) ? canonical : v)))]; c.specialties = Array.isArray(c.specialties) ? next : next.join(', '); n++; } }); db.settings.specialties = [...new Set((db.settings.specialties || []).map((v) => (set.has(v) ? canonical : v)))].sort((a, b) => a.localeCompare(b)); }
   if (field === 'city') db.clinics.forEach((c) => { if (set.has(String(c.city || '').trim())) { c.city = canonical; n++; } });
   return n;
 }
