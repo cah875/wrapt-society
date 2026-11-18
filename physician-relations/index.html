@@ -4283,9 +4283,9 @@ function chgParseReport(text, fileName) {
 }
 function chgParseJSON(text) {
   const d = JSON.parse(text); if (d.kind !== 'provider-billing' || !Array.isArray(d.records)) throw new Error('this is not a provider billing data file');
-  const records = d.records.filter((r) => r && r.provider && r.period).map((r) => ({ ...r, id: chgId(r.provider, r.location, r.period), dept: r.dept || finLocDept(r.location) }));
+  const records = d.records.filter((r) => r && r.provider && r.period).map((r) => ({ ...r, id: chgId(r.provider, r.location, r.period) + (r.src ? '_s' + String(r.src).replace(/[^0-9]/g, '') : ''), dept: r.dept || finLocDept(r.location) }));
   const months = [...new Set(records.map((r) => r.period))].sort();
-  return { records, descs: (d.meta && d.meta.descs) || {}, months, kept: records.reduce((s, r) => s + r.n, 0), skipped: 0, noProv: 0, from: months[0] ? months[0] + '-01' : '', asOf: (d.meta && d.meta.asOf) || '', total: null, source: `provider billing data file (uploaded ${todayISO()})` };
+  return { records, descs: (d.meta && d.meta.descs) || {}, months, kept: records.reduce((s, r) => s + r.n, 0), skipped: 0, noProv: 0, from: months[0] ? months[0] + '-01' : '', asOf: (d.meta && d.meta.asOf) || '', total: null, isFile: true, source: `provider billing data file (uploaded ${todayISO()})` };
 }
 async function importCharges(file) {
   if (!isAdmin()) { toast('Only the administrator can upload the RVU report.', 'err'); return; }
@@ -4295,31 +4295,53 @@ async function importCharges(file) {
   if (!parsed.records.length) { toast('No charge lines were found in that file.', 'err'); return; }
   const provs = new Set(parsed.records.map((r) => r.provider)), locs = new Set(parsed.records.map((r) => r.location));
   const matched = [...provs].filter((p) => chgMatchPhysician(p)).length;
-  const existing = chgRecords(), fileMonths = new Set(parsed.months), replaced = existing.filter((r) => fileMonths.has(r.period)).length;
+  const existing = chgRecords();
   const unmapped = [...locs].filter((l) => !finLocDept(l));
   const wsum = parsed.records.reduce((s, r) => s + r.w, 0), enc = parsed.records.reduce((s, r) => s + r.enc, 0);
   const body = `
     <p>${parsed.total !== null ? `<b>${volInt(parsed.total)}</b> charge lines read, <b>${volInt(parsed.kept)}</b> kept` : `<b>${volInt(parsed.kept)}</b> charge lines`}${parsed.from ? `, ${fmtDate(parsed.from)} to ${fmtDate(parsed.asOf)}` : ''}: <b>${volInt(wsum)}</b> work RVUs across <b>${volInt(enc)}</b> encounters, <b>${provs.size}</b> providers and <b>${locs.size}</b> locations.</p>
     <ul class="list small" style="margin:10px 0">
-      <li><span>Months in this file (a ticked month replaces what is stored for it)</span><span>${parsed.months.map((m) => { const n = parsed.records.filter((r) => r.period === m).reduce((s, r) => s + r.n, 0); const on = n >= Math.max(500, parsed.kept * 0.1); return `<label style="display:inline-flex;gap:6px;align-items:center;margin-left:10px"><input type="checkbox" class="chg-month" value="${m}" ${on ? 'checked' : ''}> ${esc(fmtMonth(m))} <span class="muted">(${volInt(n)} lines)</span></label>`; }).join('')}</span></li>
+      <li style="display:block"><div style="margin-bottom:6px">Months in this file</div>${parsed.months.map((m) => { const n = parsed.records.filter((r) => r.period === m).reduce((s, r) => s + r.n, 0); const on = n >= Math.max(500, parsed.kept * 0.1); return `<label style="display:flex;gap:8px;align-items:center;margin:4px 0"><input type="checkbox" class="chg-month" value="${m}" data-change="chg-month" ${on ? 'checked' : ''}> <b>${esc(fmtMonth(m))}</b> <span class="muted">${volInt(n)} lines</span></label>`; }).join('')}
+        <div id="chg-plan" class="small" style="margin-top:8px"></div></li>
       <li><span>Providers matched to a physician record</span><b>${matched} of ${provs.size}</b></li>
-      ${replaced ? `<li><span>Stored provider-location-month totals replaced</span><b>${replaced}</b></li>` : ''}
       ${parsed.noProv ? `<li><span class="muted">Lines with no performing provider (facility charges), kept under "No performing provider"</span><span class="muted">${volInt(parsed.noProv)}</span></li>` : ''}
       ${parsed.skipped ? `<li><span class="muted">Lines skipped (no service date)</span><span class="muted">${volInt(parsed.skipped)}</span></li>` : ''}
       ${unmapped.length ? `<li><span class="muted">Locations not tied to a department tab</span><span class="muted">${esc(unmapped.slice(0, 6).join(', '))}${unmapped.length > 6 ? '…' : ''}</span></li>` : ''}
     </ul>
-    <p class="help" style="margin-top:12px">A month with only a few days of lines (the report's date range spilling past month end) is unticked so it does not post as a whole month. Only totals by provider, location, month and CPT are stored. Patient names and account numbers never leave this browser.</p>`;
-  openModal({ title: 'Upload provider RVU report — review before saving', body, submitLabel: `Save ${parsed.months.map(fmtMonth).join(', ')}`, onSubmit: () => { const months = [...document.querySelectorAll('.chg-month:checked')].map((x) => x.value); if (!months.length) { toast('Tick at least one month.', 'err'); return false; } applyChargesImport({ ...parsed, months, records: parsed.records.filter((r) => months.includes(r.period)) }); return true; } });
+    <p class="help" style="margin-top:12px">Tick the month the report was run for. A ticked month replaces what is stored for it, so re-running a month is safe. Unticked months are the report's spill-over: charges dated just before or after the month on visits that belong to it, such as an inpatient stay crossing month end. They are added to those months without touching anything already stored there, and re-uploading this file replaces only its own spill-over. Only totals by provider, location, month and CPT are stored. Patient names and account numbers never leave this browser.</p>`;
+  ui.bl._pending = parsed;
+  openModal({ title: 'Upload provider RVU report — review before saving', body, submitLabel: 'Save', onSubmit: () => { const months = [...document.querySelectorAll('.chg-month:checked')].map((x) => x.value); if (!months.length) { toast('Tick the month this report was run for.', 'err'); return false; } applyChargesImport(parsed, months); ui.bl._pending = null; return true; } });
+  chgPlanUpdate();
 }
-function applyChargesImport(parsed) {
-  const fileMonths = new Set(parsed.months), meta = chgMeta() || { id: 'meta', months: {}, descs: {} };
-  const keep = chgRecords().filter((r) => !fileMonths.has(r.period));
-  const recs = parsed.records.map((r) => { const p = chgMatchPhysician(r.provider); return { ...r, physicianId: p ? p.id : '' }; });
-  meta.months = meta.months || {}; parsed.months.forEach((m) => { meta.months[m] = parsed.source; });
+/* What saving would do with the months ticked now: main months replace, the rest are added as this file's spill-over. */
+function chgPlan(parsed, mainMonths) {
+  const main = new Set(mainMonths), src = [...main].sort().join('+');
+  const existing = chgRecords();
+  const replaced = existing.filter((r) => (!r.src && main.has(r.period)) || (src && r.src === src));
+  const spill = parsed.months.filter((m) => !main.has(m));
+  return { main, src, replaced, spill, lines: (m) => parsed.records.filter((r) => r.period === m).reduce((s, r) => s + r.n, 0) };
+}
+function chgPlanUpdate() {
+  const parsed = ui.bl._pending, el = $('#chg-plan'); if (!parsed || !el) return;
+  const months = [...document.querySelectorAll('.chg-month:checked')].map((x) => x.value), pl = chgPlan(parsed, months);
+  const stored = (m) => chgRecords().some((r) => r.period === m && !r.src);
+  el.innerHTML = !months.length ? '<span style="color:var(--red)">Tick the month this report was run for.</span>'
+    : [...[...pl.main].map((m) => { const have = chgRecords().filter((r) => r.period === m && !r.src).reduce((s, r) => s + r.n, 0), n = pl.lines(m); return have && n < have * 0.5 ? `<div style="color:var(--red)">⚠ <b>${esc(fmtMonth(m))}</b>: replaces the stored ${volInt(have)} lines with only ${volInt(n)}. Untick it unless this report really is ${esc(fmtMonth(m))}.</div>` : `<div>✔ <b>${esc(fmtMonth(m))}</b>: ${stored(m) ? 'replaces the stored month' : 'saved as a new month'}.</div>`; }),
+       ...pl.spill.map((m) => `<div>+ <b>${esc(fmtMonth(m))}</b>: ${volInt(pl.lines(m))} late or early lines added; ${stored(m) ? `the stored ${esc(fmtMonth(m))} is kept` : `${esc(fmtMonth(m))} itself is not loaded yet`}.</div>`)].join('');
+  const btn = $('#modal-root [data-act=modal-submit]'); if (btn) btn.textContent = months.length ? `Save ${months.map(fmtMonth).join(', ')}` : 'Save';
+}
+function applyChargesImport(parsed, mainMonths) {
+  mainMonths = mainMonths || parsed.months;
+  const pl = chgPlan(parsed, mainMonths), meta = chgMeta() || { id: 'meta', months: {}, descs: {} };
+  const drop = new Set(pl.replaced.map((r) => r.id)), fileMonths = new Set(parsed.months);
+  /* a DocDock data file is a full copy of those months, spill-over included, so it replaces them outright */
+  const keep = chgRecords().filter((r) => (parsed.isFile ? !fileMonths.has(r.period) : !drop.has(r.id)));
+  const recs = parsed.records.map((r) => { const p = chgMatchPhysician(r.provider); const isMain = parsed.isFile || pl.main.has(r.period); return { ...r, ...(isMain ? {} : { src: pl.src, id: r.id + '_s' + pl.src.replace(/[^0-9]/g, '') }), physicianId: p ? p.id : '' }; });
+  meta.months = meta.months || {}; [...pl.main].forEach((m) => { meta.months[m] = parsed.source; });
   meta.descs = Object.assign({}, meta.descs || {}, parsed.descs || {});
   meta.asOf = [meta.asOf || '', parsed.asOf || ''].sort().pop(); meta.importedAt = nowISO(); meta.importedBy = session.name;
   db.charges = [meta, ...keep, ...recs];
-  saveDB(); toast(`Provider billing saved — ${recs.length} provider-location-month totals`);
+  saveDB(); toast(`Provider billing saved — ${[...pl.main].map(fmtMonth).join(', ')}${pl.spill.length ? ` plus late charges for ${pl.spill.map(fmtMonth).join(', ')}` : ''}`);
   if (!location.hash.startsWith('#/reports/billing') && !location.hash.startsWith('#/reports/clinics')) location.hash = '#/reports/billing'; else rerender();
 }
 function exportCharges() {
@@ -5235,6 +5257,7 @@ document.addEventListener('change', (e) => {
     case 'tidy-from': ui.tidy.from = t.value; break;
     case 'tidy-into': ui.tidy.into = t.value; break;
     case 'im-rank': ui.im.rank = t.value; rerender(); break;
+    case 'chg-month': { chgPlanUpdate(); break; }
     case 'bl-month': { ui.bl.month = t.value; ui.bl.showAll = false; rerender(); break; }
     case 'idle-minutes': { const v = Math.min(1440, Math.max(15, Math.round(num(t.value)) || 240)); db.settings.idleMinutes = v; t.value = v; saveDB(); toast('Saved'); rerender(); break; }
     case 'risk-days': { const v = Math.max(1, Math.round(num(t.value)) || 14); db.settings.riskDays = v; t.value = v; saveDB(); toast('Saved'); updateNavCount(); break; }
