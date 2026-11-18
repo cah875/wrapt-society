@@ -93,12 +93,28 @@ expense mix and fixed vs variable cost, shows the statement by month (actual, bu
 GL drill-down) and has a what-if panel: change revenue per visit, variable cost per visit, fixed cost or clinic days
 and see the break-even volume and gap recalculate. Everyone with a login can open it.
 
+Each department page also has: a **key** defining every term in plain language; **Why the result is what it is**
+(the gap to budget or prior year split into visits, revenue per visit and each expense category); **Fixed and variable
+cost** worked out both ways, since provider pay is the largest cost in a clinic and behaves differently from supplies
+(the finance statement counts physician, NP and PA salaries as variable; "Providers on salary" counts them as fixed,
+which is the right view when existing providers have open slots); **Visit coding and what it is worth** (office-visit
+levels by provider against all NWSH clinics, and what moving visits from one level to another adds in revenue and
+takes off break-even, valued at the Medicare fee schedule carried in Meditech); and a **purpose note** anyone can
+edit, for departments that run at a loss on purpose.
+
 **Reports → Provider billing** — upload the Meditech *Performing Provider RVU* report (.txt), one month at a time.
-Only totals by performing provider, visit location, month and CPT are stored (encounters, units, work RVUs, charges,
-payments); patient names and account numbers never leave the browser. Filter by location, provider and month; see
+The month the report was run for replaces what is stored; charges dated just outside it (stays that cross month end)
+are added to their own months without replacing anything. Only totals by performing provider, visit location, month
+and CPT/HCPCS code are stored (encounters, units, work RVUs, charges, and payments by provider, since Meditech posts
+payments to the account, not to a code); patient names and account numbers never leave the browser. Filter by location, provider and month; see
 E/M level mix, wRVU per encounter, collections and every code billed. Locations are tied to their department tab,
 so a department's financial page also shows billing by provider, and a matched physician's page gets a
 "Billing & RVUs" card.
+
+**Imaging referrals** leave cancelled orders out of every count. Meditech files C-arm time during pain injections
+and surgery under Interventional Radiology ("IR Fluoroscopy <1hr / >1hr"); DocDock moves those lines to their own
+"Procedure Fluoroscopy" group, switched off unless turned on, so Interventional Radiology shows real IR referrals
+(arthrograms, myelograms, lines and ports). Re-upload the imaging export once for this to apply to stored months.
 
 **Searchable pickers** — the surgeon and referring-provider boxes on the reports filter as you type; arrow keys
 and Enter pick, the × clears. The surgical volume report can be scoped to a whole specialty ("All Orthopedics")

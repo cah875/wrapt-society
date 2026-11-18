@@ -190,6 +190,7 @@
   tbody tr:hover { background: var(--surface-2); }
   tr.clickable { cursor: pointer; }
   td.num, th.num { text-align: right; font-variant-numeric: tabular-nums; }
+  td.num { white-space: nowrap; }
   td .primary-text { font-weight: 700; font-size: 16px; }
   td .sub { color: var(--muted); font-size: 14px; }
   .count-line { color: var(--muted); font-size: 14px; margin: 10px 0 0; }
@@ -225,9 +226,24 @@
   .bulk-bar { display: flex; gap: 10px; align-items: center; flex-wrap: wrap; background: var(--surface-2); border: 1px solid var(--border); border-radius: 10px; padding: 8px 12px; margin: 0 0 12px; font-size: 14px; }
   .bulk-bar select { width: auto; min-width: 170px; }
   table.breakdown { margin-bottom: 4px; }
+  .pl-wrap { overflow-x: auto; border: 1px solid var(--border); border-radius: 8px; }
+  table.pl { font-size: 14px; margin: 0; }
+  table.pl td, table.pl th { padding: 6px 9px; }
+  table.pl tbody tr:last-child td { border-bottom: 0; }
+  table.pl th:first-child, table.pl td:first-child { position: sticky; left: 0; z-index: 1; background: var(--surface); min-width: 215px; white-space: nowrap; box-shadow: 1px 0 0 var(--border); }
+  table.pl th:last-child, table.pl td:last-child { position: sticky; right: 0; z-index: 1; background: var(--surface); box-shadow: -1px 0 0 var(--border); }
+  table.pl thead th:first-child, table.pl thead th:last-child { background: var(--surface-2); }
+  table.pl tbody tr:hover td { background: var(--surface-2); }
+  table.pl tr.sub-row td { color: var(--muted); font-size: 13.5px; }
   table.pl tr.total-row td { font-weight: 700; border-top: 2px solid var(--border); background: var(--surface-2); }
-  table.pl tr.sub-row td { color: var(--muted); font-size: 14px; }
-  table.pl td:first-child { white-space: nowrap; }
+  table.breakdown tr.total-row td { font-weight: 700; border-top: 2px solid var(--border); background: var(--surface-2); }
+  table.bill td:first-child { min-width: 170px; max-width: 260px; }
+  table.bill td:first-child b { white-space: nowrap; }
+  table.tight td, table.tight th { padding: 7px 7px; }
+  .fbar > label > span:first-child { display: block; margin-bottom: 5px; font-size: 13px; font-weight: 700; color: var(--muted); }
+  .fbar .chips { margin: 0; min-height: 42px; }
+  .cgrid > .card { margin: 0; }
+  details > summary { list-style-position: inside; }
   table.breakdown td, table.breakdown th { padding: 7px 10px; }
   table.breakdown tr.clickable:hover td { background: var(--surface-2); }
   td.red { color: var(--red); font-weight: 700; }
@@ -335,6 +351,7 @@
   .modal-backdrop { position: fixed; inset: 0; background: rgba(30, 40, 30, .55); z-index: 50; display: grid; place-items: start center; overflow-y: auto; padding: 40px 16px; }
   .modal { background: var(--surface); border-radius: 12px; width: 100%; max-width: 780px; box-shadow: 0 20px 60px rgba(0,0,0,.3); border-top: 6px solid var(--green); }
   .modal.narrow { max-width: 520px; }
+  .modal.wide { max-width: 1040px; }
   .modal header { display: flex; justify-content: space-between; align-items: center; padding: 16px 22px; border-bottom: 1px solid var(--border); gap: 12px; }
   .modal header h2 { margin: 0; font-size: 20px; }
   .modal .x { border: 0; background: none; cursor: pointer; color: var(--muted); padding: 6px; border-radius: 6px; }
@@ -1187,7 +1204,7 @@ const ui = {
   act: { q: '', who: '', method: '', from: '', to: '' },
   sx: { vol: '', metric: 'cases', smooth: 4, rooms: {} },
   im: { id: '', period: '6', mods: {}, sites: {}, showAll: false, rank: '' },
-  fin: { group: 'clinic', period: 'ytd', sort: 'ebitda', dir: 1, pl: 'cy', open: {}, what: {}, showHosp: false },
+  fin: { group: 'clinic', period: 'ytd', sort: 'ebitda', dir: 1, pl: 'cy', open: {}, what: {}, showHosp: false, cost: 'finance', cmp: 'bu', code: {} },
   bl: { loc: '', prov: '', month: '', sort: 'w', dir: -1, showAll: false },
   tidy: { field: 'specialty', from: '', into: '' },
   year: new Date().getFullYear(),
@@ -3075,13 +3092,13 @@ function stageFormHTML(p) {
 }
 
 /* ===================== Modal ===================== */
-function openModal({ title, body, submitLabel, onSubmit, narrow, danger }) {
+function openModal({ title, body, submitLabel, onSubmit, narrow, danger, wide }) {
   const root = $('#modal-root');
   root.innerHTML = `<div class="modal-backdrop" data-act="modal-bg">
-    <div class="modal ${narrow ? 'narrow' : ''}" role="dialog" aria-modal="true" aria-label="${esc(title)}">
+    <div class="modal ${narrow ? 'narrow' : wide ? 'wide' : ''}" role="dialog" aria-modal="true" aria-label="${esc(title)}">
       <header><h2>${esc(title)}</h2><button class="x" type="button" data-act="close-modal" aria-label="Close">${ico('i-x')}</button></header>
       <div class="content">${body}</div>
-      <footer><button class="btn" type="button" data-act="close-modal">Cancel</button>${onSubmit ? `<button class="btn ${danger ? 'danger' : 'primary'}" type="button" data-act="modal-submit">${esc(submitLabel || 'Save')}</button>` : ''}</footer>
+      <footer><button class="btn" type="button" data-act="close-modal">${onSubmit ? 'Cancel' : 'Close'}</button>${onSubmit ? `<button class="btn ${danger ? 'danger' : 'primary'}" type="button" data-act="modal-submit">${esc(submitLabel || 'Save')}</button>` : ''}</footer>
     </div></div>`;
   root._onSubmit = onSubmit;
   const first = root.querySelector('input:not([type=radio]):not([type=hidden]), select, textarea');
@@ -3773,10 +3790,16 @@ function exportVolumes() {
    p = "YYYY-MM", m = modality, s = facility, n = exams ordered, r = resulted (report signed), c = cancelled.
    One extra record with id "meta" keeps the date range and the source of each month.
    Built from the Meditech imaging export; patient columns are dropped on the spot, only counts are stored. */
-const IMG_MODS = ['X-Ray', 'MRI', 'CT Scan', 'Ultrasound', 'Interventional Radiology', 'Mammography', 'DEXA', 'Fluoroscopy', 'Other'];
-const IMG_COLORS = { 'X-Ray': '#2a78d6', 'MRI': '#eb6834', 'CT Scan': '#1baf7a', 'Ultrasound': '#eda100', 'Interventional Radiology': '#e87ba4', 'Mammography': '#008300', 'DEXA': '#6250d6', 'Fluoroscopy': '#e34948', 'Other': '#898781' };
+const IMG_MODS = ['X-Ray', 'MRI', 'CT Scan', 'Ultrasound', 'Interventional Radiology', 'Mammography', 'DEXA', 'Fluoroscopy', 'Procedure Fluoroscopy', 'Other'];
+const IMG_COLORS = { 'X-Ray': '#2a78d6', 'MRI': '#eb6834', 'CT Scan': '#1baf7a', 'Ultrasound': '#eda100', 'Interventional Radiology': '#e87ba4', 'Mammography': '#008300', 'DEXA': '#6250d6', 'Fluoroscopy': '#e34948', 'Procedure Fluoroscopy': '#49b3c9', 'Other': '#898781' };
+/* C-arm time logged during pain injections and surgery. Meditech files it under Interventional Radiology, but it is not an imaging referral, so it is its own group and off unless switched on. */
+const IMG_GUIDE = 'Procedure Fluoroscopy';
+function imgIsGuidance(category, procedure) { return /interv/i.test(String(category || '')) && /^\s*IR\s+(fluoro|US guide)/i.test(String(procedure || '')); }
+function imgModOn(m) { const v = ui.im.mods[m]; return v === undefined ? m !== IMG_GUIDE : v !== false; }
+/* Exams that count: cancelled orders are left out everywhere. */
+function imgN(e) { return Math.max(0, num(e.n) - num(e.c)); }
 const IMG_CRED = /^(MD|DO|PA-?C?|NP|FNP(-C|-BC)?|ARNP|APRN|CRNA|DC|DPM|DDS|DMD|PHD|OD|PT|DPT|CNM|MPAS|RN|DNP(-C)?|ANP|PMHNP|ACNP|NP-C|CNP|LPN|MSN|BSN|MBBS|FACS|FACC|FAAP|CPNP|CCC-SLP)$/i;
-function imgModality(c) { const t = String(c || '').trim(); const hit = IMG_MODS.find((m) => m.toLowerCase() === t.toLowerCase()); if (hit) return hit; const l = t.toLowerCase(); return /x-?ray|xr\b/.test(l) ? 'X-Ray' : /mri|magnetic/.test(l) ? 'MRI' : /\bct\b/.test(l) ? 'CT Scan' : /ultra|sono/.test(l) ? 'Ultrasound' : /interv/.test(l) ? 'Interventional Radiology' : /mammo/.test(l) ? 'Mammography' : /dexa|bone dens/.test(l) ? 'DEXA' : /fluoro/.test(l) ? 'Fluoroscopy' : 'Other'; }
+function imgModality(c) { const t = String(c || '').trim(); const hit = IMG_MODS.find((m) => m.toLowerCase() === t.toLowerCase()); if (hit) return hit; const l = t.toLowerCase(); return /x-?ray|xr\b/.test(l) ? 'X-Ray' : /mri|magnetic/.test(l) ? 'MRI' : /\bct\b/.test(l) ? 'CT Scan' : /ultra|sono/.test(l) ? 'Ultrasound' : /procedure fluoro/.test(l) ? 'Procedure Fluoroscopy' : /interv/.test(l) ? 'Interventional Radiology' : /mammo/.test(l) ? 'Mammography' : /dexa|bone dens/.test(l) ? 'DEXA' : /fluoro/.test(l) ? 'Fluoroscopy' : 'Other'; }
 function imgSite(s) { const t = String(s || '').trim(), l = t.toLowerCase(); if (l.startsWith('northwest specialty')) return 'Hospital'; if (/axis/.test(l)) return 'Axis Spine Center'; if (/breast/.test(l)) return 'Breast Imaging Center'; if (/urgent/.test(l)) return 'Urgent Care'; return (t.length === 25 && /\sCente$/.test(t) ? t + 'r' : t) || 'Other'; }
 /* Names arrive as "First M Last, MD" or "Last,First DO". Returns first, last, credentials and a display form. */
 function imgNameParts(raw) {
@@ -3800,7 +3823,7 @@ function imgForPhysician(p) { return imgRecords().find((r) => r.physicianId === 
 let _imgBy = null, _imgByGen = -1;
 function imgByPhysician() {
   if (_imgBy && _imgByGen === refGen) return _imgBy;
-  const m = new Map(); imgRecords().forEach((r) => { if (r.physicianId) m.set(r.physicianId, (m.get(r.physicianId) || 0) + r.series.reduce((a, e) => a + num(e.n), 0)); });
+  const m = new Map(); imgRecords().forEach((r) => { if (r.physicianId) m.set(r.physicianId, (m.get(r.physicianId) || 0) + r.series.reduce((a, e) => a + (e.m === IMG_GUIDE ? 0 : imgN(e)), 0)); });
   _imgBy = m; _imgByGen = refGen; return m;
 }
 function imgMonths() { const meta = imgMeta(), cap = meta && meta.asOf ? meta.asOf.slice(0, 7) : ''; const set = new Set(); imgRecords().forEach((r) => r.series.forEach((e) => { if (!cap || e.p <= cap) set.add(e.p); })); return [...set].sort(); }
@@ -3815,12 +3838,12 @@ function imgPeriod(preset) {
 }
 /* " (Nov partial)" when the latest month loaded does not run to its last day. */
 function imgPartialNote() { const meta = imgMeta(); if (!meta || !meta.asOf) return ''; const d = new Date(meta.asOf + 'T00:00:00'); const last = new Date(d.getFullYear(), d.getMonth() + 1, 0).getDate(); return d.getDate() < last ? ` (${fmtMonth(meta.asOf.slice(0, 7))} partial, through the ${d.getDate()}${['th', 'st', 'nd', 'rd'][(d.getDate() % 10 > 3 || Math.floor(d.getDate() % 100 / 10) === 1) ? 0 : d.getDate() % 10]})` : ''; }
-function imgFilterOn(e) { const f = ui.im; return f.mods[e.m] !== false && f.sites[e.s] !== false; }
+function imgFilterOn(e) { const f = ui.im; return imgModOn(e.m) && f.sites[e.s] !== false; }
 /* Sums for a set of records over a set of months, honoring the modality and site chips. */
 function imgSum(recs, months) {
   const set = new Set(months); const out = { n: 0, r: 0, c: 0, byMod: {}, bySite: {}, byMonth: {}, refs: new Set() };
   months.forEach((m) => { out.byMonth[m] = { n: 0, r: 0, c: 0, mods: {} }; });
-  recs.forEach((rec) => rec.series.forEach((e) => { if (!set.has(e.p) || !imgFilterOn(e)) return; const n = num(e.n); out.n += n; out.r += num(e.r); out.c += num(e.c); out.byMod[e.m] = (out.byMod[e.m] || 0) + n; out.bySite[e.s] = (out.bySite[e.s] || 0) + n; const bm = out.byMonth[e.p]; bm.n += n; bm.r += num(e.r); bm.c += num(e.c); bm.mods[e.m] = (bm.mods[e.m] || 0) + n; if (n) out.refs.add(rec.id); }));
+  recs.forEach((rec) => rec.series.forEach((e) => { if (!set.has(e.p) || !imgFilterOn(e)) return; const n = imgN(e), r = Math.min(n, num(e.r)); out.n += n; out.r += r; out.byMod[e.m] = (out.byMod[e.m] || 0) + n; out.bySite[e.s] = (out.bySite[e.s] || 0) + n; const bm = out.byMonth[e.p]; bm.n += n; bm.r += r; bm.mods[e.m] = (bm.mods[e.m] || 0) + n; if (n) out.refs.add(rec.id); }));
   return out;
 }
 function imgPctText(n, d) { return d ? `${Math.round((n / d) * 1000) / 10}%` : '—'; }
@@ -4002,18 +4025,33 @@ function finPeriod(rec, key) {
 }
 function finSum(rec, k, which, months) { const l = finLine(rec, k); if (!l) return null; const a = l[which]; if (!a) return null; let s = 0, any = false; months.forEach((i) => { if (a[i] !== null && a[i] !== undefined) { s += a[i]; any = true; } }); return any ? s : null; }
 /* The numbers a manager needs for one department over a period, for actual (cy), budget (bu) or prior year (py). */
-function finCalc(rec, months, which) {
-  const g = (k) => finSum(rec, k, which, months);
+/* How the finance statement splits cost: provider pay and per-visit supplies are "variable", everything else "fixed".
+   (FIXED COST = total expenses − physician, NP and PA salaries − supplies, implants, drugs, anesthesia, gases, lab, clinical supplies, professional fees.) */
+const FIN_PROVIDER_GL = ['a:0502800000', 'a:0501700000', 'a:0501800000'];
+const FIN_SUPPLY_GROUPS = ['MEDICAL SUPPLIES', 'INPATIENT IMPLANTS', 'PHARMACEUTICALS', 'ANESTHESIA', 'GENERAL SUPPLIES', 'GASES', 'LABORATORY', 'OUTPATIENT IMPLANTS', 'CLINICAL SUPPLIES SYSTEM', 'PROFESSIONAL FEES'].map((g) => 'g:' + g);
+const FIN_COST_MODES = [['finance', 'Finance statement'], ['salaried', 'Providers on salary']];
+function finCostMode() { return ui.fin.cost === 'salaried' ? 'salaried' : 'finance'; }
+/* The numbers a manager needs for one department over a period, for actual (cy), budget (bu) or prior year (py).
+   Cost is split three ways (provider pay, per-visit supplies, staff and overhead) and break-even is worked out both ways:
+   "finance" counts provider pay as rising with visits, "salaried" counts it as fixed. */
+function finCalc(rec, months, which, mode) {
+  mode = mode || finCostMode();
+  const g = (k) => finSum(rec, k, which, months), z = (k) => g(k) || 0;
   const vis = g('vis'), netRev = g('netRev') ?? g('npr'), totExp = g('totExp'), ebitda = g('ebitda') ?? (netRev !== null && totExp !== null ? netRev - totExp : null);
-  let fixed = g('fixed'), varCost = g('varCost');
-  if (fixed === null && varCost !== null && totExp !== null) fixed = totExp - varCost;
-  if (varCost === null && fixed !== null && totExp !== null) varCost = totExp - fixed;
-  const npr = g('npr') ?? netRev;
-  const revUnit = vis ? npr / vis : null, expUnit = vis ? totExp / vis : null, varUnit = vis && varCost !== null ? varCost / vis : null, marginUnit = vis && netRev !== null && totExp !== null ? (netRev - totExp) / vis : null;
-  const contrib = revUnit !== null && varUnit !== null ? revUnit - varUnit : null;
-  const breakEven = contrib && contrib > 0 && fixed !== null ? fixed / contrib : null;
-  const n = Math.max(1, months.length);
-  return { vis, netRev, totExp, ebitda, fixed, varCost, revUnit, expUnit, varUnit, marginUnit, contrib, breakEven, visMo: vis !== null ? vis / n : null, beMo: breakEven !== null ? breakEven / n : null, fixedMo: fixed !== null ? fixed / n : null, coverage: breakEven ? vis / breakEven : null, hours: g('hoursTotal'), hoursProd: g('hoursProd'), ot: g('hoursOT'), pto: g('hoursPTO'), gross: g('grossRev'), allow: g('allow'), sb: g('g:SALARY & BENEFITS'), n };
+  const npr = g('npr') ?? netRev, n = Math.max(1, months.length);
+  const provPay = totExp === null ? null : FIN_PROVIDER_GL.reduce((s, k) => s + z(k), 0);
+  const supplies = totExp === null ? null : FIN_SUPPLY_GROUPS.reduce((s, k) => s + z(k), 0);
+  const overhead = totExp === null ? null : totExp - provPay - supplies;
+  const revUnit = vis ? npr / vis : null, expUnit = vis && totExp !== null ? totExp / vis : null, marginUnit = vis && netRev !== null && totExp !== null ? (netRev - totExp) / vis : null;
+  const be = (m) => {
+    if (totExp === null) return { fixed: null, varCost: null, varUnit: null, contrib: null, breakEven: null, beMo: null, fixedMo: null, coverage: null };
+    const varCost = m === 'salaried' ? supplies : provPay + supplies, fixed = totExp - varCost;
+    const varUnit = vis ? varCost / vis : null, contrib = revUnit !== null && varUnit !== null ? revUnit - varUnit : null;
+    const breakEven = contrib && contrib > 0 ? fixed / contrib : null;
+    return { fixed, varCost, varUnit, contrib, breakEven, beMo: breakEven !== null ? breakEven / n : null, fixedMo: fixed / n, coverage: breakEven ? vis / breakEven : null };
+  };
+  const byMode = { finance: be('finance'), salaried: be('salaried') };
+  return { vis, netRev, npr, totExp, ebitda, provPay, supplies, overhead, revUnit, expUnit, marginUnit, visMo: vis !== null ? vis / n : null, hours: g('hoursTotal'), hoursProd: g('hoursProd'), ot: g('hoursOT'), pto: g('hoursPTO'), gross: g('grossRev'), allow: g('allow'), sb: g('g:SALARY & BENEFITS'), n, mode, byMode, ...byMode[mode] };
 }
 function finExpGroups(rec) { return rec.lines.filter((l) => l.s === 'exp' && l.k.startsWith('g:')); }
 function finGL(rec, groupKey) { return rec.lines.filter((l) => l.s === 'gl' && l.g === groupKey); }
@@ -4102,21 +4140,20 @@ function viewFinOverview(recs, actions) {
     { l: 'Statement month', v: `${VOL_MONTHS[Math.max(0, meta.asOfMonth - 1)]} ${meta.year}`, c: `uploaded ${fmtTS(meta.importedAt)}` },
   ];
   const th = (k, l, cls) => `<th class="${cls || ''}" data-act="fin-sort" data-k="${k}" style="cursor:pointer;white-space:nowrap">${l}${sortKey === k ? (dir > 0 ? ' ▲' : ' ▼') : ''}</th>`;
-  const table = `<div class="table-wrap"><table class="breakdown">
-      <thead><tr>${th('name', 'Department')}${th('vis', unitWord[0].toUpperCase() + unitWord.slice(1), 'num')}${th('netRev', 'Net revenue', 'num')}${th('revUnit', 'Rev / ' + u1, 'num')}${th('expUnit', 'Cost / ' + u1, 'num')}${th('marginUnit', 'Margin / ' + u1, 'num')}${th('ebitda', 'EBITDA', 'num')}${th('vb', 'vs budget', 'num')}${th('vp', 'vs ' + meta.py, 'num')}${th('coverage', 'Break-even', 'num')}</tr></thead>
+  const table = `<div class="table-wrap"><table class="breakdown tight">
+      <thead><tr>${th('name', 'Department')}${th('vis', unitWord[0].toUpperCase() + unitWord.slice(1), 'num')}${th('netRev', 'Net revenue', 'num')}${th('revUnit', 'Rev/' + u1, 'num')}${th('expUnit', 'Cost/' + u1, 'num')}${th('marginUnit', 'Margin/' + u1, 'num')}${th('ebitda', 'EBITDA', 'num')}${th('vb', 'vs budget', 'num')}${th('coverage', 'Break-even', 'num')}</tr></thead>
       <tbody>${rows.map(({ r, a, b, p }) => `<tr>
-        <td><a href="#/reports/clinics/${encodeURIComponent(r.code)}"><b>${esc(r.label)}</b></a><div class="sub">${esc(r.code)} · ${esc(r.name)}</div></td>
+        <td><a href="#/reports/clinics/${encodeURIComponent(r.code)}"><b>${esc(r.label)}</b></a><div class="sub">${esc(r.code)} · ${esc(r.name)}${finNote(r.code) && finNote(r.code).role ? ` · <span class="tag">${esc(finNote(r.code).role)}</span>` : ''}</div></td>
         <td class="num">${a.vis === null ? '—' : volInt(a.vis)}${b.vis ? `<div class="sub">${finPctText(finPct(a.vis, b.vis))} of budget</div>` : ''}</td>
         <td class="num">${finMoney(a.netRev)}</td>
         <td class="num">${finMoney(a.revUnit)}</td>
         <td class="num">${finMoney(a.expUnit)}${a.varUnit !== null ? `<div class="sub">${finMoney(a.varUnit)} variable</div>` : ''}</td>
         <td class="num ${volCls(a.marginUnit)}">${finMoney(a.marginUnit)}</td>
         <td class="num ${volCls(a.ebitda)}"><b>${finMoney(a.ebitda)}</b>${a.netRev ? `<div class="sub">${finPctText(finPct(a.ebitda, a.netRev))} of revenue</div>` : ''}</td>
-        <td class="num ${volCls((a.ebitda ?? 0) - (b.ebitda ?? 0))}">${b.ebitda === null ? '—' : volSigned((a.ebitda ?? 0) - b.ebitda, finMoney)}</td>
-        <td class="num ${volCls((a.ebitda ?? 0) - (p.ebitda ?? 0))}">${p.ebitda === null ? '—' : volSigned((a.ebitda ?? 0) - p.ebitda, finMoney)}</td>
-        <td class="num">${a.beMo === null ? '—' : `<b class="${a.coverage >= 1 ? 'vol-up' : 'vol-down'}">${Math.round(a.coverage * 100)}%</b><div class="sub">${volInt(a.visMo)} of ${volInt(a.beMo)} / mo</div>`}</td>
+        <td class="num"><span class="${volCls((a.ebitda ?? 0) - (b.ebitda ?? 0))}">${b.ebitda === null ? '—' : volSigned((a.ebitda ?? 0) - b.ebitda, finMoney)}</span>${p.ebitda === null ? '' : `<div class="sub"><span class="${volCls((a.ebitda ?? 0) - p.ebitda)}">${volSigned((a.ebitda ?? 0) - p.ebitda, finShort)}</span> vs ${meta.py}</div>`}</td>
+        <td class="num">${a.beMo === null ? '—' : `<b class="${a.coverage >= 1 ? 'vol-up' : 'vol-down'}">${Math.round(a.coverage * 100)}%</b><div class="sub">${volInt(a.visMo)} of ${volInt(a.beMo)}</div>`}</td>
       </tr>`).join('')}</tbody>
-      <tfoot><tr><td><b>Total</b></td><td class="num"><b>${volInt(tot.vis)}</b></td><td class="num"><b>${finMoney(tot.netRev)}</b></td><td class="num">${tot.vis ? finMoney(tot.netRev / tot.vis) : '—'}</td><td class="num">${tot.vis ? finMoney(tot.totExp / tot.vis) : '—'}</td><td class="num ${volCls(tot.netRev - tot.totExp)}">${tot.vis ? finMoney((tot.netRev - tot.totExp) / tot.vis) : '—'}</td><td class="num ${volCls(tot.ebitda)}"><b>${finMoney(tot.ebitda)}</b></td><td class="num ${volCls(tot.ebitda - tot.bu)}">${volSigned(tot.ebitda - tot.bu, finMoney)}</td><td class="num ${volCls(tot.ebitda - tot.py)}">${volSigned(tot.ebitda - tot.py, finMoney)}</td><td></td></tr></tfoot>
+      <tfoot><tr><td><b>Total</b></td><td class="num"><b>${volInt(tot.vis)}</b></td><td class="num"><b>${finMoney(tot.netRev)}</b></td><td class="num">${tot.vis ? finMoney(tot.netRev / tot.vis) : '—'}</td><td class="num">${tot.vis ? finMoney(tot.totExp / tot.vis) : '—'}</td><td class="num ${volCls(tot.netRev - tot.totExp)}">${tot.vis ? finMoney((tot.netRev - tot.totExp) / tot.vis) : '—'}</td><td class="num ${volCls(tot.ebitda)}"><b>${finMoney(tot.ebitda)}</b></td><td class="num"><span class="${volCls(tot.ebitda - tot.bu)}">${volSigned(tot.ebitda - tot.bu, finMoney)}</span><div class="sub"><span class="${volCls(tot.ebitda - tot.py)}">${volSigned(tot.ebitda - tot.py, finShort)}</span> vs ${meta.py}</div></td><td></td></tr></tfoot>
     </table></div>`;
   const ebRows = rows.slice().sort((x, y) => (x.a.ebitda ?? 0) - (y.a.ebitda ?? 0));
   const ebChart = imgHBarSVG(ebRows.map((x) => ({ label: x.r.label, v: Math.round(x.a.ebitda || 0), color: (x.a.ebitda || 0) < 0 ? '#e34948' : '#1baf7a' })), '#1baf7a', 'EBITDA by department');
@@ -4124,78 +4161,145 @@ function viewFinOverview(recs, actions) {
   const beChart = imgHBarSVG(beRows.map((x) => ({ label: x.r.label, v: Math.round(x.a.coverage * 100), color: x.a.coverage >= 1 ? '#1baf7a' : x.a.coverage >= 0.8 ? '#eda100' : '#e34948', sub: `${volInt(x.a.visMo)} of ${volInt(x.a.beMo)} ${unitWord} a month` })), '#2a78d6', 'Share of break-even volume reached');
   return finHead('Clinic financials', `Revenue, cost, margin and break-even by department, ${esc(perLabel)}. Click a department for the full picture.`, 'clinics', actions) + `
     <div class="card" style="margin-bottom:14px">
-      <div class="pair" style="display:flex;gap:18px;flex-wrap:wrap;align-items:flex-end">
+      <div class="pair fbar" style="display:flex;gap:14px 22px;flex-wrap:wrap;align-items:flex-end">
         <label><span>Group</span><div class="chips">${groupsPresent.map(([g, l]) => `<button class="chip ${f.group === g ? 'on' : ''}" data-act="fin-group" data-v="${g}">${esc(l)}</button>`).join('')}</div></label>
         <label><span>Period</span><div class="toggle">${FIN_PERIODS.map(([k, l]) => `<button class="${f.period === k ? 'on' : ''}" data-act="fin-period" data-v="${k}">${l}</button>`).join('')}</div></label>
+        ${finCostToggleHTML()}
         ${finDeptSelectHTML('')}
       </div>
     </div>
-    <div class="kpis" style="margin-bottom:18px">${kpis.map((k) => `<div class="kpi ${k.red ? 'red' : ''}"><div class="label">${k.l}</div><div class="value" style="font-size:24px">${k.v}</div><span class="small">${k.c || ''}</span></div>`).join('')}</div>
+    <div class="kpis" style="margin-bottom:14px">${kpis.map((k) => `<div class="kpi ${k.red ? 'red' : ''}"><div class="label">${k.l}</div><div class="value" style="font-size:24px">${k.v}</div><span class="small">${k.c || ''}</span></div>`).join('')}</div>
+    ${finGlossaryHTML('fin')}
     <section class="card">
       <div class="card-head"><h2>${esc(FIN_GROUPS.find((x) => x[0] === f.group)[1])}, ${esc(perLabel)}</h2><span class="hint">Click a column heading to sort</span></div>
       ${table}
-      <p class="help" style="margin:8px 0 0">Net revenue is net patient revenue plus other revenue after contractual allowances and bad debt. Cost per ${u1} is total expenses before interest, depreciation and allocations. Break-even is the statement's fixed cost divided by net revenue per ${u1} less variable cost per ${u1}, shown as the share of that volume actually reached.</p>
+      <p class="help" style="margin:8px 0 0">Break-even here uses the <b>${finCostMode() === 'salaried' ? 'providers on salary' : 'finance statement'}</b> method; switch it at the top to see the other. The percentage is the share of break-even volume actually reached: green at 100% or more. A department can be here on purpose even when it loses money; open it to see what it is for and what is driving the result. Definitions are in the key above.</p>
     </section>
-    <div class="grid2" style="display:grid;grid-template-columns:repeat(auto-fit,minmax(340px,1fr));gap:14px;margin-top:14px">
+    <div class="grid2" style="display:grid;grid-template-columns:repeat(auto-fit,minmax(min(440px,100%),1fr));gap:14px;margin-top:14px">
       <section class="card"><div class="card-head"><h2>EBITDA by department</h2><span class="hint">${esc(perLabel)}</span></div>${ebChart}</section>
       <section class="card"><div class="card-head"><h2>Volume reached vs break-even</h2><span class="hint">100% = covering fixed cost</span></div>${beChart}</section>
     </div>`;
 }
-function viewFinDept(rec, actions) {
-  const f = ui.fin, meta = finMeta(), per = finPeriod(rec, f.period), unit = (rec.unit || 'Units').toLowerCase(), u1 = unit.replace(/ies$/, 'y').replace(/s$/, '');
-  const a = finCalc(rec, per.months, 'cy'), b = finCalc(rec, per.months, 'bu'), p = finCalc(rec, per.months, 'py');
-  const M = VOL_MONTHS.slice(0, per.asOf), mAll = VOL_MONTHS;
-  const line = (k, which) => { const l = finLine(rec, k); return l && l[which] ? l[which].slice(0, per.asOf) : Array(per.asOf).fill(null); };
-  const line12 = (k, which) => { const l = finLine(rec, k); return l && l[which] ? l[which] : Array(12).fill(null); };
-  // what-if: defaults from the period, overrides from the user
+/* ---------- plain-language key ---------- */
+const FIN_TERMS = [
+  ['Visits', 'Patient visits counted on the operating statement for the month. Imaging counts studies instead.'],
+  ['Gross revenue (charges)', 'What was billed at list price. Almost nobody pays list price, so this is not money in the door.'],
+  ['Contractual allowances', 'The discount Medicare, Medicaid and insurers take off list price under their contracts. It is usually the biggest number on the page and is not something a clinic controls day to day.'],
+  ['Bad debt', 'Amounts billed to patients that are not expected to be collected.'],
+  ['Net patient revenue', 'What the clinic actually expects to be paid: gross revenue less allowances and bad debt. This is the revenue number that matters.'],
+  ['Total expenses', 'Everything the department spent to run: pay and benefits, supplies, drugs, purchased services, rent and other operating costs. Depreciation and interest are not included.'],
+  ['EBITDA', 'Net revenue minus expenses, before interest, taxes, depreciation and amortization. Read it as the department\'s operating profit (positive) or loss (negative).'],
+  ['Net revenue per visit', 'Net patient revenue divided by visits: what one average visit brings in.'],
+  ['Cost per visit', 'Total expenses divided by visits: what one average visit costs at today\'s volume. It falls as volume rises, because fixed costs are spread over more visits.'],
+  ['Margin per visit', 'Net revenue per visit minus cost per visit. Negative means each visit, on average, loses money at today\'s volume.'],
+  ['Provider pay', 'Salaries of physicians, nurse practitioners and physician assistants (GL 0502800000, 0501700000 and 0501800000). Their benefits sit with all other benefits.'],
+  ['Variable cost', 'Cost that goes up with each added visit. The finance statement counts provider pay plus supplies, drugs, lab, implants and professional fees as variable.'],
+  ['Fixed cost', 'Cost that stays about the same whether the clinic sees 500 visits or 700 in a month: support staff pay, benefits, rent, purchased services and other operating costs.'],
+  ['Contribution per visit', 'Net revenue per visit minus variable cost per visit: what each extra visit adds toward covering fixed cost.'],
+  ['Break-even visits', 'Fixed cost divided by contribution per visit: the monthly volume at which the department neither makes nor loses money.'],
+  ['Two break-even methods', 'In a clinic, provider pay is the largest cost and it does not behave like supplies. "Finance statement" treats it as rising with every visit, which is right when growth needs more provider time (a new hire, more sessions, production-based pay). "Providers on salary" treats it as fixed, which is right when today\'s providers have open appointment slots, so an extra visit costs only supplies. The truth is usually between the two, and the switch at the top shows both.'],
+  ['Budget and prior year', 'Budget is the plan finance set for this year. Prior year is the same months last year. Green means better than the comparison, red means worse.'],
+];
+const BILL_TERMS = [
+  ['CPT code', 'A five-character code for a service a clinician performs, for example 99213 for an office visit. Codes ending in F are quality-tracking codes with no payment.'],
+  ['HCPCS code', 'A letter followed by four digits, used by Medicare and other payers for things CPT does not cover. Common here: G0463 (the hospital\'s facility fee for a clinic visit), G2211 (add-on for ongoing, complex care) and S9088 (urgent care service fee).'],
+  ['E/M level', 'Office visits are coded by level. New patients use 99202 to 99205 and established patients 99211 to 99215. A higher level means more complex medical decision making or more time, and pays more. The level has to match what is documented in the chart.'],
+  ['Work RVU (wRVU)', 'Medicare\'s measure of the clinician work in a service. It lets you compare productivity across providers no matter who the insurer is. A 99213 is about 1.2 wRVUs and a 99214 about 1.8.'],
+  ['Medicare value', 'What Medicare\'s fee schedule pays for the code, as carried in Meditech (the report\'s "Full RVU" column). Commercial plans usually pay more and Medicaid less.'],
+  ['Encounter', 'One patient account on one date of service.'],
+  ['Charges', 'List price billed for the services, before any insurer discount.'],
+  ['Payments', 'Money posted so far to those accounts. Recent months keep collecting for weeks after the visit, so they look low at first. Payments post to the patient account, not to a single code, so they are shown by provider and location only. Hospital facility payments mostly land under "No performing provider".'],
+  ['Collected', 'Payments divided by charges. Because charges are list price, a figure of 35 to 45 percent is normal.'],
+];
+function finGlossaryHTML(which, open) {
+  const dl = (terms) => `<dl style="display:grid;grid-template-columns:minmax(150px,220px) 1fr;gap:8px 18px;margin:12px 0 0;font-size:15px;line-height:1.45">${terms.map(([t, d]) => `<dt style="font-weight:700">${esc(t)}</dt><dd style="margin:0">${esc(d)}</dd>`).join('')}</dl>`;
+  return `<details class="card no-print" style="margin-bottom:14px" ${open ? 'open' : ''}><summary style="cursor:pointer;font-weight:700;font-size:16px">Key: what these numbers mean</summary>
+      ${which !== 'billing' ? dl(FIN_TERMS) : ''}${which !== 'fin' ? `${which === 'both' ? '<h3 style="margin:18px 0 0">Billing terms</h3>' : ''}${dl(BILL_TERMS)}` : ''}
+    </details>`;
+}
+function finCostToggleHTML() { const m = finCostMode(); return `<label><span>Break-even method</span><div class="toggle">${FIN_COST_MODES.map(([k, l]) => `<button class="${m === k ? 'on' : ''}" data-act="fin-cost" data-v="${k}" title="${k === 'finance' ? 'Provider pay rises with visits, as on the finance statement' : 'Provider pay is fixed; an extra visit costs only supplies'}">${l}</button>`).join('')}</div></label>`; }
+/* ---------- what a department is for ---------- */
+const FIN_ROLES = ['Expected to cover its own costs', 'Feeds surgery, imaging or other services', 'Community access and mission', 'New or still ramping up', 'Under review'];
+function finNote(code) { return (db.settings.finNotes || {})[code] || null; }
+function finNoteLineHTML(rec) {
+  const n = finNote(rec.code);
+  return `<p style="margin:0 0 12px;font-size:15px"><span class="muted">What this department is for:</span> ${n && (n.role || n.note) ? `${n.role ? `<span class="tag">${esc(n.role)}</span> ` : ''}${n.note ? esc(n.note) : ''} <span class="muted small">(${esc(n.by || '')}${n.at ? ', ' + fmtDate(n.at.slice(0, 10)) : ''})</span>` : '<span class="muted">not written down yet.</span>'} <button class="btn sm link no-print" data-act="fin-note" data-code="${esc(rec.code)}">${n ? 'Edit' : 'Add a note'}</button></p>`;
+}
+function openFinNote(code) {
+  const rec = finDept(code); if (!rec) return; const n = finNote(code) || {};
+  openModal({ title: `What ${rec.label} is for`, narrow: true, submitLabel: 'Save', body: `<form class="form" id="fin-note-form">
+      <label><span>Role</span><select name="role"><option value="">Not set</option>${FIN_ROLES.map((r) => `<option ${n.role === r ? 'selected' : ''}>${esc(r)}</option>`).join('')}</select></label>
+      <label><span>Why the numbers are what they are <span class="help">(shown to everyone on this department's page)</span></span><textarea name="note" rows="5" placeholder="e.g. Runs at a loss on purpose: most hand and shoulder surgery cases start here. Payer mix is 60% Medicare and Medicaid.">${esc(n.note || '')}</textarea></label>
+    </form>`, onSubmit: () => { const f = $('#fin-note-form'); db.settings.finNotes = db.settings.finNotes || {}; const role = f.role.value, note = f.note.value.trim(); if (!role && !note) delete db.settings.finNotes[code]; else db.settings.finNotes[code] = { role, note, by: session.name, at: nowISO() }; saveDB(); toast('Saved'); rerender(); return true; } });
+}
+/* ---------- why the result is what it is ---------- */
+function finDriversHTML(rec, per, a, unit) {
+  const meta = finMeta(), cmp = ui.fin.cmp === 'py' ? 'py' : 'bu', c = finCalc(rec, per.months, cmp), cl = cmp === 'py' ? `${meta.py}` : 'budget', u1 = finOne(unit);
+  const toggle = `<div class="toggle">${[['bu', 'vs budget'], ['py', `vs ${meta.py}`]].map(([k, l]) => `<button class="${cmp === k ? 'on' : ''}" data-act="fin-cmp" data-v="${k}">${l}</button>`).join('')}</div>`;
+  if (a.ebitda === null || c.ebitda === null || c.netRev === null) return `<section class="card" style="margin-top:14px"><div class="card-head"><h2>Why the result is what it is</h2>${toggle}</div><p class="muted">There is no ${esc(cl)} on file for this department to compare against.</p></section>`;
+  const rows = [];
+  if (a.vis && c.vis) {
+    const rpvA = a.netRev / a.vis, rpvC = c.netRev / c.vis, dv = a.vis - c.vis;
+    rows.push({ l: `${rec.unit}`, d: `${volInt(a.vis)} against ${volInt(c.vis)}: ${dv === 0 ? 'the same' : `${volInt(Math.abs(dv))} ${dv > 0 ? 'more' : 'fewer'}`}`, v: dv * rpvC });
+    rows.push({ l: `Net revenue per ${u1}`, d: `${finMoney(rpvA)} against ${finMoney(rpvC)}`, v: (rpvA - rpvC) * a.vis });
+  } else rows.push({ l: 'Net revenue', d: `${finMoney(a.netRev)} against ${finMoney(c.netRev)}`, v: a.netRev - c.netRev });
+  const groups = finExpGroups(rec).map((g) => { const x = finSum(rec, g.k, 'cy', per.months) || 0, y = finSum(rec, g.k, cmp, per.months) || 0; const gl = finGL(rec, g.k).map((l) => ({ l: l.l, d: (finSum(rec, l.k, 'cy', per.months) || 0) - (finSum(rec, l.k, cmp, per.months) || 0) })).filter((q) => Math.abs(q.d) >= 500).sort((p, q) => Math.abs(q.d) - Math.abs(p.d)).slice(0, 3); return { l: g.l, x, y, d: x - y, gl }; }).filter((g) => Math.abs(g.d) >= 1).sort((p, q) => Math.abs(q.d) - Math.abs(p.d));
+  const top = groups.slice(0, 5), rest = groups.slice(5).reduce((s, g) => s + g.d, 0);
+  top.forEach((g) => rows.push({ l: g.l, d: `${finMoney(g.x)} against ${finMoney(g.y)}: ${g.d > 0 ? 'over' : 'under'} by ${finMoney(Math.abs(g.d))}${g.gl.length ? `<div class="sub">${g.gl.map((q) => `${esc(q.l)} ${volSigned(q.d, finShort)}`).join(' · ')}</div>` : ''}`, v: -g.d, raw: true }));
+  if (Math.abs(rest) >= 1) rows.push({ l: 'All other expenses', d: `${rest > 0 ? 'over' : 'under'} by ${finMoney(Math.abs(rest))}`, v: -rest });
+  const explained = rows.reduce((s, r) => s + r.v, 0), other = (a.ebitda - c.ebitda) - explained;
+  if (Math.abs(other) >= 1) rows.push({ l: 'Other items', d: 'not in the lines above', v: other });
+  const max = Math.max(1, ...rows.map((r) => Math.abs(r.v)));
+  const bar = (v) => `<div style="position:relative;height:14px;min-width:150px"><i style="position:absolute;left:50%;top:-3px;bottom:-3px;width:1px;background:var(--border)"></i><i style="position:absolute;top:2px;height:10px;border-radius:2px;background:${v >= 0 ? '#1baf7a' : '#e34948'};${v >= 0 ? 'left:50%' : `right:50%`};width:${(Math.abs(v) / max * 50).toFixed(1)}%"></i></div>`;
+  const help = rows.filter((r) => r.v > 0).sort((p, q) => q.v - p.v)[0], hurt = rows.filter((r) => r.v < 0).sort((p, q) => p.v - q.v)[0], d = a.ebitda - c.ebitda;
+  return `<section class="card" style="margin-top:14px">
+      <div class="card-head"><h2>Why the result is what it is</h2>${toggle}</div>
+      <p style="margin:0 0 12px;font-size:16px;line-height:1.5">EBITDA for ${esc(per.label)} is <b class="${volCls(a.ebitda)}">${finMoney(a.ebitda)}</b>, <b class="${volCls(d)}">${finMoney(Math.abs(d))} ${d >= 0 ? 'better' : 'worse'}</b> than ${esc(cl)} (${finMoney(c.ebitda)}).${hurt ? ` The biggest drag is <b>${esc(hurt.l.toLowerCase())}</b> (${volSigned(hurt.v, finShort)}).` : ''}${help ? ` The biggest help is <b>${esc(help.l.toLowerCase())}</b> (${volSigned(help.v, finShort)}).` : ''}</p>
+      <div class="table-wrap"><table class="breakdown">
+        <thead><tr><th>Driver</th><th>Actual against ${esc(cl)}</th><th class="num">Effect on EBITDA</th><th style="width:26%">Hurts ◄ ► Helps</th></tr></thead>
+        <tbody><tr><td><b>EBITDA, ${esc(cl)}</b></td><td></td><td class="num"><b>${finMoney(c.ebitda)}</b></td><td></td></tr>
+        ${rows.map((r) => `<tr><td>${esc(r.l)}</td><td>${r.raw ? r.d : esc(r.d)}</td><td class="num ${volCls(r.v)}">${volSigned(r.v, finMoney)}</td><td>${bar(r.v)}</td></tr>`).join('')}
+        <tr class="total-row"><td><b>EBITDA, actual</b></td><td></td><td class="num ${volCls(a.ebitda)}"><b>${finMoney(a.ebitda)}</b></td><td></td></tr></tbody>
+      </table></div>
+      <p class="help" style="margin:8px 0 0">Each line shows how much better or worse EBITDA is because of that one thing. ${esc(rec.unit)}: the change in volume at the ${esc(cl)} revenue per ${esc(u1)}. Net revenue per ${esc(u1)}: the change in what each ${esc(u1)} brought in (payer mix, coding, rates). Expense lines: spending over the comparison hurts, spending under it helps.</p>
+    </section>`;
+}
+/* ---------- fixed and variable cost, both ways ---------- */
+function finCostCardHTML(rec, per, a, unit) {
+  if (a.totExp === null || !a.vis) return '';
+  const u1 = finOne(unit), F = a.byMode.finance, S = a.byMode.salaried, mode = finCostMode();
+  const row = (l, sub, v, tag) => `<tr><td><b>${l}</b><div class="sub">${sub}</div></td><td class="num">${finMoney(v)}</td><td class="num">${finMoney(v / a.n)}</td><td class="num">${finMoney(v / a.vis)}</td><td class="num">${finPctText(finPct(v, a.totExp))}</td><td>${tag}</td></tr>`;
+  const tile = (k, title, m, when) => `<div class="kpi" style="${mode === k ? 'outline:2px solid var(--green);outline-offset:-2px' : ''}"><div class="label">${title}${mode === k ? ' <span class="tag">in use on this page</span>' : ''}</div>
+        <div class="value" style="font-size:24px">${m.beMo === null ? 'Not reachable' : volInt(m.beMo) + ' ' + esc(unit) + ' / month'}</div>
+        <span class="small">${m.contrib !== null ? `Each ${esc(u1)} adds <b class="${volCls(m.contrib)}">${finMoney(m.contrib)}</b> toward <b>${finShort(m.fixedMo)}</b> a month of fixed cost.` : ''} ${m.beMo !== null ? `Today: ${volInt(a.visMo)} (${Math.round(m.coverage * 100)}%).` : `Each ${esc(u1)} costs more in variable cost than it brings in.`}</span>
+        <p class="help" style="margin:8px 0 0">${when}</p></div>`;
+  return `<section class="card" style="margin-top:14px">
+      <div class="card-head"><h2>Fixed and variable cost</h2><span class="hint">${esc(per.label)}</span></div>
+      <div class="table-wrap"><table class="breakdown">
+        <thead><tr><th>Where the money goes</th><th class="num">Total</th><th class="num">Per month</th><th class="num">Per ${esc(u1)}</th><th class="num">Share</th><th>How it behaves</th></tr></thead>
+        <tbody>
+          ${row('Provider pay', 'Salaries of physicians, nurse practitioners and physician assistants', a.provPay, 'Variable on the finance statement. Fixed in practice when providers are salaried and have open slots.')}
+          ${row('Supplies and other per-visit costs', 'Medical and general supplies, drugs, lab, implants, professional fees', a.supplies, 'Variable: rises with every visit.')}
+          ${row('Staff, benefits, rent and overhead', 'Support staff pay, benefits for everyone, rent, purchased services, other operating costs', a.overhead, 'Fixed: about the same at any volume.')}
+          <tr class="total-row"><td><b>Total expenses</b></td><td class="num"><b>${finMoney(a.totExp)}</b></td><td class="num"><b>${finMoney(a.totExp / a.n)}</b></td><td class="num"><b>${finMoney(a.expUnit)}</b></td><td class="num">100%</td><td></td></tr>
+        </tbody></table></div>
+      <h3 style="margin:16px 0 8px">Break-even, worked out both ways</h3>
+      <div class="kpis" style="grid-template-columns:repeat(auto-fit,minmax(300px,1fr))">
+        ${tile('finance', 'Finance statement: provider pay rises with visits', F, 'Use this when more visits need more provider time: a new hire, added sessions, or pay tied to production. This is the break-even on the monthly operating statement.')}
+        ${tile('salaried', 'Providers on salary: provider pay is fixed', S, 'Use this when the providers you already pay have open appointment slots. An extra visit then costs only supplies, so nearly all of its revenue goes toward fixed cost.')}
+      </div>
+      <p class="help" style="margin:10px 0 0">In most businesses labor that makes the product is variable. In a clinic the providers are usually on salary, so their pay does not drop when the schedule has holes and does not rise until a schedule is full. Filling open slots is the cheapest growth there is; growth beyond full schedules costs a provider. Net revenue per ${esc(u1)} is ${finMoney(a.revUnit)}.</p>
+    </section>`;
+}
+/* ---------- what it takes to break even ---------- */
+function finWhatIfHTML(rec) {
+  const f = ui.fin, per = finPeriod(rec, f.period), unit = (rec.unit || 'Units').toLowerCase(), u1 = finOne(unit), a = finCalc(rec, per.months, 'cy');
   const w = f.what && f.what.code === rec.code ? f.what : { code: rec.code };
   const revU = w.rev ?? a.revUnit, varU = w.var ?? a.varUnit, fixM = w.fixed ?? a.fixedMo, days = w.days || 21;
   const contrib = revU !== null && varU !== null ? revU - varU : null, beM = contrib && contrib > 0 && fixM !== null ? fixM / contrib : null;
   const gapMo = beM !== null && a.visMo !== null ? beM - a.visMo : null;
   const needRev = a.visMo && varU !== null && fixM !== null ? varU + fixM / a.visMo : null, needVar = a.visMo && revU !== null && fixM !== null ? revU - fixM / a.visMo : null, needFixed = a.visMo && contrib !== null ? contrib * a.visMo : null;
-  const ebDelta = a.ebitda !== null && b.ebitda !== null ? a.ebitda - b.ebitda : null;
-  const story = a.vis && a.netRev !== null && a.totExp !== null ? `<b>${esc(rec.label)}</b> ${a.ebitda < 0 ? 'lost' : 'earned'} <b>${finShort(Math.abs(a.ebitda))}</b> in ${esc(per.label)} on ${volInt(a.vis)} ${unit}. Each ${u1} brought in <b>${finMoney(a.revUnit)}</b> and cost <b>${finMoney(a.expUnit)}</b>${a.varUnit !== null ? ` (${finMoney(a.varUnit)} variable, ${finMoney(a.expUnit - a.varUnit)} fixed share)` : ''}, a margin of <b class="${volCls(a.marginUnit)}">${finMoney(a.marginUnit)}</b> per ${u1}.`
-      + (a.beMo !== null ? ` Fixed cost of <b>${finShort(a.fixedMo)}</b> a month needs <b>${volInt(a.beMo)}</b> ${unit} a month to cover; actual was <b>${volInt(a.visMo)}</b> (${Math.round(a.coverage * 100)}%).` + (gapMo > 0 ? ` Closing the gap means <b>${volInt(gapMo)}</b> more ${unit} a month, about ${volInt(gapMo / days)} a day, or <b>${finMoney(needRev - a.revUnit)}</b> more net revenue per ${u1} at today's volume.` : ' Volume is above break-even.') : '') : `<b>${esc(rec.label)}</b>: no ${unit} were recorded ${esc(per.label)}.`;
-  const kpis = [
-    { l: `${rec.unit}, ${esc(per.label)}`, v: a.vis === null ? '—' : volInt(a.vis), c: `${b.vis ? `<span class="${volCls(a.vis - b.vis)}">${volSigned(a.vis - b.vis)}</span> vs budget` : ''}${p.vis ? ` · <span class="${volCls(a.vis - p.vis)}">${volPctText(volPct(a.vis, p.vis))}</span> vs ${meta.py}` : ''}` },
-    { l: `Net revenue per ${u1}`, v: finMoney(a.revUnit), c: `${b.revUnit !== null ? `${finMoney(b.revUnit)} budget` : ''}${p.revUnit !== null ? ` · ${finMoney(p.revUnit)} in ${meta.py}` : ''}` },
-    { l: `Cost per ${u1}`, v: finMoney(a.expUnit), c: a.varUnit !== null ? `${finMoney(a.varUnit)} variable · ${finMoney(a.expUnit - a.varUnit)} fixed` : (p.expUnit !== null ? `${finMoney(p.expUnit)} in ${meta.py}` : '') },
-    { l: `Margin per ${u1}`, v: `<span class="${volCls(a.marginUnit)}">${finMoney(a.marginUnit)}</span>`, c: b.marginUnit !== null ? `${finMoney(b.marginUnit)} budget` : '', red: a.marginUnit < 0 },
-    { l: 'EBITDA', v: `<span class="${volCls(a.ebitda)}">${finShort(a.ebitda)}</span>`, c: `${ebDelta !== null ? `<span class="${volCls(ebDelta)}">${volSigned(ebDelta, finShort)}</span> vs budget` : ''}${p.ebitda !== null ? ` · ${finShort(p.ebitda)} in ${meta.py}` : ''}`, red: a.ebitda < 0 },
-    { l: `Break-even ${unit} / month`, v: a.beMo === null ? '—' : volInt(a.beMo), c: a.beMo !== null ? `actual ${volInt(a.visMo)} · <b class="${a.coverage >= 1 ? 'vol-up' : 'vol-down'}">${Math.round(a.coverage * 100)}%</b>` : 'needs fixed and variable cost lines', red: a.coverage !== null && a.coverage < 1 },
-  ];
-  // charts
-  const beLine = a.beMo;
-  const volChart = finMonthSVG({ months: mAll, bars: [{ l: `${rec.year}`, c: FIN_C.cy, v: line12('vis', 'cy') }, { l: `${meta.py}`, c: FIN_C.py, v: line12('vis', 'py') }], lines: finLine(rec, 'vis') && finLine(rec, 'vis').bu ? [{ l: 'Budget', c: FIN_C.bu, v: line12('vis', 'bu'), dash: true }] : [], ref: beLine !== null ? { v: beLine, l: 'Break-even', c: '#e34948' } : null, label: `${rec.unit} by month` });
-  const revExp = finMonthSVG({ months: mAll, bars: [{ l: 'Net revenue', c: FIN_C.rev, v: line12('netRev', 'cy') }, { l: 'Total expenses', c: FIN_C.exp, v: line12('totExp', 'cy') }], lines: [{ l: 'EBITDA', c: '#1d2730', v: line12('ebitda', 'cy'), dash: true }], fmt: finShort, label: 'Net revenue, expenses and EBITDA by month' });
-  const groups = finExpGroups(rec).map((g, i) => ({ l: g.l, c: FIN_C.pal[i % FIN_C.pal.length], v: g.cy || Array(12).fill(null), k: g.k })).filter((g) => g.v.some((v) => v));
-  const mixChart = finStackSVG(mAll.slice(0, per.asOf), groups.map((g) => ({ ...g, v: g.v.slice(0, per.asOf) })), 'Expenses by category');
-  const fv = finMonthSVG({ months: mAll, bars: [{ l: 'Fixed cost', c: '#6250d6', v: line12('fixed', 'cy') }, { l: 'Variable cost', c: '#eda100', v: line12('varCost', 'cy') }], lines: [{ l: 'Net revenue', c: FIN_C.rev, v: line12('netRev', 'cy'), dash: true }], fmt: finShort, label: 'Fixed and variable cost against net revenue' });
-  // P&L table
-  const series = f.pl || 'cy';
-  const cell = (l, i) => { if (!l) return null; if (series === 'vb' || series === 'vp') { const base = series === 'vb' ? l.bu : l.py; if (!l.cy || !base || l.cy[i] === null || base[i] === null) return null; return l.cy[i] - base[i]; } return l[series] ? l[series][i] : null; };
-  const PER_UNIT = ['revUnit', 'revUnitW', 'expUnit', 'marginUnit', 'varUnit', 'breakEven', 'hoursUnit', 'sbUnit', 'supUnit'];
-  const sumRow = (l) => { if (PER_UNIT.includes(l.k)) { if (f.period === 'ytd' && l.ytd) { const y = l.ytd; const v = series === 'cy' ? y[0] : series === 'bu' ? y[1] : series === 'py' ? y[2] : series === 'vb' ? (y[0] !== null && y[1] !== null ? y[0] - y[1] : null) : (y[0] !== null && y[2] !== null ? y[0] - y[2] : null); return v; } let s = 0, n = 0; per.months.forEach((i) => { const v = cell(l, i); if (v !== null) { s += v; n++; } }); return n ? s / n : null; } let s = 0, any = false; per.months.forEach((i) => { const v = cell(l, i); if (v !== null) { s += v; any = true; } }); return any ? s : null; };
-  const isNeg = (k) => k === 'totExp' || k.startsWith('g:') || k.startsWith('a:');
-  const fmtCell = (v, k) => v === null ? '<span class="muted">—</span>' : k === 'vis' || k.startsWith('v:') || k.startsWith('hours') ? volInt(v) : finMoney(v);
-  const plRow = (l, opts) => { const o = opts || {}; const vals = per.months.map((i) => cell(l, i)); const tot = sumRow(l); return `<tr class="${o.cls || ''}" ${o.attrs || ''}><td style="padding-left:${o.indent || 8}px">${o.label}</td>${vals.map((v) => `<td class="num ${series === 'vb' || series === 'vp' ? volCls(isNeg(l.k) ? -(v ?? 0) : (v ?? 0)) : ''}">${fmtCell(v, l.k)}</td>`).join('')}<td class="num"><b>${fmtCell(tot, l.k)}</b></td></tr>`; };
-  const open = f.open || {};
-  const plRows = [];
-  const push = (k, label, opts) => { const l = finLine(rec, k); if (l) plRows.push(plRow(l, { label, ...(opts || {}) })); };
-  push('vis', `<b>${esc(rec.unit)}</b>`);
-  rec.lines.filter((l) => l.s === 'rev').forEach((l) => plRows.push(plRow(l, { label: esc(l.l), indent: 22, cls: 'sub-row' })));
-  push('grossRev', '<b>Gross revenue</b>');
-  push('allow', 'Contractual allowances', { indent: 22 }); push('badDebt', 'Bad debt', { indent: 22 });
-  push('npr', '<b>Net patient revenue</b>'); push('otherRev', 'Other revenue', { indent: 22 });
-  push('netRev', '<b>Total net revenue</b>', { cls: 'total-row' });
-  finExpGroups(rec).forEach((g) => { const gl = finGL(rec, g.k); plRows.push(plRow(g, { label: `${gl.length ? `<button class="btn sm ghost" data-act="fin-open" data-k="${esc(g.k)}" style="padding:0 6px;min-height:24px;margin-right:6px">${open[g.k] ? '−' : '+'}</button>` : ''}${esc(g.l)}`, indent: 8 })); if (open[g.k]) gl.forEach((l) => plRows.push(plRow(l, { label: `<span class="muted mono small">${esc(l.k.slice(2))}</span> ${esc(l.l)}`, indent: 44, cls: 'sub-row' }))); });
-  push('totExp', '<b>Total expenses</b>', { cls: 'total-row' });
-  push('ebitda', '<b>EBITDA</b>', { cls: 'total-row' });
-  ['revUnit', 'expUnit', 'marginUnit', 'fixed', 'varCost', 'varUnit', 'breakEven', 'hoursTotal', 'hoursProd', 'hoursOT', 'hoursPTO', 'hoursUnit'].forEach((k) => { const l = finLine(rec, k); if (l) plRows.push(plRow(l, { label: `<span class="muted">${esc(l.l)}</span>`, indent: 8 })); });
-  const plTable = `<div class="table-wrap"><table class="breakdown pl"><thead><tr><th>Line</th>${per.months.map((i) => `<th class="num">${VOL_MONTHS[i]}</th>`).join('')}<th class="num">${esc(per.label)}</th></tr></thead><tbody>${plRows.join('')}</tbody></table></div>`;
-  const plToggle = [['cy', `${rec.year} actual`], ['bu', `${rec.year} budget`], ['py', `${meta.py} actual`], ['vb', 'Actual − budget'], ['vp', `Actual − ${meta.py}`]].map(([k, l]) => `<button class="${series === k ? 'on' : ''}" data-act="fin-pl" data-v="${k}">${l}</button>`).join('');
-  // what-if panel
-  const whatIf = `<div class="pair" style="display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:12px">
+  return `<div class="pair" style="display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:12px">
       <label><span>Net revenue per ${esc(u1)}</span><input type="number" step="1" data-input="fin-what" data-k="rev" value="${revU !== null ? Math.round(revU) : ''}"></label>
       <label><span>Variable cost per ${esc(u1)}</span><input type="number" step="1" data-input="fin-what" data-k="var" value="${varU !== null ? Math.round(varU) : ''}"></label>
       <label><span>Fixed cost per month</span><input type="number" step="100" data-input="fin-what" data-k="fixed" value="${fixM !== null ? Math.round(fixM) : ''}"></label>
@@ -4207,8 +4311,112 @@ function viewFinDept(rec, actions) {
       <div class="kpi ${gapMo > 0 ? 'red' : ''}"><div class="label">Gap at current volume</div><div class="value" style="font-size:22px">${gapMo === null ? '—' : gapMo > 0 ? volInt(gapMo) + ' short' : volInt(-gapMo) + ' over'}</div><span class="small">${gapMo !== null ? `${volInt(a.visMo)} ${esc(unit)} a month now · ${gapMo > 0 ? '+' : ''}${(gapMo / days).toFixed(1)} a day` : ''}</span></div>
       <div class="kpi"><div class="label">EBITDA per month at these inputs</div><div class="value ${volCls((contrib || 0) * (a.visMo || 0) - (fixM || 0))}" style="font-size:22px">${contrib !== null && fixM !== null && a.visMo !== null ? finShort(contrib * a.visMo - fixM) : '—'}</div><span class="small">at ${volInt(a.visMo || 0)} ${esc(unit)} a month</span></div>
     </div>
-    <p class="help" style="margin:12px 0 0">To break even at today's volume without more ${esc(unit)}: ${needRev !== null ? `net revenue of <b>${finMoney(needRev)}</b> per ${esc(u1)} (now ${finMoney(a.revUnit)})` : '—'}, or ${needVar !== null ? `variable cost of <b>${finMoney(needVar)}</b> per ${esc(u1)} (now ${finMoney(a.varUnit)})` : '—'}, or ${needFixed !== null ? `fixed cost of <b>${finShort(needFixed)}</b> a month (now ${finShort(a.fixedMo)})` : '—'}. <button class="btn sm ghost" data-act="fin-what-reset">Reset to actuals</button></p>`;
-  const hoursCard = a.hours ? `<section class="card"><div class="card-head"><h2>Staffing hours</h2><span class="hint">${esc(per.label)}</span></div>
+    <p class="help" style="margin:12px 0 0">Using the <b>${finCostMode() === 'salaried' ? 'providers on salary' : 'finance statement'}</b> method. To break even at today's volume without more ${esc(unit)}: ${needRev !== null ? `net revenue of <b>${finMoney(needRev)}</b> per ${esc(u1)} (now ${finMoney(a.revUnit)})` : '—'}, or ${needVar !== null ? `variable cost of <b>${finMoney(needVar)}</b> per ${esc(u1)} (now ${finMoney(a.varUnit)})` : '—'}, or ${needFixed !== null ? `fixed cost of <b>${finShort(needFixed)}</b> a month (now ${finShort(a.fixedMo)})` : '—'}. <button class="btn sm link" data-act="fin-what-reset">Reset to actuals</button></p>`;
+}
+/* ---------- visit coding (E/M levels) and what a change is worth ---------- */
+/* Medicare fee schedule value per code as carried in Meditech (the RVU report's "Full RVU" column, October 2026); newer uploads store their own. */
+const EM_RATE_DEFAULT = { 99202: 41.59, 99203: 72.19, 99204: 117.85, 99205: 160.13, 99211: 7.78, 99212: 31.23, 99213: 58.48, 99214: 86.06, 99215: 127.42 };
+const EM_WRVU_DEFAULT = { 99202: 0.89, 99203: 1.53, 99204: 2.49, 99205: 3.35, 99211: 0.17, 99212: 0.67, 99213: 1.24, 99214: 1.84, 99215: 2.68 };
+const EM_NEEDS = { 99202: 'straightforward, 15–29 min', 99203: 'low complexity, 30–44 min', 99204: 'moderate complexity, 45–59 min', 99205: 'high complexity, 60–74 min', 99211: 'nurse visit', 99212: 'straightforward, 10–19 min', 99213: 'low complexity, 20–29 min', 99214: 'moderate complexity, 30–39 min', 99215: 'high complexity, 40–54 min' };
+function emRate(code) { const m = chgMeta(); return (m && m.rates && m.rates[code]) || EM_RATE_DEFAULT[code] || null; }
+function chgMainMonths(recs) { return [...new Set(recs.filter((r) => !r.src).map((r) => r.period))].sort(); }
+function emFamily(code) { return EM_NEW.includes(code) ? EM_NEW : EM_EST; }
+function finCodingHTML(rec) {
+  const all = chgRecords().filter((r) => r.dept === rec.code), months = chgMainMonths(all); if (!months.length) return '';
+  const recs = all.filter((r) => months.includes(r.period)), s = chgSum(recs), nM = months.length;
+  const units = (c, sum) => ((sum || s).cpt[c] ? (sum || s).cpt[c][1] : 0);
+  const EM = [...EM_EST, ...EM_NEW], present = EM.filter((c) => units(c) > 0); if (!present.length) return '';
+  const wr = (c) => (units(c) ? s.cpt[c][2] / s.cpt[c][1] : 0) || EM_WRVU_DEFAULT[c] || 0;
+  const nw = chgSum(chgRecords().filter((r) => !r.src || months.includes(r.period)));
+  const famTot = (fam, sum) => fam.reduce((x, c) => x + units(c, sum), 0);
+  const fromOpts = present.filter((c) => emFamily(c).indexOf(c) < emFamily(c).length - 1);
+  const st = ui.fin.code && ui.fin.code.dept === rec.code ? ui.fin.code : (ui.fin.code = { dept: rec.code });
+  if (!fromOpts.includes(st.from)) st.from = fromOpts.includes('99213') ? '99213' : fromOpts.slice().sort((x, y) => units(y) - units(x))[0] || '';
+  const fam = st.from ? emFamily(st.from) : [], toOpts = fam.slice(fam.indexOf(st.from) + 1);
+  if (!toOpts.includes(st.to)) st.to = toOpts[0] || '';
+  const pct = Math.min(100, Math.max(0, st.pct ?? 25)), factor = Math.min(300, Math.max(10, st.factor ?? 100));
+  const moved = st.from ? units(st.from) / nM * pct / 100 : 0, dRate = st.from && st.to ? (emRate(st.to) - emRate(st.from)) * factor / 100 : 0, addMo = moved * dRate, addW = st.from && st.to ? moved * (wr(st.to) - wr(st.from)) : 0;
+  const per = finPeriod(rec, ui.fin.period), a = finCalc(rec, per.months, 'cy'), unit = (rec.unit || 'Units').toLowerCase(), u1 = finOne(unit);
+  const newRev = a.visMo && a.revUnit !== null ? a.revUnit + addMo / a.visMo : null, newContrib = newRev !== null && a.varUnit !== null ? newRev - a.varUnit : null, newBE = newContrib && newContrib > 0 && a.fixedMo !== null ? a.fixedMo / newContrib : null;
+  const lvl = (c) => `${EM_NEW.includes(c) ? 'New' : 'Established'} patient, level ${c.slice(-1)}`;
+  const mixRow = (c) => { const f = emFamily(c), t = famTot(f), tn = famTot(f, nw); return `<tr><td class="nowrap"><b class="mono">${c}</b></td><td class="nowrap">${lvl(c)} <span class="muted">· ${esc(EM_NEEDS[c] || '')}</span></td><td class="num">${volInt(units(c) / nM)}</td><td class="num"><b>${finPctText(finPct(units(c), t))}</b></td><td class="num muted">${tn ? finPctText(finPct(units(c, nw), tn)) : '—'}</td><td class="num">${wr(c).toFixed(2)}</td><td class="num">${emRate(c) ? finMoney(emRate(c)) : '—'}</td></tr>`; };
+  const famBlock = (f, title) => { const rows = f.filter((c) => units(c) > 0); return famTot(f) ? `<tr><td colspan="7" style="background:var(--surface-2);font-weight:700">${title} · ${volInt(famTot(f) / nM)} office visits a month</td></tr>${rows.map(mixRow).join('')}` : ''; };
+  const byProv = {}; recs.forEach((r) => { (byProv[r.provider] = byProv[r.provider] || []).push(r); });
+  const provs = Object.entries(byProv).map(([p, rs]) => { const ps = chgSum(rs), t = famTot(EM_EST, ps); return { p, t, sh: (c) => (t ? units(c, ps) / t : 0), avg: t ? EM_EST.reduce((x, c) => x + units(c, ps) * (+c.slice(-1)), 0) / t : 0, em: chgEM(ps.cpt) }; }).filter((x) => x.t >= 10 && x.p !== 'No performing provider').sort((x, y) => y.t - x.t);
+  const estT = famTot(EM_EST), clinicL4 = estT ? (units('99214') + units('99215')) / estT : 0;
+  return `<p style="margin:0 0 12px;font-size:16px;line-height:1.5">Office visits are paid by level. In ${esc(months.length === 1 ? fmtMonth(months[0]) : `${fmtMonth(months[0])} to ${fmtMonth(months[nM - 1])}`)}, <b>${finPctText(clinicL4 * 100)}</b> of established-patient visits here were coded level 4 or 5 (99214 or 99215)${famTot(EM_EST, nw) ? `, against <b>${finPctText(finPct(units('99214', nw) + units('99215', nw), famTot(EM_EST, nw)))}</b> across all NWSH clinics` : ''}. A 99214 is worth about <b>${finMoney(emRate('99214') - emRate('99213'))}</b> more than a 99213 at Medicare rates and adds no cost, so the difference goes straight to the bottom line.</p>
+    <h3 style="margin:0 0 8px">Levels billed here</h3>
+    <div class="table-wrap"><table class="breakdown"><thead><tr><th>Code</th><th>What it is</th><th class="num">A month</th><th class="num">Share here</th><th class="num">All NWSH</th><th class="num">wRVU</th><th class="num">Medicare value</th></tr></thead><tbody>${famBlock(EM_EST, 'Established patients')}${famBlock(EM_NEW, 'New patients')}</tbody></table></div>
+    <h3 style="margin:18px 0 8px">By provider, established patients</h3>
+    ${provs.length ? `<div class="table-wrap"><table class="breakdown bill"><thead><tr><th>Provider</th><th class="num">Visits</th><th class="num">99212</th><th class="num">99213</th><th class="num">99214</th><th class="num">99215</th><th class="num">Avg level</th><th style="width:22%">Mix (light = lower level)</th></tr></thead><tbody>${provs.map((x) => `<tr><td><b>${esc(x.p)}</b></td><td class="num">${volInt(x.t)}</td><td class="num">${finPctText(x.sh('99212') * 100)}</td><td class="num">${finPctText(x.sh('99213') * 100)}</td><td class="num">${finPctText(x.sh('99214') * 100)}</td><td class="num">${finPctText(x.sh('99215') * 100)}</td><td class="num"><b>${x.avg.toFixed(2)}</b></td><td style="vertical-align:middle">${chgEMBar({ new: 0, est: x.em.est, lvl: Object.fromEntries(EM_EST.filter((c) => x.em.lvl[c]).map((c) => [c, x.em.lvl[c]])) }, true)}</td></tr>`).join('')}</tbody></table></div>` : '<p class="muted">Not enough established-patient visits per provider to compare.</p>'}
+    ${st.from ? `<h3 style="margin:18px 0 8px">What a change in coding would be worth</h3>
+    <div class="pair" style="display:grid;grid-template-columns:repeat(auto-fit,minmax(170px,1fr));gap:12px">
+      <label><span>Visits now coded</span><select data-change="fin-code" data-k="from">${fromOpts.map((c) => `<option value="${c}" ${st.from === c ? 'selected' : ''}>${c} (${volInt(units(c) / nM)} a month)</option>`).join('')}</select></label>
+      <label><span>Would be coded</span><select data-change="fin-code" data-k="to">${toOpts.map((c) => `<option value="${c}" ${st.to === c ? 'selected' : ''}>${c}</option>`).join('')}</select></label>
+      <label><span>Share of them that move (%)</span><input type="number" min="0" max="100" step="5" data-input="fin-code" data-k="pct" value="${pct}"></label>
+      <label><span>Payment compared with Medicare (%)</span><input type="number" min="10" max="300" step="5" data-input="fin-code" data-k="factor" value="${factor}"></label>
+    </div>
+    <div class="kpis" style="grid-template-columns:repeat(auto-fit,minmax(170px,1fr));margin-top:12px">
+      <div class="kpi"><div class="label">Visits that change level</div><div class="value" style="font-size:22px">${volInt(moved)} a month</div><span class="small">${pct}% of ${volInt(units(st.from) / nM)} ${st.from} visits</span></div>
+      <div class="kpi"><div class="label">Added net revenue</div><div class="value vol-up" style="font-size:22px">${finMoney(addMo)} a month</div><span class="small">${finMoney(addMo * 12)} a year · ${finMoney(dRate)} per visit moved</span></div>
+      <div class="kpi"><div class="label">Added work RVUs</div><div class="value" style="font-size:22px">${addW.toFixed(1)} a month</div><span class="small">${wr(st.from).toFixed(2)} to ${wr(st.to).toFixed(2)} per visit</span></div>
+      <div class="kpi"><div class="label">Net revenue per ${esc(u1)}</div><div class="value" style="font-size:22px">${newRev === null ? '—' : finMoney(newRev)}</div><span class="small">${a.revUnit !== null ? `now ${finMoney(a.revUnit)}` : ''}</span></div>
+      <div class="kpi"><div class="label">Break-even ${esc(unit)} / month</div><div class="value" style="font-size:22px">${newBE === null ? '—' : volInt(newBE)}</div><span class="small">${a.beMo !== null ? `now ${volInt(a.beMo)}${newBE !== null ? ` · ${volInt(a.beMo - newBE)} fewer` : ''}` : ''}</span></div>
+      <div class="kpi"><div class="label">EBITDA per month</div><div class="value ${volCls((a.ebitda || 0) / a.n + addMo)}" style="font-size:22px">${a.ebitda === null ? '—' : finShort(a.ebitda / a.n + addMo)}</div><span class="small">${a.ebitda !== null ? `now ${finShort(a.ebitda / a.n)}` : ''}</span></div>
+    </div>
+    <p class="help" style="margin:12px 0 0"><b>A code has to match the chart.</b> ${st.to} needs ${esc(EM_NEEDS[st.to] || 'the documentation to support it')} (medical decision making or total time on the day of the visit). This shows what the mix is worth, not what it should be; coding and compliance decide that. Visit counts come from the provider RVU report for ${months.map(fmtMonth).join(', ')}; revenue, cost and break-even come from the operating statement for ${esc(per.label)}. "Payment compared with Medicare" scales the estimate: 100% pays every moved visit at the Medicare fee schedule; commercial plans usually pay more and Medicaid less, so ask billing for this clinic's blended figure.</p>` : ''}`;
+}
+function viewFinDept(rec, actions) {
+  const f = ui.fin, meta = finMeta(), per = finPeriod(rec, f.period), unit = (rec.unit || 'Units').toLowerCase(), u1 = finOne(unit);
+  const a = finCalc(rec, per.months, 'cy'), b = finCalc(rec, per.months, 'bu'), p = finCalc(rec, per.months, 'py');
+  const mAll = VOL_MONTHS, alt = a.byMode[a.mode === 'finance' ? 'salaried' : 'finance'], altName = a.mode === 'finance' ? 'if provider pay is treated as fixed' : 'on the finance statement';
+  const line12 = (k, which) => { const l = finLine(rec, k); return l && l[which] ? l[which] : Array(12).fill(null); };
+  const days = (f.what && f.what.code === rec.code && f.what.days) || 21;
+  const gapMo = a.beMo !== null && a.visMo !== null ? a.beMo - a.visMo : null;
+  const needRev = a.visMo && a.varUnit !== null && a.fixedMo !== null ? a.varUnit + a.fixedMo / a.visMo : null;
+  const ebDelta = a.ebitda !== null && b.ebitda !== null ? a.ebitda - b.ebitda : null;
+  const story = a.vis && a.netRev !== null && a.totExp !== null ? `<b>${esc(rec.label)}</b> ${a.ebitda < 0 ? 'lost' : 'earned'} <b>${finShort(Math.abs(a.ebitda))}</b> in ${esc(per.label)} on ${volInt(a.vis)} ${unit}. Each ${u1} brought in <b>${finMoney(a.revUnit)}</b> and cost <b>${finMoney(a.expUnit)}</b>: ${finMoney(a.provPay / a.vis)} provider pay, ${finMoney(a.supplies / a.vis)} supplies and ${finMoney(a.overhead / a.vis)} staff, rent and overhead. That is a margin of <b class="${volCls(a.marginUnit)}">${finMoney(a.marginUnit)}</b> per ${u1}.`
+      + (a.beMo !== null ? ` Break-even is <b>${volInt(a.beMo)}</b> ${unit} a month${alt.beMo !== null ? ` (<b>${volInt(alt.beMo)}</b> ${altName})` : ''}; actual was <b>${volInt(a.visMo)}</b>, ${Math.round(a.coverage * 100)}% of the way.` + (gapMo > 0 ? ` Closing the gap means <b>${volInt(gapMo)}</b> more ${unit} a month, about ${volInt(gapMo / days)} a day, or <b>${finMoney(needRev - a.revUnit)}</b> more net revenue per ${u1} at today's volume.` : ' Volume is above break-even.') : (a.contrib !== null && a.contrib <= 0 ? ` Each ${u1} costs more in variable cost than it brings in, so more volume alone will not reach break-even.` : '')) : `<b>${esc(rec.label)}</b>: no ${unit} were recorded in ${esc(per.label)}.`;
+  const kpis = [
+    { l: `${rec.unit}, ${esc(per.label)}`, v: a.vis === null ? '—' : volInt(a.vis), c: `${b.vis ? `<span class="${volCls(a.vis - b.vis)}">${volSigned(a.vis - b.vis)}</span> vs budget` : ''}${p.vis ? ` · <span class="${volCls(a.vis - p.vis)}">${volPctText(volPct(a.vis, p.vis))}</span> vs ${meta.py}` : ''}` },
+    { l: `Net revenue per ${u1}`, v: finMoney(a.revUnit), c: `${b.revUnit !== null ? `${finMoney(b.revUnit)} budget` : ''}${p.revUnit !== null ? ` · ${finMoney(p.revUnit)} in ${meta.py}` : ''}` },
+    { l: `Cost per ${u1}`, v: finMoney(a.expUnit), c: a.varUnit !== null ? `${finMoney(a.varUnit)} variable · ${finMoney(a.expUnit - a.varUnit)} fixed` : (p.expUnit !== null ? `${finMoney(p.expUnit)} in ${meta.py}` : '') },
+    { l: `Margin per ${u1}`, v: `<span class="${volCls(a.marginUnit)}">${finMoney(a.marginUnit)}</span>`, c: b.marginUnit !== null ? `${finMoney(b.marginUnit)} budget` : '', red: a.marginUnit < 0 },
+    { l: 'EBITDA', v: `<span class="${volCls(a.ebitda)}">${finShort(a.ebitda)}</span>`, c: `${ebDelta !== null ? `<span class="${volCls(ebDelta)}">${volSigned(ebDelta, finShort)}</span> vs budget` : ''}${p.ebitda !== null ? ` · ${finShort(p.ebitda)} in ${meta.py}` : ''}`, red: a.ebitda < 0 },
+    { l: `Break-even ${unit} / month`, v: a.beMo === null ? '—' : volInt(a.beMo), c: a.beMo !== null ? `actual ${volInt(a.visMo)} · <b class="${a.coverage >= 1 ? 'vol-up' : 'vol-down'}">${Math.round(a.coverage * 100)}%</b>${alt.beMo !== null ? `<br>${volInt(alt.beMo)} ${altName}` : ''}` : 'contribution per visit is not positive', red: a.coverage !== null && a.coverage < 1 },
+  ];
+  // charts
+  const volChart = finMonthSVG({ months: mAll, bars: [{ l: `${rec.year}`, c: FIN_C.cy, v: line12('vis', 'cy') }, { l: `${meta.py}`, c: FIN_C.py, v: line12('vis', 'py') }], lines: finLine(rec, 'vis') && finLine(rec, 'vis').bu ? [{ l: 'Budget', c: FIN_C.bu, v: line12('vis', 'bu'), dash: true }] : [], ref: a.beMo !== null ? { v: a.beMo, l: 'Break-even', c: '#e34948' } : null, label: `${rec.unit} by month` });
+  const revExp = finMonthSVG({ months: mAll, bars: [{ l: 'Net revenue', c: FIN_C.rev, v: line12('netRev', 'cy') }, { l: 'Total expenses', c: FIN_C.exp, v: line12('totExp', 'cy') }], lines: [{ l: 'EBITDA', c: '#1d2730', v: line12('ebitda', 'cy'), dash: true }], fmt: finShort, label: 'Net revenue, expenses and EBITDA by month' });
+  const groups = finExpGroups(rec).map((g, i) => ({ l: g.l, c: FIN_C.pal[i % FIN_C.pal.length], v: g.cy || Array(12).fill(null), k: g.k })).filter((g) => g.v.some((v) => v));
+  const mixChart = finStackSVG(mAll.slice(0, per.asOf), groups.map((g) => ({ ...g, v: g.v.slice(0, per.asOf) })), 'Expenses by category');
+  const bucket = (keys) => Array.from({ length: 12 }, (_, i) => { if (i >= per.asOf) return null; let s = 0; keys.forEach((k) => { const l = finLine(rec, k); if (l && l.cy && l.cy[i]) s += l.cy[i]; }); return s; });
+  const provM = bucket(FIN_PROVIDER_GL), supM = bucket(FIN_SUPPLY_GROUPS), totM = line12('totExp', 'cy'), ovM = totM.map((t, i) => (t === null || i >= per.asOf ? null : t - provM[i] - supM[i]));
+  const costStack = finStackSVG(mAll.slice(0, per.asOf), [{ l: 'Staff, benefits, rent and overhead', c: '#6250d6', v: ovM.slice(0, per.asOf) }, { l: 'Provider pay', c: '#2a78d6', v: provM.slice(0, per.asOf) }, { l: 'Supplies and per-visit costs', c: '#eda100', v: supM.slice(0, per.asOf) }], 'Cost by how it behaves');
+  // statement by month
+  const series = f.pl || 'cy';
+  const cell = (l, i) => { if (!l) return null; if (series === 'vb' || series === 'vp') { const base = series === 'vb' ? l.bu : l.py; if (!l.cy || !base || l.cy[i] === null || base[i] === null) return null; return l.cy[i] - base[i]; } return l[series] ? l[series][i] : null; };
+  const PER_UNIT = ['revUnit', 'revUnitW', 'expUnit', 'marginUnit', 'varUnit', 'breakEven', 'hoursUnit', 'sbUnit', 'supUnit'];
+  const sumRow = (l) => { if (PER_UNIT.includes(l.k)) { if (f.period === 'ytd' && l.ytd) { const y = l.ytd; return series === 'cy' ? y[0] : series === 'bu' ? y[1] : series === 'py' ? y[2] : series === 'vb' ? (y[0] !== null && y[1] !== null ? y[0] - y[1] : null) : (y[0] !== null && y[2] !== null ? y[0] - y[2] : null); } let s = 0, n = 0; per.months.forEach((i) => { const v = cell(l, i); if (v !== null) { s += v; n++; } }); return n ? s / n : null; } let s = 0, any = false; per.months.forEach((i) => { const v = cell(l, i); if (v !== null) { s += v; any = true; } }); return any ? s : null; };
+  const isCost = (k) => k === 'totExp' || k === 'fixed' || k === 'varCost' || k === 'varUnit' || k === 'expUnit' || k.startsWith('g:') || k.startsWith('a:');
+  const fmtCell = (v, k) => v === null ? '<span class="muted">—</span>' : k === 'hoursUnit' ? v.toFixed(2) : k === 'vis' || k === 'breakEven' || k.startsWith('v:') || k.startsWith('hours') ? volInt(v) : finMoney(v);
+  const varCls = (v, k) => (series === 'vb' || series === 'vp') && v !== null ? volCls(isCost(k) ? -v : v) : '';
+  const plRow = (l, o) => { o = o || {}; const vals = per.months.map((i) => cell(l, i)); const tot = sumRow(l); return `<tr class="${o.cls || ''}"><td style="padding-left:${o.indent || 8}px">${o.label}</td>${vals.map((v) => `<td class="num ${varCls(v, l.k)}">${fmtCell(v, l.k)}</td>`).join('')}<td class="num ${varCls(tot, l.k)}"><b>${fmtCell(tot, l.k)}</b></td></tr>`; };
+  const open = f.open || {}, plRows = [];
+  const push = (k, label, o) => { const l = finLine(rec, k); if (l) plRows.push(plRow(l, { label, ...(o || {}) })); };
+  push('vis', `<b>${esc(rec.unit)}</b>`);
+  rec.lines.filter((l) => l.s === 'rev' && l.k !== 'grossRev').forEach((l) => plRows.push(plRow(l, { label: esc(l.l.replace(/^Revenue\s*-\s*/i, '')), indent: 22, cls: 'sub-row' })));
+  push('grossRev', '<b>Gross revenue</b>');
+  push('allow', 'Contractual allowances', { indent: 22 }); push('badDebt', 'Bad debt', { indent: 22 });
+  push('npr', '<b>Net patient revenue</b>'); push('otherRev', 'Other revenue', { indent: 22 });
+  push('netRev', '<b>Total net revenue</b>', { cls: 'total-row' });
+  finExpGroups(rec).forEach((g) => { const gl = finGL(rec, g.k); plRows.push(plRow(g, { label: `${gl.length ? `<button class="btn sm" data-act="fin-open" data-k="${esc(g.k)}" aria-label="${open[g.k] ? 'Hide' : 'Show'} the lines in ${esc(g.l)}" style="padding:0 7px;min-height:22px;margin-right:6px;line-height:1">${open[g.k] ? '−' : '+'}</button>` : ''}${esc(g.l)}`, indent: 8 })); if (open[g.k]) gl.forEach((l) => plRows.push(plRow(l, { label: `<span class="muted mono small">${esc(l.k.slice(2))}</span> ${esc(l.l)}`, indent: 40, cls: 'sub-row' }))); });
+  push('totExp', '<b>Total expenses</b>', { cls: 'total-row' });
+  push('ebitda', '<b>EBITDA</b>', { cls: 'total-row' });
+  [['revUnit', `Net revenue per ${u1}`], ['expUnit', `Total expense per ${u1}`], ['marginUnit', `Margin per ${u1}`], ['fixed', 'Fixed cost (finance statement)'], ['varCost', 'Variable cost (finance statement)'], ['varUnit', `Variable cost per ${u1}`], ['breakEven', `Break-even ${unit} (finance statement)`], ['hoursTotal', 'Total hours'], ['hoursProd', 'Productive hours'], ['hoursOT', 'Overtime hours'], ['hoursPTO', 'PTO hours'], ['hoursUnit', `Hours per ${u1}`]].forEach(([k, lab]) => { const l = finLine(rec, k); if (l) plRows.push(plRow(l, { label: `<span class="muted">${esc(lab)}</span>`, indent: 8 })); });
+  const plTable = `<div class="pl-wrap"><table class="breakdown pl"><thead><tr><th>Line</th>${per.months.map((i) => `<th class="num">${VOL_MONTHS[i]}</th>`).join('')}<th class="num">${esc(per.label)}</th></tr></thead><tbody>${plRows.join('')}</tbody></table></div>`;
+  const plToggle = [['cy', `${rec.year} actual`], ['bu', `${rec.year} budget`], ['py', `${meta.py} actual`], ['vb', 'Actual − budget'], ['vp', `Actual − ${meta.py}`]].map(([k, l]) => `<button class="${series === k ? 'on' : ''}" data-act="fin-pl" data-v="${k}">${l}</button>`).join('');
+  const hoursCard = a.hours ? `<section class="card" style="margin-top:14px"><div class="card-head"><h2>Staffing hours</h2><span class="hint">${esc(per.label)}</span></div>
       <div class="kpis" style="grid-template-columns:repeat(auto-fit,minmax(140px,1fr))">
         <div class="kpi"><div class="label">Paid hours</div><div class="value" style="font-size:22px">${volInt(a.hours)}</div><span class="small">${a.hoursProd ? `${volInt(a.hoursProd)} productive` : ''}</span></div>
         <div class="kpi"><div class="label">Hours per ${esc(u1)}</div><div class="value" style="font-size:22px">${a.vis ? (a.hours / a.vis).toFixed(2) : '—'}</div><span class="small">${p.hours && p.vis ? `${(p.hours / p.vis).toFixed(2)} in ${meta.py}` : ''}</span></div>
@@ -4216,35 +4424,42 @@ function viewFinDept(rec, actions) {
         <div class="kpi"><div class="label">PTO</div><div class="value" style="font-size:22px">${a.pto !== null ? finPctText(finPct(a.pto, a.hours)) : '—'}</div><span class="small">${a.pto !== null ? volInt(a.pto) + ' hours' : ''}</span></div>
         <div class="kpi"><div class="label">Salaries & benefits per ${esc(u1)}</div><div class="value" style="font-size:22px">${a.sb !== null && a.vis ? finMoney(a.sb / a.vis) : '—'}</div><span class="small">${a.sb !== null && a.netRev ? finPctText(finPct(a.sb, a.netRev)) + ' of net revenue' : ''}</span></div>
       </div></section>` : '';
-  const billing = chgDeptSectionHTML(rec);
+  const coding = finCodingHTML(rec);
   return finHead(rec.label, `${esc(rec.code)} · ${esc(rec.name)} · ${esc(FIN_GROUPS.find((x) => x[0] === rec.group)[1])}`, 'clinics', actions) + `
-    <div class="card" style="margin-bottom:14px">
-      <div class="pair" style="display:flex;gap:18px;flex-wrap:wrap;align-items:flex-end">
+    <div class="card no-print" style="margin-bottom:14px">
+      <div class="pair fbar" style="display:flex;gap:14px 22px;flex-wrap:wrap;align-items:flex-end">
         ${finDeptSelectHTML(rec.code)}
         <label><span>Period</span><div class="toggle">${FIN_PERIODS.map(([k, l]) => `<button class="${f.period === k ? 'on' : ''}" data-act="fin-period" data-v="${k}">${l}</button>`).join('')}</div></label>
+        ${finCostToggleHTML()}
         <a class="btn" href="#/reports/clinics" style="align-self:flex-end">All departments</a>
       </div>
     </div>
+    ${finNoteLineHTML(rec)}
     <p style="font-size:16px;line-height:1.5;margin:0 0 14px">${story}</p>
-    <div class="kpis" style="margin-bottom:18px">${kpis.map((k) => `<div class="kpi ${k.red ? 'red' : ''}"><div class="label">${k.l}</div><div class="value" style="font-size:24px">${k.v}</div><span class="small">${k.c || ''}</span></div>`).join('')}</div>
-    <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(340px,1fr));gap:14px">
-      <section class="card"><div class="card-head"><h2>${esc(rec.unit)} by month</h2><span class="hint">dashed red = break-even per month, ${esc(per.label)}</span></div>${finLegend([{ l: `${rec.year}`, c: FIN_C.cy }, { l: `${meta.py}`, c: FIN_C.py }, { l: 'Budget', c: FIN_C.bu, dash: true }])}${volChart}</section>
+    <div class="kpis" style="margin-bottom:14px">${kpis.map((k) => `<div class="kpi ${k.red ? 'red' : ''}"><div class="label">${k.l}</div><div class="value" style="font-size:24px">${k.v}</div><span class="small">${k.c || ''}</span></div>`).join('')}</div>
+    ${finGlossaryHTML(coding ? 'both' : 'fin')}
+    <div class="cgrid" style="display:grid;grid-template-columns:repeat(auto-fit,minmax(min(440px,100%),1fr));gap:14px">
+      <section class="card"><div class="card-head"><h2>${esc(rec.unit)} by month</h2><span class="hint">dashed red = break-even a month</span></div>${finLegend([{ l: `${rec.year}`, c: FIN_C.cy }, { l: `${meta.py}`, c: FIN_C.py }, { l: 'Budget', c: FIN_C.bu, dash: true }])}${volChart}</section>
       <section class="card"><div class="card-head"><h2>Net revenue, expenses and EBITDA</h2><span class="hint">${rec.year} by month</span></div>${finLegend([{ l: 'Net revenue', c: FIN_C.rev }, { l: 'Total expenses', c: FIN_C.exp }, { l: 'EBITDA', c: '#1d2730', dash: true }])}${revExp}</section>
-      <section class="card"><div class="card-head"><h2>Expenses by category</h2><span class="hint">${rec.year} through ${VOL_MONTHS[per.asOf - 1]}</span></div>${finLegend(groups)}${mixChart}</section>
-      <section class="card"><div class="card-head"><h2>Fixed and variable cost</h2><span class="hint">against net revenue, ${rec.year}</span></div>${finLegend([{ l: 'Fixed cost', c: '#6250d6' }, { l: 'Variable cost', c: '#eda100' }, { l: 'Net revenue', c: FIN_C.rev, dash: true }])}${fv}</section>
+      <section class="card"><div class="card-head"><h2>Expenses by category</h2><span class="hint">as on the statement</span></div>${finLegend(groups)}${mixChart}</section>
+      <section class="card"><div class="card-head"><h2>Cost by how it behaves</h2><span class="hint">provider pay, per-visit costs, overhead</span></div>${finLegend([{ l: 'Staff, benefits, rent and overhead', c: '#6250d6' }, { l: 'Provider pay', c: '#2a78d6' }, { l: 'Supplies and per-visit costs', c: '#eda100' }])}${costStack}</section>
     </div>
-    <section class="card" style="margin-top:14px"><div class="card-head"><h2>What it takes to break even</h2><span class="hint">change any input; the rest recalculates</span></div><div id="fin-whatif">${whatIf}</div></section>
-    ${hoursCard ? `<div style="margin-top:14px">${hoursCard}</div>` : ''}
+    ${finDriversHTML(rec, per, a, rec.unit)}
+    ${finCostCardHTML(rec, per, a, unit)}
+    <section class="card" style="margin-top:14px"><div class="card-head"><h2>What it takes to break even</h2><span class="hint">change any input; the rest recalculates</span></div><div id="fin-whatif">${finWhatIfHTML(rec)}</div></section>
+    ${coding ? `<section class="card" style="margin-top:14px"><div class="card-head"><h2>Visit coding and what it is worth</h2><span class="hint">office visit (E/M) levels from the provider RVU report</span></div><div id="fin-coding">${coding}</div></section>` : ''}
+    ${hoursCard}
     <section class="card" style="margin-top:14px">
-      <div class="card-head"><h2>Statement by month</h2><div class="toggle">${plToggle}</div></div>
+      <div class="card-head"><h2>Statement by month</h2><div class="toggle" style="flex-wrap:wrap">${plToggle}</div></div>
       ${plTable}
-      <p class="help" style="margin:8px 0 0">Expense categories open to their GL lines with the + button. Variance columns show actual minus the comparison; for expense lines a negative number is favorable. The last column totals each line for the period; per-unit lines show the statement's own year-to-date figure instead.</p>
+      <p class="help" style="margin:8px 0 0">The + button opens an expense category to its GL lines. On the two "Actual −" views green is better than the comparison and red is worse. The last column totals the period; per-${esc(u1)} lines show the statement's own year-to-date figure. On a narrow screen the months scroll sideways while the line names and the total stay in view.</p>
     </section>
-    ${billing}`;
+    ${chgDeptSectionHTML(rec)}`;
 }
 function pickFinDept(v) { const h = v ? '#/reports/clinics/' + encodeURIComponent(v) : '#/reports/clinics'; if (location.hash === h) rerender(); else location.hash = h; }
-function updateFinWhatIf() { const el = $('#fin-whatif'); if (!el) return; const code = (location.hash.split('/')[3] || ''); const rec = finDept(decodeURIComponent(code)); if (!rec) return; const html = viewFinDept(rec, ''); const m = html.match(/<div id="fin-whatif">([\s\S]*?)<\/div><\/section>/); if (m) el.innerHTML = m[1]; }
-
+function finCurrentDept() { return finDept(decodeURIComponent(location.hash.split('/')[3] || '')); }
+function updateFinWhatIf() { const el = $('#fin-whatif'), rec = finCurrentDept(); if (el && rec) el.innerHTML = finWhatIfHTML(rec); }
+function updateFinCoding() { const el = $('#fin-coding'), rec = finCurrentDept(); if (el && rec) el.innerHTML = finCodingHTML(rec); }
 /* ============================================================================================
    Provider billing: CPT, RVU, charges and payments by performing provider and visit location.
    ============================================================================================ */
@@ -4261,9 +4476,9 @@ function chgMatchPhysician(name) { const { first, last } = chgProviderParts(name
 function chgParseReport(text, fileName) {
   const rows = parseCSV(text); if (rows.length < 2) throw new Error('the file is empty');
   const hdr = rows[0].map((h) => String(h || '').trim().toLowerCase()); const ix = (n) => hdr.indexOf(n);
-  const I = { acct: ix('account number'), date: ix('service date'), cpt: ix('cpt'), hcpcs: ix('hcpcs'), desc: ix('description'), qty: ix('qty'), w: ix('work rvu'), f: ix('full rvu'), perf: ix('performing provider'), att: ix('attending provider'), dept: ix('dept name'), loc: ix('visit location'), ch: ix('charge amt'), pch: ix('prof charge amt'), pay: ix('payment total'), adj: ix('adjustment total') };
+  const I = { acct: ix('account number'), date: ix('service date'), cpt: ix('cpt'), hcpcs: ix('hcpcs'), desc: ix('description'), qty: ix('qty'), w: ix('work rvu'), f: ix('full rvu'), perf: ix('performing provider'), att: ix('attending provider'), dept: ix('dept name'), loc: ix('visit location'), ch: ix('charge amt'), mod: ix('cpt modifiers'), pch: ix('prof charge amt'), pay: ix('payment total'), adj: ix('adjustment total') };
   if (I.date < 0 || I.perf < 0 || (I.cpt < 0 && I.hcpcs < 0)) throw new Error('this is not the Performing Provider RVU report (it needs Service Date, Performing Provider and CPT columns)');
-  const agg = new Map(), descs = {}, months = new Set(); let kept = 0, skipped = 0, noProv = 0, minD = '', maxD = '';
+  const agg = new Map(), descs = {}, rates = {}, months = new Set(); let kept = 0, skipped = 0, noProv = 0, minD = '', maxD = '';
   const r2 = (v) => Math.round(v * 100) / 100;
   for (let r = 1; r < rows.length; r++) {
     const row = rows[r]; if (!row || row.length < 5) continue; const g = (k) => (I[k] >= 0 ? String(row[I[k]] ?? '').trim() : '');
@@ -4275,17 +4490,17 @@ function chgParseReport(text, fileName) {
     let a = agg.get(key); if (!a) { a = { provider: prov, location: loc, period, n: 0, q: 0, w: 0, f: 0, ch: 0, pch: 0, pay: 0, adj: 0, accts: new Set(), cpt: {} }; agg.set(key, a); }
     const qty = num(g('qty')) || 1, w = num(g('w')) * qty, fr = num(g('f')) * qty, ch = num(g('ch')), pch = num(g('pch')), pay = num(g('pay')), adj = num(g('adj'));
     a.n++; a.q += qty; a.w += w; a.f += fr; a.ch += ch; a.pch += pch; a.pay += pay; a.adj += adj; if (g('acct')) a.accts.add(g('acct') + '|' + date);
-    if (code) { const c = a.cpt[code] = a.cpt[code] || [0, 0, 0, 0, 0]; c[0]++; c[1] += qty; c[2] += w; c[3] += ch; c[4] += pay; if (!descs[code] && g('desc')) descs[code] = g('desc'); }
+    if (code) { const c = a.cpt[code] = a.cpt[code] || [0, 0, 0, 0, 0]; c[0]++; c[1] += qty; c[2] += w; c[3] += ch; c[4] += pay; if (!descs[code] && g('desc')) descs[code] = g('desc'); if (!rates[code] && num(g('f')) > 0 && !(I.mod >= 0 && g('mod'))) rates[code] = r2(num(g('f'))); }
     months.add(period); kept++; if (!minD || date < minD) minD = date; if (date > maxD) maxD = date;
   }
   const records = [...agg.values()].map((a) => ({ id: chgId(a.provider, a.location, a.period), provider: a.provider, location: a.location, dept: finLocDept(a.location), period: a.period, n: a.n, q: r2(a.q), w: r2(a.w), f: r2(a.f), ch: r2(a.ch), pch: r2(a.pch), pay: r2(a.pay), adj: r2(a.adj), enc: a.accts.size, cpt: Object.fromEntries(Object.entries(a.cpt).map(([k, v]) => [k, v.map(r2)])) }));
-  return { records, descs, months: [...months].sort(), kept, skipped, noProv, from: minD, asOf: maxD, total: rows.length - 1, source: `${fileName} (uploaded ${todayISO()})` };
+  return { records, descs, rates, months: [...months].sort(), kept, skipped, noProv, from: minD, asOf: maxD, total: rows.length - 1, source: `${fileName} (uploaded ${todayISO()})` };
 }
 function chgParseJSON(text) {
   const d = JSON.parse(text); if (d.kind !== 'provider-billing' || !Array.isArray(d.records)) throw new Error('this is not a provider billing data file');
   const records = d.records.filter((r) => r && r.provider && r.period).map((r) => ({ ...r, id: chgId(r.provider, r.location, r.period) + (r.src ? '_s' + String(r.src).replace(/[^0-9]/g, '') : ''), dept: r.dept || finLocDept(r.location) }));
   const months = [...new Set(records.map((r) => r.period))].sort();
-  return { records, descs: (d.meta && d.meta.descs) || {}, months, kept: records.reduce((s, r) => s + r.n, 0), skipped: 0, noProv: 0, from: months[0] ? months[0] + '-01' : '', asOf: (d.meta && d.meta.asOf) || '', total: null, isFile: true, source: `provider billing data file (uploaded ${todayISO()})` };
+  return { records, descs: (d.meta && d.meta.descs) || {}, rates: (d.meta && d.meta.rates) || {}, months, kept: records.reduce((s, r) => s + r.n, 0), skipped: 0, noProv: 0, from: months[0] ? months[0] + '-01' : '', asOf: (d.meta && d.meta.asOf) || '', total: null, isFile: true, source: `provider billing data file (uploaded ${todayISO()})` };
 }
 async function importCharges(file) {
   if (!isAdmin()) { toast('Only the administrator can upload the RVU report.', 'err'); return; }
@@ -4339,6 +4554,7 @@ function applyChargesImport(parsed, mainMonths) {
   const recs = parsed.records.map((r) => { const p = chgMatchPhysician(r.provider); const isMain = parsed.isFile || pl.main.has(r.period); return { ...r, ...(isMain ? {} : { src: pl.src, id: r.id + '_s' + pl.src.replace(/[^0-9]/g, '') }), physicianId: p ? p.id : '' }; });
   meta.months = meta.months || {}; [...pl.main].forEach((m) => { meta.months[m] = parsed.source; });
   meta.descs = Object.assign({}, meta.descs || {}, parsed.descs || {});
+  meta.rates = Object.assign({}, meta.rates || {}, parsed.rates || {});
   meta.asOf = [meta.asOf || '', parsed.asOf || ''].sort().pop(); meta.importedAt = nowISO(); meta.importedBy = session.name;
   db.charges = [meta, ...keep, ...recs];
   saveDB(); toast(`Provider billing saved — ${[...pl.main].map(fmtMonth).join(', ')}${pl.spill.length ? ` plus late charges for ${pl.spill.map(fmtMonth).join(', ')}` : ''}`);
@@ -4346,7 +4562,7 @@ function applyChargesImport(parsed, mainMonths) {
 }
 function exportCharges() {
   const meta = chgMeta() || {};
-  download(`provider-billing-${todayISO()}.json`, JSON.stringify({ app: 'nwsh-physician-relations', kind: 'provider-billing', exportedAt: nowISO(), exportedBy: session.name, meta: { months: meta.months || {}, asOf: meta.asOf || '', descs: meta.descs || {} }, records: chgRecords().map(({ physicianId, id, dept, ...r }) => r) }), 'application/json');
+  download(`provider-billing-${todayISO()}.json`, JSON.stringify({ app: 'nwsh-physician-relations', kind: 'provider-billing', exportedAt: nowISO(), exportedBy: session.name, meta: { months: meta.months || {}, asOf: meta.asOf || '', descs: meta.descs || {}, rates: meta.rates || {} }, records: chgRecords().map(({ physicianId, id, dept, ...r }) => r) }), 'application/json');
 }
 const EM_NEW = ['99202', '99203', '99204', '99205'], EM_EST = ['99211', '99212', '99213', '99214', '99215'];
 function chgSum(recs) {
@@ -4355,37 +4571,40 @@ function chgSum(recs) {
   return s;
 }
 function chgEM(cpt) { const em = { new: 0, est: 0, lvl: {} }; EM_NEW.forEach((c) => { const v = cpt[c] ? cpt[c][1] : 0; em.new += v; if (v) em.lvl[c] = v; }); EM_EST.forEach((c) => { const v = cpt[c] ? cpt[c][1] : 0; em.est += v; if (v) em.lvl[c] = v; }); em.g0463 = cpt['G0463'] ? cpt['G0463'][1] : 0; return em; }
-function chgEMBar(em) {
-  const total = em.new + em.est; if (!total) return '<span class="muted small">no E/M</span>';
+function chgEMBar(em, bare) {
+  const total = em.new + em.est; if (!total) return '<span class="muted small">no office visits</span>';
   const segs = [...EM_NEW, ...EM_EST].filter((c) => em.lvl[c]).map((c) => ({ c, v: em.lvl[c], col: c.endsWith('2') ? '#cfe0f5' : c.endsWith('3') ? '#86b6ef' : c.endsWith('4') ? '#2a78d6' : c.endsWith('5') ? '#184f95' : '#e1e6ea' }));
   const avg = (EM_NEW.concat(EM_EST).reduce((s, c) => s + (em.lvl[c] || 0) * (+c.slice(-1)), 0) / total).toFixed(2);
-  return `<div style="display:flex;height:12px;border-radius:3px;overflow:hidden;min-width:120px" title="${segs.map((s) => `${s.c}: ${volInt(s.v)}`).join(', ')}">${segs.map((s) => `<i style="display:block;flex:${s.v};background:${s.col}"></i>`).join('')}</div><div class="sub">avg level ${avg} · ${volInt(em.new)} new / ${volInt(em.est)} est.</div>`;
+  const bar = `<div style="display:flex;height:12px;border-radius:3px;overflow:hidden;min-width:110px" title="${segs.map((s) => `${s.c}: ${volInt(s.v)}`).join(', ')}">${segs.map((s) => `<i style="display:block;flex:${s.v};background:${s.col}"></i>`).join('')}</div>`;
+  return bare ? bar : `${bar}<div class="sub" style="white-space:nowrap">avg level ${avg} · ${volInt(em.new)} new / ${volInt(em.est)} est.</div>`;
 }
 function chgMonthsAvailable() { return [...new Set(chgRecords().map((r) => r.period))].sort(); }
+function codeKind(code) { return /^[A-V]\d{4}$/i.test(String(code)) ? 'HCPCS' : 'CPT'; }
 function chgProviderTableHTML(recs, opts) {
   const o = opts || {}, byProv = {};
   recs.forEach((r) => { (byProv[r.provider] = byProv[r.provider] || []).push(r); });
   const rows = Object.entries(byProv).map(([prov, rs]) => ({ prov, s: chgSum(rs), p: rs.find((r) => r.physicianId) ? getPhys(rs.find((r) => r.physicianId).physicianId) : chgMatchPhysician(prov), locs: [...new Set(rs.map((r) => r.location))] }));
   const sort = ui.bl.sort || 'w', dir = ui.bl.dir || -1;
-  rows.sort((a, b) => { const v = (x) => sort === 'name' ? x.prov : sort === 'enc' ? x.s.enc : sort === 'n' ? x.s.n : sort === 'wenc' ? (x.s.enc ? x.s.w / x.s.enc : 0) : sort === 'ch' ? x.s.ch : sort === 'pay' ? x.s.pay : sort === 'pct' ? (x.s.ch ? x.s.pay / x.s.ch : 0) : x.s.w; const va = v(a), vb = v(b); return (typeof va === 'string' ? va.localeCompare(vb) : va - vb) * dir; });
+  rows.sort((a, b) => { const v = (x) => sort === 'name' ? x.prov : sort === 'enc' ? x.s.enc : sort === 'wenc' ? (x.s.enc ? x.s.w / x.s.enc : 0) : sort === 'ch' ? x.s.ch : sort === 'pct' ? (x.s.ch ? x.s.pay / x.s.ch : 0) : x.s.w; const va = v(a), vb = v(b); return (typeof va === 'string' ? va.localeCompare(vb) : va - vb) * dir; });
   const th = (k, l, cls) => `<th class="${cls || ''}" data-act="bl-sort" data-k="${k}" style="cursor:pointer;white-space:nowrap">${l}${sort === k ? (dir > 0 ? ' ▲' : ' ▼') : ''}</th>`;
   const shown = o.limit && !ui.bl.showAll ? rows.slice(0, o.limit) : rows;
-  return `<div class="table-wrap"><table class="breakdown">
-      <thead><tr>${th('name', 'Provider')}${th('enc', 'Encounters', 'num')}${th('n', 'Charge lines', 'num')}${th('w', 'Work RVUs', 'num')}${th('wenc', 'wRVU / encounter', 'num')}<th>E/M levels</th>${th('ch', 'Charges', 'num')}${th('pay', 'Payments', 'num')}${th('pct', 'Collected', 'num')}<th></th></tr></thead>
+  const descs = (chgMeta() || {}).descs || {};
+  return `<div class="table-wrap"><table class="breakdown bill">
+      <thead><tr>${th('name', 'Provider')}${th('enc', 'Encounters', 'num')}${th('w', 'Work RVUs', 'num')}${th('wenc', 'wRVU / enc.', 'num')}<th>Office visit levels</th>${th('ch', 'Charges', 'num')}${th('pct', 'Collected', 'num')}<th></th></tr></thead>
       <tbody>${shown.map((x) => { const em = chgEM(x.s.cpt); const top = Object.entries(x.s.cpt).sort((a, b) => b[1][1] - a[1][1])[0]; return `<tr>
-        <td>${x.p ? `<a href="#/physician/${x.p.id}"><b>${esc(x.prov)}</b></a>` : `<b>${esc(x.prov)}</b>`}<div class="sub">${o.showLoc ? esc(x.locs.slice(0, 3).join(', ')) + (x.locs.length > 3 ? ` +${x.locs.length - 3}` : '') : (top ? `top CPT ${esc(top[0])} · ${volInt(top[1][1])}` : '')}</div></td>
-        <td class="num">${volInt(x.s.enc)}</td><td class="num">${volInt(x.s.n)}</td><td class="num"><b>${x.s.w.toLocaleString(undefined, { maximumFractionDigits: 1 })}</b></td><td class="num">${x.s.enc ? (x.s.w / x.s.enc).toFixed(2) : '—'}</td>
-        <td>${chgEMBar(em)}${em.g0463 ? `<div class="sub">${volInt(em.g0463)} facility clinic visits (G0463)</div>` : ''}</td>
-        <td class="num">${finMoney(x.s.ch)}</td><td class="num">${finMoney(x.s.pay)}</td><td class="num">${x.s.ch ? finPctText(finPct(x.s.pay, x.s.ch)) : '—'}</td>
-        <td class="nowrap"><button class="btn sm" data-act="bl-cpt" data-prov="${esc(x.prov)}" data-loc="${esc(o.loc || '')}">CPTs</button></td></tr>`; }).join('')}</tbody></table></div>
+        <td>${x.p ? `<a href="#/physician/${x.p.id}"><b>${esc(x.prov)}</b></a>` : `<b>${esc(x.prov)}</b>`}<div class="sub">${o.showLoc ? esc(shortText(x.locs.slice(0, 2).join(', '), 48)) + (x.locs.length > 2 ? ` +${x.locs.length - 2}` : '') : (top ? `top code ${esc(top[0])} · ${volInt(top[1][1])} · ${esc(shortText(descs[top[0]] || '', 24))}` : '')}</div></td>
+        <td class="num">${volInt(x.s.enc)}</td><td class="num"><b>${x.s.w.toLocaleString(undefined, { maximumFractionDigits: 0 })}</b></td><td class="num">${x.s.enc ? (x.s.w / x.s.enc).toFixed(2) : '—'}</td>
+        <td style="min-width:185px">${chgEMBar(em)}${em.g0463 ? `<div class="sub" style="white-space:nowrap">${volInt(em.g0463)} facility fees (G0463)</div>` : ''}</td>
+        <td class="num">${finMoney(x.s.ch)}<div class="sub">${finMoney(x.s.pay)} paid</div></td><td class="num">${x.s.ch ? finPctText(finPct(x.s.pay, x.s.ch)) : '—'}</td>
+        <td class="nowrap"><button class="btn sm" data-act="bl-cpt" data-prov="${esc(x.prov)}" data-loc="${esc(o.loc || '')}" data-dept="${esc(o.dept || '')}">Codes</button></td></tr>`; }).join('')}</tbody></table></div>
     ${o.limit && rows.length > o.limit && !ui.bl.showAll ? `<p style="margin:10px 0 0"><button class="btn sm" data-act="bl-show-all">Show all ${rows.length} providers</button></p>` : ''}`;
 }
 function chgCPTTableHTML(cpt, descs, limit) {
-  const rows = Object.entries(cpt).map(([code, v]) => ({ code, n: v[0], q: v[1], w: v[2], ch: v[3], pay: v[4] })).sort((a, b) => b.q - a.q);
+  const rows = Object.entries(cpt).map(([code, v]) => ({ code, n: v[0], q: v[1], w: v[2], ch: v[3] })).sort((a, b) => b.q - a.q);
   const totQ = rows.reduce((s, r) => s + r.q, 0), totW = rows.reduce((s, r) => s + r.w, 0);
-  return `<div class="table-wrap" style="max-height:420px;overflow:auto"><table class="breakdown"><thead><tr><th>CPT / HCPCS</th><th>Description</th><th class="num">Units</th><th class="num">Share</th><th class="num">Work RVUs</th><th class="num">wRVU / unit</th><th class="num">Charges</th><th class="num">Payments</th></tr></thead>
-    <tbody>${rows.slice(0, limit || rows.length).map((r) => `<tr><td class="mono"><b>${esc(r.code)}</b></td><td>${esc(descs[r.code] || '')}</td><td class="num">${volInt(r.q)}</td><td class="num">${finPctText(finPct(r.q, totQ))}</td><td class="num">${r.w.toFixed(1)}</td><td class="num">${r.q ? (r.w / r.q).toFixed(2) : '—'}</td><td class="num">${finMoney(r.ch)}</td><td class="num">${finMoney(r.pay)}</td></tr>`).join('')}</tbody>
-    <tfoot><tr><td colspan="2"><b>${rows.length} codes</b></td><td class="num"><b>${volInt(totQ)}</b></td><td></td><td class="num"><b>${totW.toFixed(1)}</b></td><td class="num">${totQ ? (totW / totQ).toFixed(2) : '—'}</td><td class="num"><b>${finMoney(rows.reduce((s, r) => s + r.ch, 0))}</b></td><td class="num"><b>${finMoney(rows.reduce((s, r) => s + r.pay, 0))}</b></td></tr></tfoot></table></div>`;
+  return `<div class="table-wrap" style="max-height:440px;overflow:auto"><table class="breakdown"><thead><tr><th>Code</th><th>Description</th><th class="num">Units</th><th class="num">Share</th><th class="num">Work RVUs</th><th class="num">wRVU / unit</th><th class="num">Charges</th></tr></thead>
+    <tbody>${rows.slice(0, limit || rows.length).map((r) => `<tr><td class="nowrap"><b class="mono">${esc(r.code)}</b> <span class="muted small">${codeKind(r.code)}</span></td><td>${esc(descs[r.code] || '')}</td><td class="num">${volInt(r.q)}</td><td class="num">${finPctText(finPct(r.q, totQ))}</td><td class="num">${r.w ? r.w.toFixed(1) : '<span class="muted">—</span>'}</td><td class="num">${r.q && r.w ? (r.w / r.q).toFixed(2) : '<span class="muted">—</span>'}</td><td class="num">${finMoney(r.ch)}</td></tr>`).join('')}</tbody>
+    <tfoot><tr><td colspan="2"><b>${rows.length} codes</b>${limit && rows.length > limit ? ` <span class="muted small">(top ${limit} shown)</span>` : ''}</td><td class="num"><b>${volInt(totQ)}</b></td><td></td><td class="num"><b>${totW.toFixed(1)}</b></td><td class="num">${totQ ? (totW / totQ).toFixed(2) : '—'}</td><td class="num"><b>${finMoney(rows.reduce((s, r) => s + r.ch, 0))}</b></td></tr></tfoot></table></div>`;
 }
 function chgScope(f) { let recs = chgRecords(); if (f.month) recs = recs.filter((r) => r.period === f.month); if (f.loc) recs = recs.filter((r) => r.location === f.loc); if (f.prov) recs = recs.filter((r) => r.provider === f.prov); return recs; }
 function viewBilling() {
@@ -4414,20 +4633,21 @@ function viewBilling() {
   const topCPT = Object.entries(s.cpt).map(([code, v]) => ({ label: `${code} ${(meta.descs || {})[code] || ''}`.trim(), v: Math.round(v[1]) })).sort((a, b) => b.v - a.v).slice(0, 15);
   return finHead('Provider billing', `CPT codes, work RVUs, charges and payments by performing provider and visit location, from the Meditech RVU report.`, 'billing', actions) + `
     <div class="card" style="margin-bottom:14px">
-      <div class="pair" style="display:flex;gap:18px;flex-wrap:wrap;align-items:flex-end">
+      <div class="pair fbar" style="display:flex;gap:14px 22px;flex-wrap:wrap;align-items:flex-end">
         <label><span>Location</span>${comboHTML('bl-loc', locs.map((l) => ({ v: l, l, g: FIN_DEPT_LABELS[finLocDept(l)] || '' })), f.loc, 'All locations')}</label>
         <label><span>Provider</span>${comboHTML('bl-prov', provs.map((p) => ({ v: p, l: p })), f.prov, 'All providers')}</label>
         <label><span>Month</span><select data-change="bl-month"><option value="">All loaded (${months.length})</option>${months.map((m) => `<option value="${m}" ${f.month === m ? 'selected' : ''}>${fmtMonth(m)}</option>`).join('')}</select></label>
       </div>
     </div>
-    <div class="kpis" style="margin-bottom:18px">${kpis.map((k) => `<div class="kpi"><div class="label">${k.l}</div><div class="value" style="font-size:24px">${k.v}</div><span class="small">${k.c || ''}</span></div>`).join('')}</div>
+    <div class="kpis" style="margin-bottom:14px">${kpis.map((k) => `<div class="kpi"><div class="label">${k.l}</div><div class="value" style="font-size:24px">${k.v}</div><span class="small">${k.c || ''}</span></div>`).join('')}</div>
+    ${finGlossaryHTML('billing')}
     <section class="card"><div class="card-head"><h2>${f.prov ? esc(f.prov) : 'By provider'}${f.loc ? ` · ${esc(f.loc)}` : ''}</h2><span class="hint">${esc(perLabel)} · click a column heading to sort</span></div>${chgProviderTableHTML(recs, { limit: 40, showLoc: !f.loc, loc: f.loc })}</section>
     ${locTable}
-    <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(340px,1fr));gap:14px;margin-top:14px">
+    <div class="cgrid" style="display:grid;grid-template-columns:minmax(0,1fr);gap:14px;margin-top:14px">
       <section class="card"><div class="card-head"><h2>Most billed codes</h2><span class="hint">units, ${esc(perLabel)}</span></div>${imgHBarSVG(topCPT, '#2a78d6', 'Most billed codes')}</section>
       <section class="card"><div class="card-head"><h2>All codes</h2><span class="hint">${Object.keys(s.cpt).length} distinct</span></div>${chgCPTTableHTML(s.cpt, meta.descs || {}, 60)}</section>
     </div>
-    <p class="help" style="margin:10px 0 0">Work RVUs come from Meditech's fee schedule line by line, multiplied by units. Encounters are distinct account and service date pairs. Payments are what has posted so far, so recent months collect further after upload. Months loaded: ${months.map(fmtMonth).join(', ')}${meta.importedAt ? ` · last uploaded ${fmtTS(meta.importedAt)} by ${esc(meta.importedBy || '')}` : ''}.</p>`;
+    <p class="help" style="margin:10px 0 0">Work RVUs come from Meditech's fee schedule line by line, multiplied by units. Encounters are distinct account and service date pairs. Payments are what has posted so far, so recent months collect further after upload; they post to the patient account, not to a code, and hospital facility payments mostly sit under "No performing provider". To see what a change in visit coding is worth for one clinic, open that clinic under Clinic financials. Months loaded: ${months.map(fmtMonth).join(', ')}${meta.importedAt ? ` · last uploaded ${fmtTS(meta.importedAt)} by ${esc(meta.importedBy || '')}` : ''}.</p>`;
 }
 /* Billing section on a department's financial page. */
 function chgDeptSectionHTML(rec) {
@@ -4435,14 +4655,14 @@ function chgDeptSectionHTML(rec) {
   const months = [...new Set(recs.map((r) => r.period))].sort(), s = chgSum(recs), em = chgEM(s.cpt), meta = chgMeta() || {};
   const locs = [...new Set(recs.map((r) => r.location))];
   return `<section class="card" style="margin-top:14px">
-      <div class="card-head"><h2>Billing by provider</h2><span class="hint">${esc(locs.join(', '))} · ${months.map(fmtMonth).join(', ')} · <a href="#/reports/billing" data-act="bl-goto" data-loc="${esc(locs[0])}">open the billing report</a></span></div>
-      <div class="kpis" style="grid-template-columns:repeat(auto-fit,minmax(140px,1fr));margin-bottom:12px">
+      <div class="card-head"><h2>Billing by provider</h2><span class="hint">${esc(shortText(locs.join(', '), 60))} · ${months.length === 1 ? fmtMonth(months[0]) : `${fmtMonth(months[0])} to ${fmtMonth(months[months.length - 1])}`} · <a href="#/reports/billing" data-act="bl-goto" data-loc="${esc(locs.length === 1 ? locs[0] : '')}">open the billing report</a></span></div>
+      <div class="kpis" style="grid-template-columns:repeat(auto-fit,minmax(170px,1fr));margin-bottom:12px">
         <div class="kpi"><div class="label">Work RVUs</div><div class="value" style="font-size:22px">${volInt(s.w)}</div><span class="small">${s.enc ? (s.w / s.enc).toFixed(2) + ' per encounter' : ''}</span></div>
         <div class="kpi"><div class="label">Encounters billed</div><div class="value" style="font-size:22px">${volInt(s.enc)}</div><span class="small">${months.length} month${months.length === 1 ? '' : 's'}</span></div>
-        <div class="kpi"><div class="label">E/M mix</div><div class="value" style="font-size:16px;margin-top:6px">${chgEMBar(em)}</div></div>
+        <div class="kpi"><div class="label">Office visit levels</div><div style="margin-top:10px">${chgEMBar(em)}</div></div>
         <div class="kpi"><div class="label">Charges</div><div class="value" style="font-size:22px">${finShort(s.ch)}</div><span class="small">${finShort(s.pay)} paid so far</span></div>
       </div>
-      ${chgProviderTableHTML(recs, { limit: 15, loc: '' })}
+      ${chgProviderTableHTML(recs, { limit: 15, dept: rec.code })}
       <details style="margin-top:10px"><summary style="cursor:pointer;font-weight:600">Codes billed at ${esc(rec.label)}</summary>${chgCPTTableHTML(s.cpt, meta.descs || {}, 40)}</details>
     </section>`;
 }
@@ -4466,12 +4686,14 @@ function physicianBillingCardHTML(p) {
 }
 function pickBillingLocation(v) { ui.bl.loc = v || ''; ui.bl.showAll = false; if (location.hash.startsWith('#/reports/billing')) rerender(); else location.hash = '#/reports/billing'; }
 function pickBillingProvider(v) { ui.bl.prov = v || ''; ui.bl.showAll = false; if (location.hash.startsWith('#/reports/billing')) rerender(); else location.hash = '#/reports/billing'; }
-function openCPTModal(prov, loc) {
-  const f = { ...ui.bl, prov: prov || ui.bl.prov, loc: loc || ui.bl.loc }; const recs = chgScope(f); const s = chgSum(recs), meta = chgMeta() || {};
-  const months = [...new Set(recs.map((r) => r.period))].sort();
-  openModal({ title: `${prov || 'All providers'}${f.loc ? ' · ' + f.loc : ''} — codes billed`, wide: true, body: `<p class="small muted" style="margin:0 0 10px">${months.map(fmtMonth).join(', ')} · ${volInt(s.enc)} encounters · ${volInt(s.w)} work RVUs${!loc && !ui.bl.loc ? ` · ${[...s.locs].join(', ')}` : ''}</p>${chgCPTTableHTML(s.cpt, meta.descs || {})}`, submitLabel: 'Close', onSubmit: () => true });
+function openCPTModal(prov, loc, dept) {
+  let recs = chgRecords(); const f = ui.bl;
+  if (dept) recs = recs.filter((r) => r.dept === dept); else { const l = loc || f.loc; if (l) recs = recs.filter((r) => r.location === l); if (f.month) recs = recs.filter((r) => r.period === f.month); }
+  const p = prov || (dept ? '' : f.prov); if (p) recs = recs.filter((r) => r.provider === p);
+  const s = chgSum(recs), meta = chgMeta() || {}, months = [...new Set(recs.map((r) => r.period))].sort();
+  const where = dept ? (finDept(dept) || {}).label || '' : (loc || f.loc || '');
+  openModal({ title: `${p || 'All providers'}${where ? ' · ' + where : ''}: codes billed`, wide: true, body: `<p class="small muted" style="margin:0 0 10px">${months.length ? (months.length === 1 ? fmtMonth(months[0]) : `${fmtMonth(months[0])} to ${fmtMonth(months[months.length - 1])}`) : 'No months'} · ${volInt(s.enc)} encounters · ${volInt(s.w)} work RVUs · ${esc(shortText([...s.locs].join(', '), 90))}</p>${chgCPTTableHTML(s.cpt, meta.descs || {})}<p class="help" style="margin:10px 0 0">CPT codes are five characters; HCPCS codes start with a letter (G0463 is the hospital's facility fee for a clinic visit, S9088 the urgent care service fee, G2211 an add-on for ongoing complex care). Payments are not shown by code because they post to the patient account as a whole.</p>` });
 }
-
 function analyticsSwitcher(which) { return finSwitcher(which); }
 /* Reports home: the referral tracking report, with the switch to the other two reports. */
 function viewReportsReferrals() {
@@ -4500,7 +4722,7 @@ function viewImaging(recId) {
   const now = imgSum(scope, months), before = per.prior.length ? imgSum(scope, per.prior) : null;
   const allMods = IMG_MODS.filter((m) => recs.some((r) => r.series.some((e) => e.m === m)));
   const allSites = [...new Set(recs.flatMap((r) => r.series.map((e) => e.s)))].sort();
-  const modsOn = allMods.filter((m) => f.mods[m] !== false);
+  const modsOn = allMods.filter((m) => imgModOn(m));
   const topMod = Object.entries(now.byMod).sort((a, b) => b[1] - a[1])[0];
   const weeks = Math.max(1, months.length * 4.345);
   const who = rec ? imgDisplayName(rec) : 'All referring providers';
@@ -4509,11 +4731,10 @@ function viewImaging(recId) {
   const partial = months.length && months[months.length - 1] === imgMonths().slice(-1)[0] ? imgPartialNote() : '';
   const sentence = `<b>${esc(who)}</b>${p ? ` <a href="#/physician/${p.id}" class="small">(open physician page)</a>` : rec ? ' <span class="muted small">(not in the physician list)</span>' : ''}: <b>${volInt(now.n)}</b> imaging exam${now.n === 1 ? '' : 's'} ordered ${esc(per.label)}${esc(partial)}`
     + (before ? `, <b class="${volCls(d)}">${volSigned(d)} (${volPctText(volPct(now.n, before.n))})</b> compared with the ${per.prior.length} months before` : '') + '.'
-    + (now.n ? ` ${imgPctText(now.r, now.n)} resulted, ${imgPctText(now.c, now.n)} cancelled.${topMod ? ` Most ordered: <b>${esc(topMod[0])}</b> (${volInt(topMod[1])}).` : ''}` : '');
+    + (now.n ? ` ${imgPctText(now.r, now.n)} resulted.${topMod ? ` Most ordered: <b>${esc(topMod[0])}</b> (${volInt(topMod[1])}).` : ''}` : '');
   const kpis = [
     { l: `Exams ordered, ${esc(per.label)}`, v: volInt(now.n), c: before ? `<span class="${volCls(d)}">${volSigned(d)} · ${volPctText(volPct(now.n, before.n))}</span> vs the ${per.prior.length} months before` : '' },
     { l: 'Resulted (report signed)', v: imgPctText(now.r, now.n), c: `${volInt(now.r)} exams` },
-    { l: 'Cancelled', v: imgPctText(now.c, now.n), c: `${volInt(now.c)} exams${before ? ` · ${imgPctText(before.c, before.n)} before` : ''}`, red: now.n && now.c / now.n > 0.12 },
     { l: 'Exams per week', v: volInt(now.n / weeks), c: before ? `${volInt(before.n / Math.max(1, per.prior.length * 4.345))} before` : '' },
     rec ? { l: 'Share of all imaging', v: imgPctText(now.n, imgSum(recs, months).n), c: 'of exams in this period' } : { l: 'Referring providers', v: volInt(now.refs.size), c: 'with at least one exam' },
     { l: 'Most ordered', v: topMod ? esc(topMod[0]) : '—', c: topMod ? `${volInt(topMod[1])} exams · ${imgPctText(topMod[1], now.n)}` : '' },
@@ -4523,7 +4744,7 @@ function viewImaging(recId) {
   const ranked = recs.map((r) => { const s = imgSum([r], months), b = before ? imgSum([r], per.prior) : null; const tm = Object.entries(s.byMod).sort((x, y) => y[1] - x[1])[0]; const n = rank ? (s.byMod[rank] || 0) : s.n; return { r, n, all: s.n, c: s.c, b: b ? (rank ? (b.byMod[rank] || 0) : b.n) : null, top: tm ? tm[0] : '' }; }).filter((x) => x.n > 0).sort((a, b) => b.n - a.n);
   const shown = f.showAll ? ranked : ranked.slice(0, 25);
   const bySpec = {}; recs.forEach((r) => { const ph = imgPhysician(r); const k = ph ? (ph.specialty || 'No specialty on file') : 'Not in the physician list'; (bySpec[k] = bySpec[k] || []).push(r); });
-  const total = {}; recs.forEach((r) => { total[r.id] = r.series.reduce((a, e) => a + num(e.n), 0); });
+  const total = {}; recs.forEach((r) => { total[r.id] = r.series.reduce((a, e) => a + (e.m === IMG_GUIDE ? 0 : imgN(e)), 0); });
   const groups = Object.keys(bySpec).sort((a, b) => (a === 'Not in the physician list') - (b === 'Not in the physician list') || a.localeCompare(b));
   const comboOpts = [{ v: '', l: 'All referring providers' }, ...groups.flatMap((g) => bySpec[g].sort((a, b) => total[b.id] - total[a.id]).map((r) => ({ v: r.id, l: `${imgDisplayName(r)} (${volInt(total[r.id])})`, g })))];
   const periods = [['3', 'Last 3 months'], ['6', 'Last 6 months'], ['12', 'Last 12 months'], ['ytd', 'This year to date'], ['all', 'Everything loaded']];
@@ -4536,7 +4757,7 @@ function viewImaging(recId) {
         <div class="field" style="flex:1 1 320px"><span class="field-label">Referring provider</span>${comboHTML('im-ref', comboOpts, f.id, 'Type a name or specialty, or pick from the list')}</div>
         <label class="field"><span class="field-label">Period</span><select data-change="im-period" aria-label="Period">${periods.map(([k, l]) => `<option value="${k}" ${f.period === k ? 'selected' : ''}>${l}</option>`).join('')}</select></label>
         ${rec ? '' : `<label class="field"><span class="field-label">Rank providers by</span><select data-change="im-rank" aria-label="Rank providers by"><option value="">All exams</option>${allMods.map((m0) => `<option value="${esc(m0)}" ${rank === m0 ? 'selected' : ''}>${esc(m0)}</option>`).join('')}</select></label>`}
-        <div class="field"><span class="field-label">Modalities</span><div style="display:flex;gap:6px;flex-wrap:wrap">${allMods.map((m) => `<button type="button" class="chip ${f.mods[m] !== false ? 'on' : ''}" data-act="im-mod" data-v="${esc(m)}"><i style="display:inline-block;width:10px;height:10px;border-radius:3px;background:${IMG_COLORS[m]}"></i>${esc(m)}</button>`).join('')}</div></div>
+        <div class="field"><span class="field-label">Modalities</span><div style="display:flex;gap:6px;flex-wrap:wrap">${allMods.map((m) => `<button type="button" class="chip ${imgModOn(m) ? 'on' : ''}" data-act="im-mod" data-v="${esc(m)}"><i style="display:inline-block;width:10px;height:10px;border-radius:3px;background:${IMG_COLORS[m]}"></i>${esc(m)}</button>`).join('')}</div></div>
         <div class="field"><span class="field-label">Facility</span><div style="display:flex;gap:6px;flex-wrap:wrap">${allSites.map((s) => `<button type="button" class="chip ${f.sites[s] !== false ? 'on' : ''}" data-act="im-site" data-v="${esc(s)}">${esc(s)}</button>`).join('')}</div></div>
       </div>
     </section>
@@ -4551,16 +4772,16 @@ function viewImaging(recId) {
     </div>
     ${rec ? '' : `<section class="card" style="margin-top:18px">
       <div class="card-head"><h2>Referring providers${rank ? ` — ranked by ${esc(rank)}` : ''}</h2><span class="hint">${ranked.length} with ${rank ? esc(rank) + ' ' : ''}exams ${esc(per.label)} · click a row to see one provider</span></div>
-      <div class="table-wrap"><table class="breakdown"><thead><tr><th>Referring provider</th><th>Physician record</th><th class="num">${rank ? esc(rank) + ' exams' : 'Exams'}</th>${before ? '<th class="num">Change</th>' : ''}${rank ? '<th class="num">All exams</th>' : ''}<th class="num">Share${rank ? ' of ' + esc(rank) : ''}</th><th class="num">Cancelled</th><th>Most ordered</th></tr></thead>
-        <tbody>${shown.map((x) => { const ph = imgPhysician(x.r); const dd = x.b !== null ? x.n - x.b : null; return `<tr class="clickable" data-act="im-pick" data-id="${x.r.id}"><td><b>${esc(imgDisplayName(x.r))}</b></td><td>${ph ? `<a href="#/physician/${ph.id}">${esc(ph.specialty || 'Open')}</a>` : '<span class="muted">Not in the physician list</span>'}</td><td class="num"><b>${volInt(x.n)}</b></td>${before ? `<td class="num ${volCls(dd)}">${dd === null ? '—' : volSigned(dd)}</td>` : ''}${rank ? `<td class="num">${volInt(x.all)}</td>` : ''}<td class="num">${imgPctText(x.n, rank ? (now.byMod[rank] || 0) : now.n)}</td><td class="num ${x.all && x.c / x.all > 0.12 ? 'red' : ''}">${imgPctText(x.c, x.all)}</td><td>${esc(x.top)}</td></tr>`; }).join('')}</tbody></table></div>
+      <div class="table-wrap"><table class="breakdown"><thead><tr><th>Referring provider</th><th>Physician record</th><th class="num">${rank ? esc(rank) + ' exams' : 'Exams'}</th>${before ? '<th class="num">Change</th>' : ''}${rank ? '<th class="num">All exams</th>' : ''}<th class="num">Share${rank ? ' of ' + esc(rank) : ''}</th><th>Most ordered</th></tr></thead>
+        <tbody>${shown.map((x) => { const ph = imgPhysician(x.r); const dd = x.b !== null ? x.n - x.b : null; return `<tr class="clickable" data-act="im-pick" data-id="${x.r.id}"><td><b>${esc(imgDisplayName(x.r))}</b></td><td>${ph ? `<a href="#/physician/${ph.id}">${esc(ph.specialty || 'Open')}</a>` : '<span class="muted">Not in the physician list</span>'}</td><td class="num"><b>${volInt(x.n)}</b></td>${before ? `<td class="num ${volCls(dd)}">${dd === null ? '—' : volSigned(dd)}</td>` : ''}${rank ? `<td class="num">${volInt(x.all)}</td>` : ''}<td class="num">${imgPctText(x.n, rank ? (now.byMod[rank] || 0) : now.n)}</td><td>${esc(x.top)}</td></tr>`; }).join('')}</tbody></table></div>
       ${ranked.length > 25 ? `<p class="help" style="margin:8px 0 0"><button class="btn sm link" data-act="im-all">${f.showAll ? 'Show the top 25' : `Show all ${ranked.length}`}</button></p>` : ''}
     </section>`}
     <section class="card" style="margin-top:18px">
       <div class="card-head"><h2>By month</h2><span class="hint">${esc(who)}</span></div>
-      <div class="table-wrap"><table class="breakdown"><thead><tr><th>Month</th>${modsOn.map((m) => `<th class="num">${esc(m)}</th>`).join('')}<th class="num">Total</th><th class="num">Resulted</th><th class="num">Cancelled</th></tr></thead>
-        <tbody>${months.map((m) => { const bm = now.byMonth[m]; return `<tr><td><b>${esc(fmtMonth(m))}</b></td>${modsOn.map((mod) => `<td class="num">${bm.mods[mod] ? volInt(bm.mods[mod]) : '<span class="muted">—</span>'}</td>`).join('')}<td class="num"><b>${volInt(bm.n)}</b></td><td class="num">${volInt(bm.r)}</td><td class="num">${volInt(bm.c)}</td></tr>`; }).join('')}
-        <tr><td><b>Total</b></td>${modsOn.map((mod) => `<td class="num"><b>${volInt(now.byMod[mod] || 0)}</b></td>`).join('')}<td class="num"><b>${volInt(now.n)}</b></td><td class="num"><b>${volInt(now.r)}</b></td><td class="num"><b>${volInt(now.c)}</b></td></tr></tbody></table></div>
-      <p class="help" style="margin:10px 0 0">An exam is one imaging order line in Meditech, dated by service date. "Resulted" means the order is resulted or complete or its report is signed. Facilities: ${esc(allSites.join(', '))}. ${meta.from && meta.asOf ? `Data covers ${fmtDate(meta.from)} to ${fmtDate(meta.asOf)}.` : ''}${meta.importedAt ? ` Last uploaded ${fmtTS(meta.importedAt)} by ${esc(meta.importedBy || '')}.` : ''}</p>
+      <div class="table-wrap"><table class="breakdown"><thead><tr><th>Month</th>${modsOn.map((m) => `<th class="num">${esc(m)}</th>`).join('')}<th class="num">Total</th><th class="num">Resulted</th></tr></thead>
+        <tbody>${months.map((m) => { const bm = now.byMonth[m]; return `<tr><td><b>${esc(fmtMonth(m))}</b></td>${modsOn.map((mod) => `<td class="num">${bm.mods[mod] ? volInt(bm.mods[mod]) : '<span class="muted">—</span>'}</td>`).join('')}<td class="num"><b>${volInt(bm.n)}</b></td><td class="num">${volInt(bm.r)}</td></tr>`; }).join('')}
+        <tr><td><b>Total</b></td>${modsOn.map((mod) => `<td class="num"><b>${volInt(now.byMod[mod] || 0)}</b></td>`).join('')}<td class="num"><b>${volInt(now.n)}</b></td><td class="num"><b>${volInt(now.r)}</b></td></tr></tbody></table></div>
+      <p class="help" style="margin:10px 0 0">An exam is one imaging order line in Meditech, dated by service date. Cancelled orders are left out. "Resulted" means the order is resulted or complete or its report is signed. "Procedure Fluoroscopy" is C-arm time logged during pain injections and surgery (Meditech's "IR Fluoroscopy" lines); it is not a referral to imaging, so it is switched off unless you turn it on under Modalities, and it is not counted in Interventional Radiology. Facilities: ${esc(allSites.join(', '))}. ${meta.from && meta.asOf ? `Data covers ${fmtDate(meta.from)} to ${fmtDate(meta.asOf)}.` : ''}${meta.importedAt ? ` Last uploaded ${fmtTS(meta.importedAt)} by ${esc(meta.importedBy || '')}.` : ''}</p>
     </section>`;
 }
 /* Card on a physician's page. */
@@ -4579,7 +4800,7 @@ function physicianImagingCardHTML(p) {
       <div class="kpis" style="grid-template-columns:repeat(auto-fit,minmax(130px,1fr));margin-bottom:12px">
         <div class="kpi"><div class="label">Exams, last ${months.length} month${months.length === 1 ? '' : 's'}</div><div class="value">${volInt(s.n)}</div><span class="small muted">${fmtMonth(months[0])} to ${fmtMonth(months[months.length - 1])}</span></div>
         <div class="kpi"><div class="label">Last 3 months${esc(imgPartialNote())}</div><div class="value">${volInt(s3.n)}</div>${sPrev ? `<span class="small ${volCls(d)}">${volSigned(d)} (${volPctText(volPct(s3.n, sPrev.n))}) vs the 3 months before</span>` : ''}</div>
-        <div class="kpi ${s.n && s.c / s.n > 0.12 ? 'red' : ''}"><div class="label">Cancelled</div><div class="value" style="font-size:24px">${imgPctText(s.c, s.n)}</div><span class="small muted">${volInt(s.c)} exams</span></div>
+        <div class="kpi"><div class="label">Resulted</div><div class="value" style="font-size:24px">${imgPctText(s.r, s.n)}</div><span class="small muted">${volInt(s.r)} exams</span></div>
         <div class="kpi"><div class="label">Most ordered</div><div class="value" style="font-size:20px">${topMod ? esc(topMod[0]) : '—'}</div>${topMod ? `<span class="small muted">${imgPctText(topMod[1], s.n)} of exams</span>` : ''}</div>
       </div>
       ${imgLegend(mods)}${imgStackSVG(months, s.byMonth, `Imaging exams per month for ${physName(p)}`)}
@@ -4590,11 +4811,11 @@ function physicianImagingCardHTML(p) {
 function imgBuildFromExport(rows, fileName) {
   const norm = (h) => String(h || '').toLowerCase().replace(/[^a-z0-9#]/g, '');
   const hdr = rows[0].map(norm); const col = (names) => names.map((n) => hdr.indexOf(n)).find((i) => i >= 0);
-  const iSite = col(['sitename', 'site', 'facility']), iCat = col(['category', 'modality']), iDate = col(['svcdate', 'servicedate', 'dateofservice', 'examdate', 'date']), iRef = col(['referring', 'referringprovider', 'referringphysician', 'ordering', 'orderingprovider']), iAtt = col(['attending']);
+  const iSite = col(['sitename', 'site', 'facility']), iCat = col(['category', 'modality']), iDate = col(['svcdate', 'servicedate', 'dateofservice', 'examdate', 'date']), iRef = col(['referring', 'referringprovider', 'referringphysician', 'ordering', 'orderingprovider']), iAtt = col(['attending']), iProc = col(['procedure', 'exam', 'procedurename', 'examname']);
   const statusIdx = hdr.map((h, i) => (h === 'status' || h === 'orderstatus' || h === 'reportstatus' ? i : -1)).filter((i) => i >= 0);
   const iOrd = hdr.indexOf('orderstatus') >= 0 ? hdr.indexOf('orderstatus') : statusIdx[0], iRpt = hdr.indexOf('reportstatus') >= 0 ? hdr.indexOf('reportstatus') : statusIdx[1];
   if (iCat === undefined || iDate === undefined || (iRef === undefined && iAtt === undefined)) throw new Error('this does not look like the Meditech imaging export (needs CATEGORY, SVC DATE and REFERRING columns)');
-  const agg = {}, refNames = {}, today = todayISO(); let kept = 0, skipped = 0, testRows = 0, minDate = '', maxDate = '', cancelled = 0, future = 0, maxPast = ''; const months = new Set();
+  const agg = {}, refNames = {}, today = todayISO(); let kept = 0, skipped = 0, testRows = 0, minDate = '', maxDate = '', cancelled = 0, future = 0, maxPast = '', guidance = 0; const months = new Set();
   for (let r = 1; r < rows.length; r++) {
     const row = rows[r]; if (!row || row.length < 3) continue;
     const date = volCellDate(row[iDate]); if (!date) { skipped++; continue; }
@@ -4603,7 +4824,8 @@ function imgBuildFromExport(rows, fileName) {
     if (imgIsTestName(parts)) { testRows++; continue; }
     const os = String(iOrd !== undefined ? row[iOrd] : '').trim().toLowerCase(), rs = String(iRpt !== undefined ? row[iRpt] : '').trim().toLowerCase();
     const resulted = os === 'resulted' || os === 'complete' || os === 'completed' || rs === 'signed' ? 1 : 0, canc = os.startsWith('cancel') ? 1 : 0;
-    const key = parts.key, p = date.slice(0, 7), m = imgModality(row[iCat]), s = imgSite(iSite !== undefined ? row[iSite] : '');
+    const isGuide = iProc !== undefined && imgIsGuidance(row[iCat], row[iProc]); if (isGuide && !canc) guidance++;
+    const key = parts.key, p = date.slice(0, 7), m = isGuide ? IMG_GUIDE : imgModality(row[iCat]), s = imgSite(iSite !== undefined ? row[iSite] : '');
     const k = `${key}\u0001${p}\u0001${m}\u0001${s}`; const a = agg[k] = agg[k] || [0, 0, 0]; a[0]++; a[1] += resulted; a[2] += canc;
     const sp = refNames[key] = refNames[key] || {}; sp[parts.display] = (sp[parts.display] || 0) + 1; months.add(p); kept++; cancelled += canc; if (!minDate || date < minDate) minDate = date; if (date > maxDate) maxDate = date; if (date > today) future++; else if (date > maxPast) maxPast = date;
   }
@@ -4626,7 +4848,7 @@ function imgBuildFromExport(rows, fileName) {
   Object.entries(agg).forEach(([k, v]) => { const [key0, p, m, s] = k.split('\u0001'); const key = cluster[key0] || key0; const rec = recs[key] = recs[key] || { referrer: bestName(spellings[key]), series: [] }; const hit = rec.series.find((e) => e.p === p && e.m === m && e.s === s); if (hit) { hit.n += v[0]; hit.r += v[1]; hit.c += v[2]; } else rec.series.push({ p, m, s, n: v[0], r: v[1], c: v[2] }); });
   Object.values(recs).forEach((rec) => rec.series.sort((a, b) => a.p.localeCompare(b.p) || a.m.localeCompare(b.m)));
   // the as-of date never runs past today: exams booked for a future date are kept but sit outside the analysis window
-  return { records: Object.values(recs), months: [...months].sort(), from: minDate, asOf: maxPast || maxDate, future, kept, skipped, testRows, cancelled, total: rows.length - 1, source: `${fileName} (uploaded ${todayISO()})` };
+  return { records: Object.values(recs), months: [...months].sort(), from: minDate, asOf: maxPast || maxDate, future, kept, skipped, testRows, cancelled, guidance, total: rows.length - 1, source: `${fileName} (uploaded ${todayISO()})` };
 }
 function imgParseJSON(text) {
   const d = JSON.parse(text); const recs = Array.isArray(d) ? d : d.records; if (!Array.isArray(recs)) throw new Error('this is not an imaging referrals data file');
@@ -4654,7 +4876,8 @@ async function importImaging(file) {
       <li><span>Months in this file (these replace what is stored for the same months)</span><b>${parsed.months.length > 6 ? `${fmtMonth(parsed.months[0])} to ${fmtMonth(parsed.months[parsed.months.length - 1])} (${parsed.months.length})` : parsed.months.map(fmtMonth).join(', ')}</b></li>
       <li><span>Referring providers matched to a physician record</span><b>${matched} of ${parsed.records.length}</b></li>
       <li><span>Referring providers not seen before</span><b>${newNames}</b></li>
-      <li><span>Cancelled exams (kept, counted separately)</span><b>${volInt(parsed.cancelled)}</b></li>
+      <li><span>Cancelled orders (left out of every count)</span><b>${volInt(parsed.cancelled)}</b></li>
+      ${parsed.guidance ? `<li><span>Fluoroscopy during pain injections and surgery (kept apart from Interventional Radiology, off by default)</span><b>${volInt(parsed.guidance)}</b></li>` : ''}
       ${parsed.future ? `<li><span class="muted">Exams booked for a future date (kept, shown once their month arrives)</span><span class="muted">${volInt(parsed.future)}</span></li>` : ''}
       ${parsed.testRows ? `<li><span class="muted">Test and placeholder providers skipped</span><span class="muted">${volInt(parsed.testRows)}</span></li>` : ''}
       ${parsed.skipped ? `<li><span class="muted">Rows skipped (no date or no provider)</span><span class="muted">${volInt(parsed.skipped)}</span></li>` : ''}
@@ -5110,11 +5333,14 @@ const actions = {
   'fin-open': (el) => { ui.fin.open = ui.fin.open || {}; ui.fin.open[el.dataset.k] = !ui.fin.open[el.dataset.k]; const y = window.scrollY; rerender(); window.scrollTo(0, y); },
   'fin-what-reset': () => { ui.fin.what = {}; updateFinWhatIf(); },
   'bl-sort': (el) => { const k = el.dataset.k; if (ui.bl.sort === k) ui.bl.dir = -(ui.bl.dir || -1); else { ui.bl.sort = k; ui.bl.dir = k === 'name' ? 1 : -1; } const y = window.scrollY; rerender(); window.scrollTo(0, y); },
-  'bl-cpt': (el) => openCPTModal(el.dataset.prov || '', el.dataset.loc || ''),
+  'bl-cpt': (el) => openCPTModal(el.dataset.prov || '', el.dataset.loc || '', el.dataset.dept || ''),
+  'fin-cost': (el) => { ui.fin.cost = el.dataset.v; ui.fin.what = {}; rerender(); },
+  'fin-cmp': (el) => { ui.fin.cmp = el.dataset.v; rerender(); },
+  'fin-note': (el) => openFinNote(el.dataset.code),
   'bl-show-all': () => { ui.bl.showAll = true; const y = window.scrollY; rerender(); window.scrollTo(0, y); },
   'bl-loc': (el, e) => { if (e) e.preventDefault(); pickBillingLocation(el.dataset.v || ''); },
   'bl-goto': (el, e) => { if (e) e.preventDefault(); ui.bl.loc = el.dataset.loc || ''; ui.bl.prov = el.dataset.prov || ''; ui.bl.month = ''; location.hash = '#/reports/billing'; },
-  'im-mod': (el) => { const k = el.dataset.v, on = IMG_MODS.filter((m) => ui.im.mods[m] !== false); if (ui.im.mods[k] !== false && on.length === 1) { toast('Keep at least one modality on.'); return; } ui.im.mods[k] = ui.im.mods[k] === false ? true : false; rerender(); },
+  'im-mod': (el) => { const k = el.dataset.v, on = IMG_MODS.filter((m) => imgModOn(m)); if (imgModOn(k) && on.length === 1) { toast('Keep at least one modality on.'); return; } ui.im.mods[k] = !imgModOn(k); rerender(); },
   'im-site': (el) => { const k = el.dataset.v; ui.im.sites[k] = ui.im.sites[k] === false ? true : false; rerender(); },
   'im-pick': (el) => pickReferrer(el.dataset.id),
   'im-all': () => { ui.im.showAll = !ui.im.showAll; rerender(); },
@@ -5202,6 +5428,7 @@ document.addEventListener('input', (e) => {
   if (k === 'act-q') { ui.act.q = e.target.value; updateActivityTable(); }
   if (k === 'clin-q') { ui.clin.q = e.target.value; ui.clin.limit = 100; const y = window.scrollY; $('#view').innerHTML = viewClinics(); window.scrollTo(0, y); const s = $('#clinic-search'); s.focus(); s.setSelectionRange(s.value.length, s.value.length); }
   if (k === 'fin-what') { const code = decodeURIComponent(location.hash.split('/')[3] || ''); if (!ui.fin.what || ui.fin.what.code !== code) ui.fin.what = { code }; const v = e.target.value === '' ? null : num(e.target.value); if (v === null) delete ui.fin.what[e.target.dataset.k]; else ui.fin.what[e.target.dataset.k] = v; clearTimeout(ui.fin._t); ui.fin._t = setTimeout(() => { const el = $('#fin-whatif'); const active = document.activeElement; const k = active && active.dataset ? active.dataset.k : ''; updateFinWhatIf(); if (k && el) { const again = el.querySelector(`[data-input="fin-what"][data-k="${k}"]`); if (again) { again.focus(); } } }, 350); }
+  if (k === 'fin-code') { const st = ui.fin.code || (ui.fin.code = {}); const v = e.target.value === '' ? undefined : num(e.target.value); st[e.target.dataset.k] = v; clearTimeout(ui.fin._t2); ui.fin._t2 = setTimeout(() => { const kk = e.target.dataset.k; updateFinCoding(); const again = document.querySelector(`#fin-coding [data-input="fin-code"][data-k="${kk}"]`); if (again) again.focus(); }, 450); }
   if (k === 'ref-q') { ui.ref.q = e.target.value; clearTimeout(ui.ref._t); ui.ref._t = setTimeout(() => { const y = window.scrollY; updateRefList(); window.scrollTo(0, y); }, 180); }
 });
 document.addEventListener('change', (e) => {
@@ -5258,6 +5485,7 @@ document.addEventListener('change', (e) => {
     case 'tidy-into': ui.tidy.into = t.value; break;
     case 'im-rank': ui.im.rank = t.value; rerender(); break;
     case 'chg-month': { chgPlanUpdate(); break; }
+    case 'fin-code': { (ui.fin.code || (ui.fin.code = {}))[t.dataset.k] = t.value; updateFinCoding(); break; }
     case 'bl-month': { ui.bl.month = t.value; ui.bl.showAll = false; rerender(); break; }
     case 'idle-minutes': { const v = Math.min(1440, Math.max(15, Math.round(num(t.value)) || 240)); db.settings.idleMinutes = v; t.value = v; saveDB(); toast('Saved'); rerender(); break; }
     case 'risk-days': { const v = Math.max(1, Math.round(num(t.value)) || 14); db.settings.riskDays = v; t.value = v; saveDB(); toast('Saved'); updateNavCount(); break; }
