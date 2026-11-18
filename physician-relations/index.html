@@ -1205,7 +1205,7 @@ const ui = {
   sx: { vol: '', metric: 'cases', smooth: 4, rooms: {} },
   im: { id: '', period: '6', mods: {}, sites: {}, showAll: false, rank: '' },
   fin: { group: 'clinic', period: 'ytd', sort: 'ebitda', dir: 1, pl: 'cy', open: {}, what: {}, showHosp: false, cost: 'finance', cmp: 'bu', code: {} },
-  bl: { loc: '', prov: '', month: '', sort: 'w', dir: -1, showAll: false },
+  bl: { loc: '', prov: '', month: '', sort: 'w', dir: -1, showAll: false, view: 'prof' },
   tidy: { field: 'specialty', from: '', into: '' },
   year: new Date().getFullYear(),
 };
@@ -2339,7 +2339,7 @@ function repairMeditechData() {
       if (con.merged) { const meta = volMeta(); db.volumes = [...(meta ? [meta] : []), ...con.recs]; fixed += con.merged; }
     }
   } catch (e) { console.error('volumes repair', e); }
-  try { (db.charges || []).forEach((r) => { if (r.id !== 'meta' && (!r.physicianId || !getPhys(r.physicianId))) { const p = chgMatchPhysician(r.provider); if (p && p.id !== r.physicianId) { r.physicianId = p.id; fixed++; } } }); } catch (e) { console.error('charges repair', e); }
+  try { (db.charges || []).forEach((r) => { if (r.id === 'meta') return; if (chgIsFac(r)) { if (r.att && (!r.attPhysicianId || !getPhys(r.attPhysicianId))) { const ap = chgAttPhysician(r.att); if (ap && ap.id !== r.attPhysicianId) { r.attPhysicianId = ap.id; fixed++; } } return; } if (!r.physicianId || !getPhys(r.physicianId)) { const p = chgMatchPhysician(r.provider); if (p && p.id !== r.physicianId) { r.physicianId = p.id; fixed++; } } }); } catch (e) { console.error('charges repair', e); }
   if (drop.size || fixed) { saveDB(); if (drop.size) toast(`${drop.size} duplicate Meditech referral${drop.size === 1 ? '' : 's'} merged`); }
 }
 function planMeditechImport(parsed) {
@@ -4105,7 +4105,7 @@ function finHead(title, lead, which, extra) {
 }
 function viewFinancials(code) {
   const recs = finRecords(), f = ui.fin, meta = finMeta();
-  const actions = `${recs.length ? `<button class="btn" data-act="export-fin">${ico('i-download')}Download data file</button>` : ''}${isAdmin() ? `<button class="btn" data-act="import-fin">${ico('i-upload')}Upload operating statements</button>` : ''}`;
+  const actions = `${recs.length ? `<button class="btn" data-act="print">${ico('i-print')}Print</button><button class="btn" data-act="export-fin">${ico('i-download')}Download data file</button>` : ''}${isAdmin() ? `<button class="btn" data-act="import-fin">${ico('i-upload')}Upload operating statements</button>` : ''}`;
   if (!recs.length) return finHead('Clinic financials', 'Revenue, cost, margin and break-even by department, from the monthly operating statements.', 'clinics', actions) + `<div class="card empty"><p style="margin:0 0 8px;font-size:17px"><b>No operating statements have been loaded yet.</b></p>
       <p class="muted" style="max-width:640px;margin:0 auto">${isAdmin() ? 'Click <b>Upload operating statements</b> and pick the NWSH Departmental Operating Statements workbook (.xlsm or .xlsx). One tab per department is read; nothing is saved until you confirm.' : 'Ask the administrator to upload the monthly operating statements workbook.'}</p></div>`;
   code = code ? decodeURIComponent(code) : '';
@@ -4169,6 +4169,7 @@ function viewFinOverview(recs, actions) {
       </div>
     </div>
     <div class="kpis" style="margin-bottom:14px">${kpis.map((k) => `<div class="kpi ${k.red ? 'red' : ''}"><div class="label">${k.l}</div><div class="value" style="font-size:24px">${k.v}</div><span class="small">${k.c || ''}</span></div>`).join('')}</div>
+    ${finInsightsHTML(rows, unitWord)}
     ${finGlossaryHTML('fin')}
     <section class="card">
       <div class="card-head"><h2>${esc(FIN_GROUPS.find((x) => x[0] === f.group)[1])}, ${esc(perLabel)}</h2><span class="hint">Click a column heading to sort</span></div>
@@ -4454,7 +4455,8 @@ function viewFinDept(rec, actions) {
       ${plTable}
       <p class="help" style="margin:8px 0 0">The + button opens an expense category to its GL lines. On the two "Actual −" views green is better than the comparison and red is worse. The last column totals the period; per-${esc(u1)} lines show the statement's own year-to-date figure. On a narrow screen the months scroll sideways while the line names and the total stay in view.</p>
     </section>
-    ${chgDeptSectionHTML(rec)}`;
+    ${chgDeptSectionHTML(rec)}
+    ${finDownstreamHTML(rec)}`;
 }
 function pickFinDept(v) { const h = v ? '#/reports/clinics/' + encodeURIComponent(v) : '#/reports/clinics'; if (location.hash === h) rerender(); else location.hash = h; }
 function finCurrentDept() { return finDept(decodeURIComponent(location.hash.split('/')[3] || '')); }
@@ -4484,21 +4486,21 @@ function chgParseReport(text, fileName) {
     const row = rows[r]; if (!row || row.length < 5) continue; const g = (k) => (I[k] >= 0 ? String(row[I[k]] ?? '').trim() : '');
     const date = volCellDate(g('date')); if (!date) { skipped++; continue; }
     const code = g('cpt') || g('hcpcs'), period = date.slice(0, 7);
-    let prov = g('perf'); if (!prov) { noProv++; prov = 'No performing provider'; }
+    let prov = g('perf'), att = ''; if (!prov) { noProv++; prov = CHG_FAC; att = g('att'); }
     const loc = g('loc') || g('dept') || 'Unknown location';
-    const key = `${prov}\u0001${loc}\u0001${period}`;
-    let a = agg.get(key); if (!a) { a = { provider: prov, location: loc, period, n: 0, q: 0, w: 0, f: 0, ch: 0, pch: 0, pay: 0, adj: 0, accts: new Set(), cpt: {} }; agg.set(key, a); }
+    const key = `${prov}\u0001${loc}\u0001${period}\u0001${att}`;
+    let a = agg.get(key); if (!a) { a = { provider: prov, att, location: loc, period, n: 0, q: 0, w: 0, f: 0, ch: 0, pch: 0, pay: 0, adj: 0, accts: new Set(), cpt: {} }; agg.set(key, a); }
     const qty = num(g('qty')) || 1, w = num(g('w')) * qty, fr = num(g('f')) * qty, ch = num(g('ch')), pch = num(g('pch')), pay = num(g('pay')), adj = num(g('adj'));
     a.n++; a.q += qty; a.w += w; a.f += fr; a.ch += ch; a.pch += pch; a.pay += pay; a.adj += adj; if (g('acct')) a.accts.add(g('acct') + '|' + date);
     if (code) { const c = a.cpt[code] = a.cpt[code] || [0, 0, 0, 0, 0]; c[0]++; c[1] += qty; c[2] += w; c[3] += ch; c[4] += pay; if (!descs[code] && g('desc')) descs[code] = g('desc'); if (!rates[code] && num(g('f')) > 0 && !(I.mod >= 0 && g('mod'))) rates[code] = r2(num(g('f'))); }
     months.add(period); kept++; if (!minD || date < minD) minD = date; if (date > maxD) maxD = date;
   }
-  const records = [...agg.values()].map((a) => ({ id: chgId(a.provider, a.location, a.period), provider: a.provider, location: a.location, dept: finLocDept(a.location), period: a.period, n: a.n, q: r2(a.q), w: r2(a.w), f: r2(a.f), ch: r2(a.ch), pch: r2(a.pch), pay: r2(a.pay), adj: r2(a.adj), enc: a.accts.size, cpt: Object.fromEntries(Object.entries(a.cpt).map(([k, v]) => [k, v.map(r2)])) }));
+  const records = [...agg.values()].map((a) => ({ id: chgId(a.att ? 'facility ' + a.att : a.provider, a.location, a.period), provider: a.provider, ...(a.att ? { att: a.att } : {}), location: a.location, dept: finLocDept(a.location), period: a.period, n: a.n, q: r2(a.q), w: r2(a.w), f: r2(a.f), ch: r2(a.ch), pch: r2(a.pch), pay: r2(a.pay), adj: r2(a.adj), enc: a.accts.size, cpt: Object.fromEntries(Object.entries(a.cpt).map(([k, v]) => [k, v.map(r2)])) }));
   return { records, descs, rates, months: [...months].sort(), kept, skipped, noProv, from: minD, asOf: maxD, total: rows.length - 1, source: `${fileName} (uploaded ${todayISO()})` };
 }
 function chgParseJSON(text) {
   const d = JSON.parse(text); if (d.kind !== 'provider-billing' || !Array.isArray(d.records)) throw new Error('this is not a provider billing data file');
-  const records = d.records.filter((r) => r && r.provider && r.period).map((r) => ({ ...r, id: chgId(r.provider, r.location, r.period) + (r.src ? '_s' + String(r.src).replace(/[^0-9]/g, '') : ''), dept: r.dept || finLocDept(r.location) }));
+  const records = d.records.filter((r) => r && r.provider && r.period).map((r) => ({ ...r, id: chgId(r.att ? 'facility ' + r.att : r.provider, r.location, r.period) + (r.src ? '_s' + String(r.src).replace(/[^0-9]/g, '') : ''), dept: r.dept || finLocDept(r.location) }));
   const months = [...new Set(records.map((r) => r.period))].sort();
   return { records, descs: (d.meta && d.meta.descs) || {}, rates: (d.meta && d.meta.rates) || {}, months, kept: records.reduce((s, r) => s + r.n, 0), skipped: 0, noProv: 0, from: months[0] ? months[0] + '-01' : '', asOf: (d.meta && d.meta.asOf) || '', total: null, isFile: true, source: `provider billing data file (uploaded ${todayISO()})` };
 }
@@ -4509,7 +4511,7 @@ async function importCharges(file) {
   catch (e) { toast('That file could not be read: ' + (e && e.message ? e.message : e), 'err'); return; }
   if (!parsed.records.length) { toast('No charge lines were found in that file.', 'err'); return; }
   const provs = new Set(parsed.records.map((r) => r.provider)), locs = new Set(parsed.records.map((r) => r.location));
-  const matched = [...provs].filter((p) => chgMatchPhysician(p)).length;
+  const matched = [...provs].filter((p) => p !== CHG_FAC && chgMatchPhysician(p)).length;
   const existing = chgRecords();
   const unmapped = [...locs].filter((l) => !finLocDept(l));
   const wsum = parsed.records.reduce((s, r) => s + r.w, 0), enc = parsed.records.reduce((s, r) => s + r.enc, 0);
@@ -4519,7 +4521,7 @@ async function importCharges(file) {
       <li style="display:block"><div style="margin-bottom:6px">Months in this file</div>${parsed.months.map((m) => { const n = parsed.records.filter((r) => r.period === m).reduce((s, r) => s + r.n, 0); const on = n >= Math.max(500, parsed.kept * 0.1); return `<label style="display:flex;gap:8px;align-items:center;margin:4px 0"><input type="checkbox" class="chg-month" value="${m}" data-change="chg-month" ${on ? 'checked' : ''}> <b>${esc(fmtMonth(m))}</b> <span class="muted">${volInt(n)} lines</span></label>`; }).join('')}
         <div id="chg-plan" class="small" style="margin-top:8px"></div></li>
       <li><span>Providers matched to a physician record</span><b>${matched} of ${provs.size}</b></li>
-      ${parsed.noProv ? `<li><span class="muted">Lines with no performing provider (facility charges), kept under "No performing provider"</span><span class="muted">${volInt(parsed.noProv)}</span></li>` : ''}
+      ${parsed.noProv ? `<li><span class="muted">Lines with no performing provider (facility charges), kept apart as hospital facility charges, by attending provider</span><span class="muted">${volInt(parsed.noProv)}</span></li>` : ''}
       ${parsed.skipped ? `<li><span class="muted">Lines skipped (no service date)</span><span class="muted">${volInt(parsed.skipped)}</span></li>` : ''}
       ${unmapped.length ? `<li><span class="muted">Locations not tied to a department tab</span><span class="muted">${esc(unmapped.slice(0, 6).join(', '))}${unmapped.length > 6 ? '…' : ''}</span></li>` : ''}
     </ul>
@@ -4551,7 +4553,7 @@ function applyChargesImport(parsed, mainMonths) {
   const drop = new Set(pl.replaced.map((r) => r.id)), fileMonths = new Set(parsed.months);
   /* a DocDock data file is a full copy of those months, spill-over included, so it replaces them outright */
   const keep = chgRecords().filter((r) => (parsed.isFile ? !fileMonths.has(r.period) : !drop.has(r.id)));
-  const recs = parsed.records.map((r) => { const p = chgMatchPhysician(r.provider); const isMain = parsed.isFile || pl.main.has(r.period); return { ...r, ...(isMain ? {} : { src: pl.src, id: r.id + '_s' + pl.src.replace(/[^0-9]/g, '') }), physicianId: p ? p.id : '' }; });
+  const recs = parsed.records.map((r) => { const p = chgIsFac(r) ? null : chgMatchPhysician(r.provider), ap = r.att ? chgAttPhysician(r.att) : null; const isMain = parsed.isFile || pl.main.has(r.period); return { ...r, ...(isMain ? {} : { src: pl.src, id: r.id + '_s' + pl.src.replace(/[^0-9]/g, '') }), physicianId: p ? p.id : '', ...(r.att ? { attPhysicianId: ap ? ap.id : '' } : {}) }; });
   meta.months = meta.months || {}; [...pl.main].forEach((m) => { meta.months[m] = parsed.source; });
   meta.descs = Object.assign({}, meta.descs || {}, parsed.descs || {});
   meta.rates = Object.assign({}, meta.rates || {}, parsed.rates || {});
@@ -4562,7 +4564,7 @@ function applyChargesImport(parsed, mainMonths) {
 }
 function exportCharges() {
   const meta = chgMeta() || {};
-  download(`provider-billing-${todayISO()}.json`, JSON.stringify({ app: 'nwsh-physician-relations', kind: 'provider-billing', exportedAt: nowISO(), exportedBy: session.name, meta: { months: meta.months || {}, asOf: meta.asOf || '', descs: meta.descs || {}, rates: meta.rates || {} }, records: chgRecords().map(({ physicianId, id, dept, ...r }) => r) }), 'application/json');
+  download(`provider-billing-${todayISO()}.json`, JSON.stringify({ app: 'nwsh-physician-relations', kind: 'provider-billing', exportedAt: nowISO(), exportedBy: session.name, meta: { months: meta.months || {}, asOf: meta.asOf || '', descs: meta.descs || {}, rates: meta.rates || {} }, records: chgRecords().map(({ physicianId, attPhysicianId, id, dept, ...r }) => r) }), 'application/json');
 }
 const EM_NEW = ['99202', '99203', '99204', '99205'], EM_EST = ['99211', '99212', '99213', '99214', '99215'];
 function chgSum(recs) {
@@ -4581,7 +4583,7 @@ function chgEMBar(em, bare) {
 function chgMonthsAvailable() { return [...new Set(chgRecords().map((r) => r.period))].sort(); }
 function codeKind(code) { return /^[A-V]\d{4}$/i.test(String(code)) ? 'HCPCS' : 'CPT'; }
 function chgProviderTableHTML(recs, opts) {
-  const o = opts || {}, byProv = {};
+  const o = opts || {}, byProv = {}; recs = recs.filter((r) => !chgIsFac(r));
   recs.forEach((r) => { (byProv[r.provider] = byProv[r.provider] || []).push(r); });
   const rows = Object.entries(byProv).map(([prov, rs]) => ({ prov, s: chgSum(rs), p: rs.find((r) => r.physicianId) ? getPhys(rs.find((r) => r.physicianId).physicianId) : chgMatchPhysician(prov), locs: [...new Set(rs.map((r) => r.location))] }));
   const sort = ui.bl.sort || 'w', dir = ui.bl.dir || -1;
@@ -4607,51 +4609,159 @@ function chgCPTTableHTML(cpt, descs, limit) {
     <tfoot><tr><td colspan="2"><b>${rows.length} codes</b>${limit && rows.length > limit ? ` <span class="muted small">(top ${limit} shown)</span>` : ''}</td><td class="num"><b>${volInt(totQ)}</b></td><td></td><td class="num"><b>${totW.toFixed(1)}</b></td><td class="num">${totQ ? (totW / totQ).toFixed(2) : '—'}</td><td class="num"><b>${finMoney(rows.reduce((s, r) => s + r.ch, 0))}</b></td></tr></tfoot></table></div>`;
 }
 function chgScope(f) { let recs = chgRecords(); if (f.month) recs = recs.filter((r) => r.period === f.month); if (f.loc) recs = recs.filter((r) => r.location === f.loc); if (f.prov) recs = recs.filter((r) => r.provider === f.prov); return recs; }
+/* Charge lines with no performing provider are the hospital's own facility billing: room time by the minute, implants, supplies,
+   recovery, technical fees. They are kept apart from provider billing and, where the report names one, tied to the attending. */
+const CHG_FAC = 'No performing provider';
+function chgIsFac(r) { return r.provider === CHG_FAC; }
+function chgAttParts(att) { const [l, f] = String(att || '').split(','); return { last: (l || '').trim(), first: (f || '').trim() }; }
+function chgAttDisplay(att) { const p = chgAttParts(att); return p.last ? `${p.first} ${p.last}`.trim() : ''; }
+function chgAttPhysician(att) { const p = chgAttParts(att); return p.last ? findPhysicianByName(p.first, p.last) : null; }
+function nameLastTok(s) { const t = nameTokens(s); return t[t.length - 1] || ''; }
+/* Same person across reports that write names differently ("Roland Kent, MD", "Kent,Roland", "KENT, ROLAND"). */
+function samePerson(a, b) { return !!(a && b && a.last && b.last) && nameLastTok(a.last) === nameLastTok(b.last) && firstNamesAgree(a.first, b.first); }
+function chgFacByAttending(recs) {
+  const by = new Map();
+  recs.filter(chgIsFac).forEach((r) => { const k = r.att || ''; let a = by.get(k); if (!a) { a = { att: k, ch: 0, pay: 0, enc: 0, n: 0, locs: {}, physicianId: r.attPhysicianId || '', recs: [] }; by.set(k, a); } a.ch += r.ch; a.pay += r.pay; a.enc += r.enc; a.n += r.n; a.locs[r.location] = (a.locs[r.location] || 0) + r.ch; a.recs.push(r); if (!a.physicianId && r.attPhysicianId) a.physicianId = r.attPhysicianId; });
+  return [...by.values()];
+}
+function chgFacTableHTML(recs, limit) {
+  const rows = chgFacByAttending(recs).sort((a, b) => b.ch - a.ch), shown = limit && !ui.bl.showAll ? rows.slice(0, limit) : rows, tot = rows.reduce((s, x) => s + x.ch, 0);
+  return `<div class="table-wrap"><table class="breakdown bill">
+      <thead><tr><th>Attending provider</th><th class="num">Cases</th><th class="num">Facility charges</th><th class="num">Share</th><th class="num">Paid so far</th><th class="num">Collected</th><th>Mostly at</th><th></th></tr></thead>
+      <tbody>${shown.map((x) => { const p = x.physicianId ? getPhys(x.physicianId) : (x.att ? chgAttPhysician(x.att) : null); const top = Object.entries(x.locs).sort((a, b) => b[1] - a[1])[0]; return `<tr>
+        <td>${x.att ? (p ? `<a href="#/physician/${p.id}"><b>${esc(chgAttDisplay(x.att))}</b></a>` : `<b>${esc(chgAttDisplay(x.att))}</b>`) : '<b>Attending not recorded</b><div class="sub">uploaded before attendings were kept; upload that month\'s report again</div>'}</td>
+        <td class="num">${volInt(x.enc)}</td><td class="num"><b>${finMoney(x.ch)}</b></td><td class="num">${finPctText(finPct(x.ch, tot))}</td><td class="num">${finMoney(x.pay)}</td><td class="num">${x.ch ? finPctText(finPct(x.pay, x.ch)) : '—'}</td>
+        <td>${top ? esc(top[0]) : ''}</td><td class="nowrap"><button class="btn sm" data-act="bl-cpt" data-fac="1" data-att="${esc(x.att)}">Codes</button></td></tr>`; }).join('')}</tbody>
+    </table></div>
+    ${limit && rows.length > limit && !ui.bl.showAll ? `<p style="margin:10px 0 0"><button class="btn sm" data-act="bl-show-all">Show all ${rows.length} attending providers</button></p>` : ''}`;
+}
 function viewBilling() {
   const f = ui.bl, all = chgRecords(), meta = chgMeta();
-  const actions = `${all.length ? `<button class="btn" data-act="export-chg">${ico('i-download')}Download data file</button>` : ''}${isAdmin() ? `<button class="btn" data-act="import-chg">${ico('i-upload')}Upload provider RVU report</button>` : ''}`;
+  const actions = `${all.length ? `<button class="btn" data-act="print">${ico('i-print')}Print</button><button class="btn" data-act="export-chg">${ico('i-download')}Download data file</button>` : ''}${isAdmin() ? `<button class="btn" data-act="import-chg">${ico('i-upload')}Upload provider RVU report</button>` : ''}`;
   if (!all.length) return finHead('Provider billing', 'CPT codes, work RVUs, charges and payments by performing provider and visit location.', 'billing', actions) + `<div class="card empty"><p style="margin:0 0 8px;font-size:17px"><b>No provider billing has been loaded yet.</b></p>
       <p class="muted" style="max-width:640px;margin:0 auto">${isAdmin() ? 'Click <b>Upload provider RVU report</b> and pick the Meditech "Performing Provider RVU" export (.txt or .csv). Run it one month at a time; each upload adds that month.' : 'Ask the administrator to upload the Meditech Performing Provider RVU report.'}</p></div>`;
   const months = chgMonthsAvailable(); if (f.month && !months.includes(f.month)) f.month = '';
-  const locs = [...new Set(all.map((r) => r.location))].sort(), provs = [...new Set(all.map((r) => r.provider))].sort();
-  const recs = chgScope(f), s = chgSum(recs);
+  const view = f.view === 'fac' ? 'fac' : 'prof';
+  const locs = [...new Set(all.map((r) => r.location))].sort(), provs = [...new Set(all.filter((r) => !chgIsFac(r)).map((r) => r.provider))].sort();
+  const scopeAll = chgScope({ ...f, prov: '' }), facRecs = scopeAll.filter(chgIsFac), profRecs = chgScope(f).filter((r) => !chgIsFac(r));
+  const recs = view === 'fac' ? facRecs : profRecs, s = chgSum(recs), fs = chgSum(facRecs);
   const em = chgEM(s.cpt);
   const perLabel = f.month ? fmtMonth(f.month) : months.length === 1 ? fmtMonth(months[0]) : `${fmtMonth(months[0])} to ${fmtMonth(months[months.length - 1])}`;
-  const kpis = [
+  const atts = chgFacByAttending(facRecs).filter((x) => x.att);
+  const kpis = view === 'fac' ? [
+    { l: `Facility charges, ${esc(perLabel)}`, v: finShort(s.ch), c: 'list price, before insurer discounts' },
+    { l: 'Paid so far', v: finShort(s.pay), c: s.ch ? `${finPctText(finPct(s.pay, s.ch))} of charges` : '' },
+    { l: 'Cases', v: volInt(s.enc), c: s.enc ? `${finShort(s.ch / s.enc)} charged per case` : '' },
+    { l: 'Attending providers', v: volInt(atts.length), c: atts.length ? `top 10 bring ${finPctText(finPct(atts.sort((a, b) => b.ch - a.ch).slice(0, 10).reduce((t, x) => t + x.ch, 0), s.ch))} of charges` : 'not recorded in these uploads' },
+    { l: 'Locations', v: volInt(s.locs.size), c: '' },
+    { l: 'Charge lines', v: volInt(s.n), c: '' },
+  ] : [
     { l: `Work RVUs, ${esc(perLabel)}`, v: s.w.toLocaleString(undefined, { maximumFractionDigits: 0 }), c: `${volInt(s.n)} charge lines` },
     { l: 'Encounters', v: volInt(s.enc), c: s.enc ? `${(s.w / s.enc).toFixed(2)} wRVU per encounter` : '' },
-    { l: 'Charges', v: finShort(s.ch), c: s.pch ? `${finShort(s.pch)} professional` : '' },
+    { l: 'Charges under a provider', v: finShort(s.ch), c: s.pch ? `${finShort(s.pch)} professional fees` : '' },
     { l: 'Payments posted', v: finShort(s.pay), c: s.ch ? `${finPctText(finPct(s.pay, s.ch))} of charges so far` : '' },
-    { l: 'E/M visits', v: volInt(em.new + em.est), c: em.new + em.est ? `${finPctText(finPct(em.new, em.new + em.est))} new patients` : '' },
+    { l: 'Office visits', v: volInt(em.new + em.est), c: em.new + em.est ? `${finPctText(finPct(em.new, em.new + em.est))} new patients` : '' },
     { l: f.prov ? 'Locations' : 'Providers', v: volInt(f.prov ? s.locs.size : s.provs.size), c: f.prov ? '' : `${s.locs.size} locations` },
   ];
   const byLoc = {}; recs.forEach((r) => { (byLoc[r.location] = byLoc[r.location] || []).push(r); });
-  const locRows = Object.entries(byLoc).map(([loc, rs]) => ({ loc, s: chgSum(rs), dept: finLocDept(loc) })).sort((a, b) => b.s.w - a.s.w);
+  const locRows = Object.entries(byLoc).map(([loc, rs]) => ({ loc, s: chgSum(rs), dept: finLocDept(loc) })).sort((a, b) => (view === 'fac' ? b.s.ch - a.s.ch : b.s.w - a.s.w));
   const locTable = !f.loc ? `<section class="card" style="margin-top:14px"><div class="card-head"><h2>By location</h2><span class="hint">${esc(perLabel)}</span></div>
-      <div class="table-wrap"><table class="breakdown"><thead><tr><th>Location</th><th>Department</th><th class="num">Providers</th><th class="num">Encounters</th><th class="num">Work RVUs</th><th class="num">wRVU / enc.</th><th class="num">Charges</th><th class="num">Payments</th></tr></thead>
-      <tbody>${locRows.map((x) => { const d = x.dept ? finDept(x.dept) : null; return `<tr><td><a href="#" data-act="bl-loc" data-v="${esc(x.loc)}"><b>${esc(x.loc)}</b></a></td><td>${d ? `<a href="#/reports/clinics/${encodeURIComponent(d.code)}">${esc(d.label)}</a>` : x.dept ? esc(FIN_DEPT_LABELS[x.dept] || x.dept) : '<span class="muted">—</span>'}</td><td class="num">${x.s.provs.size}</td><td class="num">${volInt(x.s.enc)}</td><td class="num"><b>${volInt(x.s.w)}</b></td><td class="num">${x.s.enc ? (x.s.w / x.s.enc).toFixed(2) : '—'}</td><td class="num">${finMoney(x.s.ch)}</td><td class="num">${finMoney(x.s.pay)}</td></tr>`; }).join('')}</tbody></table></div></section>` : '';
-  const topCPT = Object.entries(s.cpt).map(([code, v]) => ({ label: `${code} ${(meta.descs || {})[code] || ''}`.trim(), v: Math.round(v[1]) })).sort((a, b) => b.v - a.v).slice(0, 15);
-  return finHead('Provider billing', `CPT codes, work RVUs, charges and payments by performing provider and visit location, from the Meditech RVU report.`, 'billing', actions) + `
-    <div class="card" style="margin-bottom:14px">
+      <div class="table-wrap"><table class="breakdown"><thead><tr><th>Location</th><th>Department</th>${view === 'fac' ? '' : '<th class="num">Providers</th>'}<th class="num">${view === 'fac' ? 'Cases' : 'Encounters'}</th>${view === 'fac' ? '' : '<th class="num">Work RVUs</th><th class="num">wRVU / enc.</th>'}<th class="num">Charges</th><th class="num">Payments</th></tr></thead>
+      <tbody>${locRows.map((x) => { const d = x.dept ? finDept(x.dept) : null; return `<tr><td><a href="#" data-act="bl-loc" data-v="${esc(x.loc)}"><b>${esc(x.loc)}</b></a></td><td>${d ? `<a href="#/reports/clinics/${encodeURIComponent(d.code)}">${esc(d.label)}</a>` : x.dept ? esc(FIN_DEPT_LABELS[x.dept] || x.dept) : '<span class="muted">—</span>'}</td>${view === 'fac' ? '' : `<td class="num">${x.s.provs.size}</td>`}<td class="num">${volInt(x.s.enc)}</td>${view === 'fac' ? '' : `<td class="num"><b>${volInt(x.s.w)}</b></td><td class="num">${x.s.enc ? (x.s.w / x.s.enc).toFixed(2) : '—'}</td>`}<td class="num">${finMoney(x.s.ch)}</td><td class="num">${finMoney(x.s.pay)}</td></tr>`; }).join('')}</tbody></table></div></section>` : '';
+  const topCPT = Object.entries(s.cpt).map(([code, v]) => ({ label: `${code} ${(meta.descs || {})[code] || ''}`.trim(), v: Math.round(view === 'fac' ? v[3] : v[1]) })).sort((a, b) => b.v - a.v).slice(0, 15);
+  const facNote = view === 'prof' && fs.ch ? `<div class="notice info" style="margin-bottom:14px">${ico('i-info')}<div><b>${finShort(fs.ch)} of hospital facility charges are kept out of this view.</b> They are the hospital's own billing for room time, implants, supplies, recovery and technical fees on ${volInt(fs.enc)} cases, and Meditech does not tie them to a clinician's work. <a href="#" data-act="bl-view" data-v="fac">See them by attending provider</a>.</div></div>` : '';
+  return finHead('Provider billing', view === 'fac' ? 'Hospital facility charges by attending provider: what each provider\'s cases bring to the hospital.' : 'CPT and HCPCS codes, work RVUs, charges and payments by performing provider and visit location, from the Meditech RVU report.', 'billing', actions) + `
+    <div class="card no-print" style="margin-bottom:14px">
       <div class="pair fbar" style="display:flex;gap:14px 22px;flex-wrap:wrap;align-items:flex-end">
+        <label><span>Show</span><div class="toggle"><button class="${view === 'prof' ? 'on' : ''}" data-act="bl-view" data-v="prof">Provider billing</button><button class="${view === 'fac' ? 'on' : ''}" data-act="bl-view" data-v="fac">Hospital facility charges</button></div></label>
         <label><span>Location</span>${comboHTML('bl-loc', locs.map((l) => ({ v: l, l, g: FIN_DEPT_LABELS[finLocDept(l)] || '' })), f.loc, 'All locations')}</label>
-        <label><span>Provider</span>${comboHTML('bl-prov', provs.map((p) => ({ v: p, l: p })), f.prov, 'All providers')}</label>
+        ${view === 'prof' ? `<label><span>Provider</span>${comboHTML('bl-prov', provs.map((p) => ({ v: p, l: p })), f.prov, 'All providers')}</label>` : ''}
         <label><span>Month</span><select data-change="bl-month"><option value="">All loaded (${months.length})</option>${months.map((m) => `<option value="${m}" ${f.month === m ? 'selected' : ''}>${fmtMonth(m)}</option>`).join('')}</select></label>
       </div>
     </div>
     <div class="kpis" style="margin-bottom:14px">${kpis.map((k) => `<div class="kpi"><div class="label">${k.l}</div><div class="value" style="font-size:24px">${k.v}</div><span class="small">${k.c || ''}</span></div>`).join('')}</div>
+    ${facNote}
     ${finGlossaryHTML('billing')}
-    <section class="card"><div class="card-head"><h2>${f.prov ? esc(f.prov) : 'By provider'}${f.loc ? ` · ${esc(f.loc)}` : ''}</h2><span class="hint">${esc(perLabel)} · click a column heading to sort</span></div>${chgProviderTableHTML(recs, { limit: 40, showLoc: !f.loc, loc: f.loc })}</section>
+    ${view === 'fac' ? `<section class="card"><div class="card-head"><h2>By attending provider${f.loc ? ` · ${esc(f.loc)}` : ''}</h2><span class="hint">${esc(perLabel)}</span></div>${recs.length ? chgFacTableHTML(recs, 40) : '<p class="muted">No hospital facility charges in this selection.</p>'}
+        <p class="help" style="margin:10px 0 0">Facility charges are what the hospital bills for the room, staff time, implants and supplies on a case: operating room minutes, recovery, endoscopy, pain procedure rooms and the technical side of imaging. They are list price; what is collected is a fraction of it. The attending is the provider Meditech names on the account, usually the surgeon or proceduralist.</p></section>`
+      : `<section class="card"><div class="card-head"><h2>${f.prov ? esc(f.prov) : 'By provider'}${f.loc ? ` · ${esc(f.loc)}` : ''}</h2><span class="hint">${esc(perLabel)} · click a column heading to sort</span></div>${chgProviderTableHTML(recs, { limit: 40, showLoc: !f.loc, loc: f.loc })}</section>`}
     ${locTable}
     <div class="cgrid" style="display:grid;grid-template-columns:minmax(0,1fr);gap:14px;margin-top:14px">
-      <section class="card"><div class="card-head"><h2>Most billed codes</h2><span class="hint">units, ${esc(perLabel)}</span></div>${imgHBarSVG(topCPT, '#2a78d6', 'Most billed codes')}</section>
+      <section class="card"><div class="card-head"><h2>${view === 'fac' ? 'Largest charge items' : 'Most billed codes'}</h2><span class="hint">${view === 'fac' ? 'charges' : 'units'}, ${esc(perLabel)}</span></div>${imgHBarSVG(topCPT, '#2a78d6', 'Most billed codes')}</section>
       <section class="card"><div class="card-head"><h2>All codes</h2><span class="hint">${Object.keys(s.cpt).length} distinct</span></div>${chgCPTTableHTML(s.cpt, meta.descs || {}, 60)}</section>
     </div>
-    <p class="help" style="margin:10px 0 0">Work RVUs come from Meditech's fee schedule line by line, multiplied by units. Encounters are distinct account and service date pairs. Payments are what has posted so far, so recent months collect further after upload; they post to the patient account, not to a code, and hospital facility payments mostly sit under "No performing provider". To see what a change in visit coding is worth for one clinic, open that clinic under Clinic financials. Months loaded: ${months.map(fmtMonth).join(', ')}${meta.importedAt ? ` · last uploaded ${fmtTS(meta.importedAt)} by ${esc(meta.importedBy || '')}` : ''}.</p>`;
+    <p class="help" style="margin:10px 0 0">Work RVUs come from Meditech's fee schedule line by line, multiplied by units. Encounters are distinct account and service date pairs. Payments are what has posted so far, so recent months collect further after upload; they post to the patient account, not to a code. To see what a change in visit coding is worth for one clinic, open that clinic under Clinic financials. Months loaded: ${months.map(fmtMonth).join(', ')}${meta.importedAt ? ` · last uploaded ${fmtTS(meta.importedAt)} by ${esc(meta.importedBy || '')}` : ''}.</p>`;
+}
+/* ---------- what a clinic's providers bring to the rest of the hospital ---------- */
+function finDownstreamHTML(rec) {
+  const own = chgRecords().filter((r) => r.dept === rec.code && !chgIsFac(r)); if (!own.length) return '';
+  const byProv = {}; own.forEach((r) => { (byProv[r.provider] = byProv[r.provider] || { enc: 0 }).enc += r.enc; });
+  const provs = Object.entries(byProv).filter(([, v]) => v.enc >= 10).map(([name, v]) => ({ name, enc: v.enc, parts: chgProviderParts(name) })).filter((x) => x.parts.last);
+  if (!provs.length) return '';
+  const fac = chgFacByAttending(chgRecords()).filter((x) => x.att).map((x) => ({ ...x, parts: chgAttParts(x.att) }));
+  const noAtt = chgRecords().some((r) => chgIsFac(r) && !r.att);
+  const imgCap = imgMonths(), imgSet = new Set(imgCap), imgs = imgRecords().map((r) => ({ r, parts: imgNameParts(r.referrer) })).filter((x) => x.parts);
+  const asOf = volAsOf(), yr = asOf ? asOf.year : 0, vols = volRecords().map((r) => ({ r, parts: volNameParts(r.surgeon) }));
+  const rows = provs.map((p) => {
+    const f = fac.filter((x) => samePerson(p.parts, x.parts)), fch = f.reduce((s, x) => s + x.ch, 0), fenc = f.reduce((s, x) => s + x.enc, 0);
+    const locs = {}; f.forEach((x) => Object.entries(x.locs).forEach(([k, v]) => { locs[k] = (locs[k] || 0) + v; })); const top = Object.entries(locs).sort((a, b) => b[1] - a[1])[0];
+    const im = imgs.find((x) => samePerson(p.parts, x.parts)), exams = im ? im.r.series.reduce((s, e) => s + (imgSet.has(e.p) && e.m !== IMG_GUIDE ? imgN(e) : 0), 0) : 0;
+    const vo = vols.find((x) => samePerson(p.parts, x.parts)), cases = vo && yr ? vo.r.series.reduce((s, e) => s + (e.period[5] !== 'W' && e.period.startsWith(String(yr)) ? e.cases : 0), 0) : 0;
+    return { ...p, fch, fenc, top: top ? top[0] : '', exams, cases, ph: chgMatchPhysician(p.name) };
+  }).filter((x) => x.fch || x.exams || x.cases).sort((a, b) => b.fch - a.fch || b.exams - a.exams);
+  if (!rows.length) return '';
+  const T = rows.reduce((s, x) => { s.fch += x.fch; s.fenc += x.fenc; s.exams += x.exams; s.cases += x.cases; return s; }, { fch: 0, fenc: 0, exams: 0, cases: 0 });
+  const chgM = chgMainMonths(chgRecords()), chgLabel = chgM.length ? (chgM.length === 1 ? fmtMonth(chgM[0]) : `${fmtMonth(chgM[0])} to ${fmtMonth(chgM[chgM.length - 1])}`) : '', imgLabel = imgCap.length ? `${fmtMonth(imgCap[0])} to ${fmtMonth(imgCap[imgCap.length - 1])}` : '';
+  const bits = [T.fch ? `<b>${finShort(T.fch)}</b> of hospital facility charges on <b>${volInt(T.fenc)}</b> cases (${esc(chgLabel)})` : '', T.cases ? `<b>${volInt(T.cases)}</b> procedure case${T.cases === 1 ? '' : 's'} in ${yr}` : '', T.exams ? `<b>${volInt(T.exams)}</b> imaging exams ordered at NWSH (${esc(imgLabel)})` : ''].filter(Boolean);
+  return `<section class="card" style="margin-top:14px">
+      <div class="card-head"><h2>What this clinic's providers bring to the rest of the hospital</h2><span class="hint">not on this department's statement</span></div>
+      <p style="margin:0 0 12px;font-size:16px;line-height:1.5">The ${rows.length} provider${rows.length === 1 ? '' : 's'} below who see patients in ${esc(rec.label)} also account for ${bits.length === 3 ? `${bits[0]}, ${bits[1]} and ${bits[2]}` : bits.join(' and ')}. That business is booked to the operating room, surgery center, endoscopy and imaging, so it does not show up in this department's revenue or EBITDA.</p>
+      <div class="table-wrap"><table class="breakdown bill">
+        <thead><tr><th>Provider</th><th class="num">Encounters here</th><th class="num">Hospital facility charges</th><th class="num">Cases</th><th>Mostly at</th><th class="num">Procedure cases ${yr || ''}</th><th class="num">Imaging exams ordered</th></tr></thead>
+        <tbody>${rows.map((x) => `<tr><td>${x.ph ? `<a href="#/physician/${x.ph.id}"><b>${esc(x.name)}</b></a>` : `<b>${esc(x.name)}</b>`}</td><td class="num">${volInt(x.enc)}</td><td class="num">${x.fch ? `<b>${finMoney(x.fch)}</b>` : '<span class="muted">—</span>'}</td><td class="num">${x.fenc ? volInt(x.fenc) : '<span class="muted">—</span>'}</td><td>${esc(x.top)}</td><td class="num">${x.cases ? volInt(x.cases) : '<span class="muted">—</span>'}</td><td class="num">${x.exams ? volInt(x.exams) : '<span class="muted">—</span>'}</td></tr>`).join('')}
+        <tr class="total-row"><td><b>Total</b></td><td></td><td class="num"><b>${finMoney(T.fch)}</b></td><td class="num"><b>${volInt(T.fenc)}</b></td><td></td><td class="num"><b>${volInt(T.cases)}</b></td><td class="num"><b>${volInt(T.exams)}</b></td></tr></tbody>
+      </table></div>
+      <p class="help" style="margin:8px 0 0">Facility charges are list price for room time, implants, supplies and technical fees on cases where the provider is the attending; collections are a fraction of that. A provider who works in more than one clinic is counted on each clinic's page, so these totals should not be added across clinics. Imaging counts leave out cancelled orders and fluoroscopy during procedures. Referrals a provider sends to another surgeon are not captured here.${noAtt ? ' Some loaded months were uploaded before attendings were kept; upload those RVU reports again to include their facility charges.' : ''}</p>
+    </section>`;
+}
+/* ---------- what stands out across departments ---------- */
+function finCodingGap(code, nw) {
+  const all = chgRecords().filter((r) => r.dept === code), months = chgMainMonths(all); if (!months.length) return null;
+  const s = chgSum(all.filter((r) => months.includes(r.period))), u = (c, x) => ((x || s).cpt[c] ? (x || s).cpt[c][1] : 0);
+  const est = EM_EST.reduce((t, c) => t + u(c), 0); if (est < 50 * months.length) return null;
+  const nEst = EM_EST.reduce((t, c) => t + u(c, nw), 0); if (!nEst) return null;
+  const l4 = (u('99214') + u('99215')) / est, n4 = (u('99214', nw) + u('99215', nw)) / nEst; if (l4 >= n4 - 0.05) return null;
+  const moved = (n4 - l4) * est / months.length;
+  return { l4, n4, moved, value: moved * (emRate('99214') - emRate('99213')) * 12 };
+}
+function finInsightsHTML(rows, unitWord) {
+  const link = (x) => `<a href="#/reports/clinics/${encodeURIComponent(x.r.code)}"><b>${esc(x.r.label)}</b></a>`, u1 = finOne(unitWord), items = [];
+  const live = rows.filter((x) => x.a.ebitda !== null && x.a.vis);
+  const losers = live.filter((x) => x.a.ebitda < 0).sort((x, y) => x.a.ebitda - y.a.ebitda).slice(0, 3);
+  if (losers.length) items.push(['Losing the most', losers.map((x) => `${link(x)} (${finShort(x.a.ebitda)}, ${finMoney(x.a.marginUnit)} per ${u1})`).join(', ') + '.']);
+  const why = (x) => { if (!x.a.vis || !x.b.vis || x.b.netRev === null) return ''; const vol = (x.a.vis - x.b.vis) * (x.b.netRev / x.b.vis), rate = (x.a.netRev / x.a.vis - x.b.netRev / x.b.vis) * x.a.vis, exp = -(x.a.totExp - x.b.totExp); const worst = [['fewer ' + unitWord + ' than planned', vol], ['less revenue per ' + u1, rate], ['higher expenses', exp]].sort((p, q) => p[1] - q[1])[0]; return worst[1] < 0 ? `, mostly ${worst[0]}` : ''; };
+  const behind = live.filter((x) => x.b.ebitda !== null && x.a.ebitda - x.b.ebitda < 0).sort((x, y) => (x.a.ebitda - x.b.ebitda) - (y.a.ebitda - y.b.ebitda)).slice(0, 3);
+  if (behind.length) items.push(['Furthest behind budget', behind.map((x) => `${link(x)} (${finShort(x.a.ebitda - x.b.ebitda)}${why(x)})`).join('; ') + '.']);
+  const ahead = live.filter((x) => x.b.ebitda !== null && x.a.ebitda - x.b.ebitda > 0).sort((x, y) => (y.a.ebitda - y.b.ebitda) - (x.a.ebitda - x.b.ebitda)).slice(0, 3);
+  if (ahead.length) items.push(['Furthest ahead of budget', ahead.map((x) => `${link(x)} (+${finShort(x.a.ebitda - x.b.ebitda)})`).join(', ') + '.']);
+  const near = live.filter((x) => x.a.coverage !== null && x.a.coverage >= 0.8 && x.a.coverage < 1).sort((x, y) => y.a.coverage - x.a.coverage).slice(0, 4);
+  if (near.length) items.push(['Within reach of break-even', near.map((x) => `${link(x)} is at ${Math.round(x.a.coverage * 100)}% and needs about ${Math.max(1, Math.round((x.a.beMo - x.a.visMo) / 21))} more ${Math.max(1, Math.round((x.a.beMo - x.a.visMo) / 21)) === 1 ? u1 : unitWord} a day`).join('; ') + '.']);
+  const flip = live.filter((x) => x.a.byMode.finance.coverage !== null && x.a.byMode.finance.coverage < 1 && x.a.byMode.salaried.coverage !== null && x.a.byMode.salaried.coverage >= 1);
+  if (flip.length) items.push(['Already past break-even if provider pay is fixed', `${flip.map(link).join(', ')}. On the finance statement these look short on volume, but with salaried providers who have open slots they already cover their fixed cost; the question there is cost, not ${unitWord}.`]);
+  if (chgRecords().length) {
+    const nw = chgSum(chgRecords().filter((r) => !r.src)), gaps = rows.map((x) => ({ x, g: finCodingGap(x.r.code, nw) })).filter((q) => q.g).sort((p, q) => q.g.value - p.g.value).slice(0, 3);
+    if (gaps.length) items.push(['Visit coding below the NWSH average', gaps.map(({ x, g }) => `${link(x)} codes ${Math.round(g.l4 * 100)}% of established visits at level 4 or 5 against ${Math.round(g.n4 * 100)}% across NWSH; matching the average would be worth about <b>${finShort(g.value)}</b> a year at Medicare rates`).join('; ') + '. Only where the documentation supports the higher level.']);
+  }
+  const winners = live.filter((x) => x.a.ebitda > 0).sort((x, y) => y.a.ebitda - x.a.ebitda).slice(0, 3);
+  if (winners.length) items.push(['Earning the most', winners.map((x) => `${link(x)} (+${finShort(x.a.ebitda)})`).join(', ') + '.']);
+  if (!items.length) return '';
+  return `<section class="card" style="margin-bottom:14px"><div class="card-head"><h2>What stands out</h2><span class="hint">worked out from the figures below; click a department for the detail</span></div>
+      <dl style="display:grid;grid-template-columns:minmax(150px,230px) 1fr;gap:10px 18px;margin:0;font-size:15.5px;line-height:1.5">${items.map(([t, d]) => `<dt style="font-weight:700">${t}</dt><dd style="margin:0">${d}</dd>`).join('')}</dl>
+    </section>`;
 }
 /* Billing section on a department's financial page. */
 function chgDeptSectionHTML(rec) {
-  const recs = chgRecords().filter((r) => r.dept === rec.code); if (!recs.length) return '';
+  const allHere = chgRecords().filter((r) => r.dept === rec.code), recs = allHere.filter((r) => !chgIsFac(r)), fs = chgSum(allHere.filter(chgIsFac)); if (!recs.length) return '';
   const months = [...new Set(recs.map((r) => r.period))].sort(), s = chgSum(recs), em = chgEM(s.cpt), meta = chgMeta() || {};
   const locs = [...new Set(recs.map((r) => r.location))];
   return `<section class="card" style="margin-top:14px">
@@ -4663,36 +4773,43 @@ function chgDeptSectionHTML(rec) {
         <div class="kpi"><div class="label">Charges</div><div class="value" style="font-size:22px">${finShort(s.ch)}</div><span class="small">${finShort(s.pay)} paid so far</span></div>
       </div>
       ${chgProviderTableHTML(recs, { limit: 15, dept: rec.code })}
+      ${fs.ch ? `<p class="small" style="margin:10px 0 0"><b>${finShort(fs.ch)}</b> of hospital facility charges on ${volInt(fs.enc)} cases were also billed at this location (room time, supplies and technical fees, not tied to a clinician's work). <a href="#/reports/billing" data-act="bl-goto" data-view="fac" data-loc="${esc(locs.length === 1 ? locs[0] : '')}">See them by attending provider</a>.</p>` : ''}
       <details style="margin-top:10px"><summary style="cursor:pointer;font-weight:600">Codes billed at ${esc(rec.label)}</summary>${chgCPTTableHTML(s.cpt, meta.descs || {}, 40)}</details>
     </section>`;
 }
 function physicianBillingCardHTML(p) {
-  const recs = chgRecords().filter((r) => r.physicianId === p.id); if (!recs.length) return '';
-  const months = [...new Set(recs.map((r) => r.period))].sort(), s = chgSum(recs), em = chgEM(s.cpt), meta = chgMeta() || {};
+  const recs = chgRecords().filter((r) => r.physicianId === p.id && !chgIsFac(r)), fac = chgRecords().filter((r) => chgIsFac(r) && r.attPhysicianId === p.id);
+  if (!recs.length && !fac.length) return '';
+  const months = [...new Set(recs.map((r) => r.period))].sort(), s = chgSum(recs), em = chgEM(s.cpt), meta = chgMeta() || {}, fs = chgSum(fac);
   const byMonth = months.map((m) => ({ m, s: chgSum(recs.filter((r) => r.period === m)) }));
   const top = Object.entries(s.cpt).sort((a, b) => b[1][1] - a[1][1]).slice(0, 5);
   return `<section class="card">
-      <div class="card-head"><h2>Billing & RVUs</h2><a href="#/reports/billing" data-act="bl-goto" data-prov="${esc(recs[0].provider)}">Open the billing report</a></div>
-      <div class="kpis" style="grid-template-columns:repeat(auto-fit,minmax(130px,1fr));margin-bottom:12px">
-        <div class="kpi"><div class="label">Work RVUs</div><div class="value" style="font-size:22px">${volInt(s.w)}</div><span class="small">${months.length === 1 ? fmtMonth(months[0]) : `${months.length} months`}</span></div>
+      <div class="card-head"><h2>Billing & RVUs</h2><a href="#/reports/billing" data-act="bl-goto" data-prov="${esc(recs[0] ? recs[0].provider : '')}">Open the billing report</a></div>
+      <div class="kpis" style="grid-template-columns:repeat(auto-fit,minmax(150px,1fr));margin-bottom:12px">
+        ${recs.length ? `<div class="kpi"><div class="label">Work RVUs</div><div class="value" style="font-size:22px">${volInt(s.w)}</div><span class="small">${months.length === 1 ? fmtMonth(months[0]) : `${months.length} months`}</span></div>
         <div class="kpi"><div class="label">Encounters</div><div class="value" style="font-size:22px">${volInt(s.enc)}</div><span class="small">${s.enc ? (s.w / s.enc).toFixed(2) + ' wRVU each' : ''}</span></div>
-        <div class="kpi"><div class="label">E/M mix</div><div class="value" style="font-size:16px;margin-top:6px">${chgEMBar(em)}</div></div>
-        <div class="kpi"><div class="label">Charges · payments</div><div class="value" style="font-size:22px">${finShort(s.ch)}</div><span class="small">${finShort(s.pay)} paid so far</span></div>
+        <div class="kpi"><div class="label">Office visit levels</div><div style="margin-top:10px">${chgEMBar(em)}</div></div>
+        <div class="kpi"><div class="label">Charges under this provider</div><div class="value" style="font-size:22px">${finShort(s.ch)}</div><span class="small">${finShort(s.pay)} paid so far</span></div>` : ''}
+        ${fac.length ? `<div class="kpi"><div class="label">Hospital facility charges on their cases</div><div class="value" style="font-size:22px">${finShort(fs.ch)}</div><span class="small">${volInt(fs.enc)} cases · ${esc(shortText([...fs.locs].join(', '), 40))}</span></div>` : ''}
       </div>
-      <div class="table-wrap"><table class="breakdown"><thead><tr><th>Month</th><th>Locations</th><th class="num">Encounters</th><th class="num">Work RVUs</th><th class="num">Charges</th><th class="num">Payments</th></tr></thead>
-        <tbody>${byMonth.map((x) => `<tr><td>${esc(fmtMonth(x.m))}</td><td>${esc([...x.s.locs].join(', '))}</td><td class="num">${volInt(x.s.enc)}</td><td class="num"><b>${volInt(x.s.w)}</b></td><td class="num">${finMoney(x.s.ch)}</td><td class="num">${finMoney(x.s.pay)}</td></tr>`).join('')}</tbody></table></div>
-      <p class="small" style="margin:10px 0 0">Most billed: ${top.map(([c, v]) => `<b>${esc(c)}</b> ${esc(shortText((meta.descs || {})[c] || '', 28))} (${volInt(v[1])})`).join(' · ')}</p>
+      ${recs.length ? `<div class="table-wrap"><table class="breakdown"><thead><tr><th>Month</th><th>Locations</th><th class="num">Encounters</th><th class="num">Work RVUs</th><th class="num">Charges</th><th class="num">Payments</th></tr></thead>
+        <tbody>${byMonth.map((x) => `<tr><td class="nowrap">${esc(fmtMonth(x.m))}</td><td>${esc([...x.s.locs].join(', '))}</td><td class="num">${volInt(x.s.enc)}</td><td class="num"><b>${volInt(x.s.w)}</b></td><td class="num">${finMoney(x.s.ch)}</td><td class="num">${finMoney(x.s.pay)}</td></tr>`).join('')}</tbody></table></div>
+      <p class="small" style="margin:10px 0 0">Most billed: ${top.map(([c, v]) => `<b>${esc(c)}</b> ${esc(shortText((meta.descs || {})[c] || '', 28))} (${volInt(v[1])})`).join(' · ')}</p>` : ''}
+      ${fac.length ? '<p class="help" style="margin:8px 0 0">Facility charges are the hospital\'s list-price billing for room time, implants and supplies on cases where this provider is the attending. They are not the provider\'s own billing.</p>' : ''}
     </section>`;
 }
 function pickBillingLocation(v) { ui.bl.loc = v || ''; ui.bl.showAll = false; if (location.hash.startsWith('#/reports/billing')) rerender(); else location.hash = '#/reports/billing'; }
 function pickBillingProvider(v) { ui.bl.prov = v || ''; ui.bl.showAll = false; if (location.hash.startsWith('#/reports/billing')) rerender(); else location.hash = '#/reports/billing'; }
-function openCPTModal(prov, loc, dept) {
-  let recs = chgRecords(); const f = ui.bl;
+function openCPTModal(prov, loc, dept, o) {
+  o = o || {}; let recs = chgRecords(); const f = ui.bl;
   if (dept) recs = recs.filter((r) => r.dept === dept); else { const l = loc || f.loc; if (l) recs = recs.filter((r) => r.location === l); if (f.month) recs = recs.filter((r) => r.period === f.month); }
-  const p = prov || (dept ? '' : f.prov); if (p) recs = recs.filter((r) => r.provider === p);
+  let p = '';
+  if (o.fac) recs = recs.filter((r) => chgIsFac(r) && (r.att || '') === (o.att || ''));
+  else { recs = recs.filter((r) => !chgIsFac(r)); p = prov || (dept ? '' : f.prov); if (p) recs = recs.filter((r) => r.provider === p); }
   const s = chgSum(recs), meta = chgMeta() || {}, months = [...new Set(recs.map((r) => r.period))].sort();
   const where = dept ? (finDept(dept) || {}).label || '' : (loc || f.loc || '');
-  openModal({ title: `${p || 'All providers'}${where ? ' · ' + where : ''}: codes billed`, wide: true, body: `<p class="small muted" style="margin:0 0 10px">${months.length ? (months.length === 1 ? fmtMonth(months[0]) : `${fmtMonth(months[0])} to ${fmtMonth(months[months.length - 1])}`) : 'No months'} · ${volInt(s.enc)} encounters · ${volInt(s.w)} work RVUs · ${esc(shortText([...s.locs].join(', '), 90))}</p>${chgCPTTableHTML(s.cpt, meta.descs || {})}<p class="help" style="margin:10px 0 0">CPT codes are five characters; HCPCS codes start with a letter (G0463 is the hospital's facility fee for a clinic visit, S9088 the urgent care service fee, G2211 an add-on for ongoing complex care). Payments are not shown by code because they post to the patient account as a whole.</p>` });
+  const title = o.fac ? `${chgAttDisplay(o.att) || 'Attending not recorded'}${where ? ' · ' + where : ''}: hospital facility charges` : `${p || 'All providers'}${where ? ' · ' + where : ''}: codes billed`;
+  openModal({ title, wide: true, body: `<p class="small muted" style="margin:0 0 10px">${months.length ? (months.length === 1 ? fmtMonth(months[0]) : `${fmtMonth(months[0])} to ${fmtMonth(months[months.length - 1])}`) : 'No months'} · ${volInt(s.enc)} ${o.fac ? 'cases' : 'encounters'} · ${o.fac ? finShort(s.ch) + ' charged' : volInt(s.w) + ' work RVUs'} · ${esc(shortText([...s.locs].join(', '), 90))}</p>${chgCPTTableHTML(s.cpt, meta.descs || {})}<p class="help" style="margin:10px 0 0">${o.fac ? 'These are the hospital\'s charges on this provider\'s cases: room time by the minute, implants, supplies and recovery. Lines without a code are charge items that have no CPT or HCPCS code.' : 'CPT codes are five characters; HCPCS codes start with a letter (G0463 is the hospital\'s facility fee for a clinic visit, S9088 the urgent care service fee, G2211 an add-on for ongoing complex care).'} Payments are not shown by code because they post to the patient account as a whole.</p>` });
 }
 function analyticsSwitcher(which) { return finSwitcher(which); }
 /* Reports home: the referral tracking report, with the switch to the other two reports. */
@@ -5333,13 +5450,14 @@ const actions = {
   'fin-open': (el) => { ui.fin.open = ui.fin.open || {}; ui.fin.open[el.dataset.k] = !ui.fin.open[el.dataset.k]; const y = window.scrollY; rerender(); window.scrollTo(0, y); },
   'fin-what-reset': () => { ui.fin.what = {}; updateFinWhatIf(); },
   'bl-sort': (el) => { const k = el.dataset.k; if (ui.bl.sort === k) ui.bl.dir = -(ui.bl.dir || -1); else { ui.bl.sort = k; ui.bl.dir = k === 'name' ? 1 : -1; } const y = window.scrollY; rerender(); window.scrollTo(0, y); },
-  'bl-cpt': (el) => openCPTModal(el.dataset.prov || '', el.dataset.loc || '', el.dataset.dept || ''),
+  'bl-cpt': (el) => openCPTModal(el.dataset.prov || '', el.dataset.loc || '', el.dataset.dept || '', { fac: !!el.dataset.fac, att: el.dataset.att || '' }),
+  'bl-view': (el, e) => { if (e) e.preventDefault(); ui.bl.view = el.dataset.v; ui.bl.showAll = false; const y = window.scrollY; rerender(); window.scrollTo(0, el.tagName === 'A' ? 0 : y); },
   'fin-cost': (el) => { ui.fin.cost = el.dataset.v; ui.fin.what = {}; rerender(); },
   'fin-cmp': (el) => { ui.fin.cmp = el.dataset.v; rerender(); },
   'fin-note': (el) => openFinNote(el.dataset.code),
   'bl-show-all': () => { ui.bl.showAll = true; const y = window.scrollY; rerender(); window.scrollTo(0, y); },
   'bl-loc': (el, e) => { if (e) e.preventDefault(); pickBillingLocation(el.dataset.v || ''); },
-  'bl-goto': (el, e) => { if (e) e.preventDefault(); ui.bl.loc = el.dataset.loc || ''; ui.bl.prov = el.dataset.prov || ''; ui.bl.month = ''; location.hash = '#/reports/billing'; },
+  'bl-goto': (el, e) => { if (e) e.preventDefault(); ui.bl.loc = el.dataset.loc || ''; ui.bl.prov = el.dataset.prov || ''; ui.bl.month = ''; ui.bl.view = el.dataset.view === 'fac' ? 'fac' : 'prof'; location.hash = '#/reports/billing'; },
   'im-mod': (el) => { const k = el.dataset.v, on = IMG_MODS.filter((m) => imgModOn(m)); if (imgModOn(k) && on.length === 1) { toast('Keep at least one modality on.'); return; } ui.im.mods[k] = !imgModOn(k); rerender(); },
   'im-site': (el) => { const k = el.dataset.v; ui.im.sites[k] = ui.im.sites[k] === false ? true : false; rerender(); },
   'im-pick': (el) => pickReferrer(el.dataset.id),

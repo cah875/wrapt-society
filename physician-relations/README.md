@@ -111,6 +111,15 @@ E/M level mix, wRVU per encounter, collections and every code billed. Locations 
 so a department's financial page also shows billing by provider, and a matched physician's page gets a
 "Billing & RVUs" card.
 
+Charge lines with no performing provider are the hospital's own facility billing (room time, implants, supplies,
+recovery, technical fees). Provider billing keeps them out of the provider table and shows them under
+**Hospital facility charges**, by attending provider. Each clinic's financial page ends with **What this clinic's
+providers bring to the rest of the hospital**: facility charges on their cases, procedure cases and imaging exams
+ordered, none of which sit on the clinic's own statement. The Clinic financials overview opens with **What stands
+out**: the largest losses, the biggest budget misses and their main cause, departments within reach of break-even,
+and what closing each clinic's visit-coding gap to the NWSH average would be worth. Months uploaded before this
+version need their RVU report uploaded again for facility charges to be tied to an attending.
+
 **Imaging referrals** leave cancelled orders out of every count. Meditech files C-arm time during pain injections
 and surgery under Interventional Radiology ("IR Fluoroscopy <1hr / >1hr"); DocDock moves those lines to their own
 "Procedure Fluoroscopy" group, switched off unless turned on, so Interventional Radiology shows real IR referrals
