@@ -4578,13 +4578,19 @@ function viewFinDept(rec, actions) {
   const costStack = finStackSVG(mAll.slice(0, per.asOf), [{ l: 'Staff, benefits, rent and overhead', c: '#6250d6', v: ovM.slice(0, per.asOf) }, { l: 'Provider pay', c: '#2a78d6', v: provM.slice(0, per.asOf) }, { l: 'Supplies and per-visit costs', c: '#eda100', v: supM.slice(0, per.asOf) }], 'Cost by how it behaves');
   // statement by month
   const series = f.pl || 'cy';
-  const cell = (l, i) => { if (!l) return null; if (series === 'vb' || series === 'vp') { const base = series === 'vb' ? l.bu : l.py; if (!l.cy || !base || l.cy[i] === null || base[i] === null) return null; return l.cy[i] - base[i]; } return l[series] ? l[series][i] : null; };
   const PER_UNIT = ['revUnit', 'revUnitW', 'expUnit', 'marginUnit', 'varUnit', 'breakEven', 'hoursUnit', 'sbUnit', 'supUnit'];
+  const at = (arr, i) => (arr && arr[i] !== null && arr[i] !== undefined ? arr[i] : null);
+  /* actual less a comparison; on lines that add up, a blank on one side counts as zero so revenue that moved between lines still shows */
+  const has = { bu: rec.lines.some((l) => l.bu && l.bu.some((v) => v)), py: rec.lines.some((l) => l.py && l.py.some((v) => v)) };
+  const gap = (l, which, i) => { const x = at(l.cy, i), y = at(l[which], i); if (!has[which] || (x === null && y === null)) return null; if ((PER_UNIT.includes(l.k) || l.s === 'kpi' || l.s === 'hrs') && (x === null || y === null)) return null; return (x || 0) - (y || 0); };
+  const cell = (l, i) => { if (!l) return null; if (series === 'vb' || series === 'vp') return gap(l, series === 'vb' ? 'bu' : 'py', i); return l[series] ? l[series][i] : null; };
   const sumRow = (l) => { if (PER_UNIT.includes(l.k)) { if (f.period === 'ytd' && l.ytd) { const y = l.ytd; return series === 'cy' ? y[0] : series === 'bu' ? y[1] : series === 'py' ? y[2] : series === 'vb' ? (y[0] !== null && y[1] !== null ? y[0] - y[1] : null) : (y[0] !== null && y[2] !== null ? y[0] - y[2] : null); } let s = 0, n = 0; per.months.forEach((i) => { const v = cell(l, i); if (v !== null) { s += v; n++; } }); return n ? s / n : null; } let s = 0, any = false; per.months.forEach((i) => { const v = cell(l, i); if (v !== null) { s += v; any = true; } }); return any ? s : null; };
-  const isCost = (k) => k === 'totExp' || k === 'fixed' || k === 'varCost' || k === 'varUnit' || k === 'expUnit' || k.startsWith('g:') || k.startsWith('a:');
-  const fmtCell = (v, k) => v === null ? '<span class="muted">—</span>' : k === 'hoursUnit' ? v.toFixed(2) : k === 'vis' || k === 'breakEven' || k.startsWith('v:') || k.startsWith('hours') ? volInt(v) : finMoney(v);
-  const varCls = (v, k) => (series === 'vb' || series === 'vp') && v !== null ? volCls(isCost(k) ? -v : v) : '';
-  const plRow = (l, o) => { o = o || {}; const vals = per.months.map((i) => cell(l, i)); const tot = sumRow(l); return `<tr class="${o.cls || ''}"><td style="padding-left:${o.indent || 8}px">${o.label}</td>${vals.map((v) => `<td class="num ${varCls(v, l.k)}">${fmtCell(v, l.k)}</td>`).join('')}<td class="num ${varCls(tot, l.k)}"><b>${fmtCell(tot, l.k)}</b></td></tr>`; };
+  const isCost = (k) => k === 'totExp' || k === 'breakEven' || k === 'fixed' || k === 'varCost' || k === 'varUnit' || k === 'expUnit' || k.startsWith('g:') || k.startsWith('a:');
+  const fmtCell = (v, k) => v === null ? '<span class="muted">—</span>' : k === 'hoursUnit' ? v.toFixed(2) : k === 'vis' || k === 'breakEven' || k.startsWith('v:') || k.startsWith('hours') ? volInt(v) : finMoney(Math.abs(v) < 0.5 ? 0 : v);
+  const gapCls = (v, k) => (v === null || Math.abs(v) < 0.5 || k.startsWith('hours') ? '' : volCls(isCost(k) ? -v : v));
+  const varCls = (v, k) => (series === 'vb' || series === 'vp' ? gapCls(v, k) : '');
+  const single = per.months.length === 1, m1 = per.months[0];
+  const plRow = (l, o) => { o = o || {}; if (single) { const vb = gap(l, 'bu', m1), vp = gap(l, 'py', m1); return `<tr class="${o.cls || ''}"><td style="padding-left:${o.indent || 8}px">${o.label}</td><td class="num"><b>${fmtCell(at(l.cy, m1), l.k)}</b></td><td class="num">${fmtCell(at(l.bu, m1), l.k)}</td><td class="num ${gapCls(vb, l.k)}">${fmtCell(vb, l.k)}</td><td class="num">${fmtCell(at(l.py, m1), l.k)}</td><td class="num ${gapCls(vp, l.k)}">${fmtCell(vp, l.k)}</td></tr>`; } const vals = per.months.map((i) => cell(l, i)); const tot = sumRow(l); return `<tr class="${o.cls || ''}"><td style="padding-left:${o.indent || 8}px">${o.label}</td>${vals.map((v) => `<td class="num ${varCls(v, l.k)}">${fmtCell(v, l.k)}</td>`).join('')}<td class="num ${varCls(tot, l.k)}"><b>${fmtCell(tot, l.k)}</b></td></tr>`; };
   const open = f.open || {}, plRows = [];
   const push = (k, label, o) => { const l = finLine(rec, k); if (l) plRows.push(plRow(l, { label, ...(o || {}) })); };
   push('vis', `<b>${esc(rec.unit)}</b>`);
@@ -4597,7 +4603,8 @@ function viewFinDept(rec, actions) {
   push('totExp', '<b>Total expenses</b>', { cls: 'total-row' });
   push('ebitda', '<b>EBITDA</b>', { cls: 'total-row' });
   [['revUnit', `Net revenue per ${u1}`], ['expUnit', `Total expense per ${u1}`], ['marginUnit', `Margin per ${u1}`], ['fixed', 'Fixed cost (finance statement)'], ['varCost', 'Variable cost (finance statement)'], ['varUnit', `Variable cost per ${u1}`], ['breakEven', `Break-even ${unit} (finance statement)`], ['hoursTotal', 'Total hours'], ['hoursProd', 'Productive hours'], ['hoursOT', 'Overtime hours'], ['hoursPTO', 'PTO hours'], ['hoursUnit', `Hours per ${u1}`]].forEach(([k, lab]) => { const l = finLine(rec, k); if (l) plRows.push(plRow(l, { label: `<span class="muted">${esc(lab)}</span>`, indent: 8 })); });
-  const plTable = `<div class="pl-wrap"><table class="breakdown pl"><thead><tr><th>Line</th>${per.months.map((i) => `<th class="num">${VOL_MONTHS[i]}</th>`).join('')}<th class="num">${esc(per.label)}</th></tr></thead><tbody>${plRows.join('')}</tbody></table></div>`;
+  const plTable = single ? `<div class="table-wrap"><table class="breakdown"><thead><tr><th>Line</th><th class="num">${VOL_MONTHS[m1]} ${rec.year} actual</th><th class="num">Budget</th><th class="num">Actual − budget</th><th class="num">${VOL_MONTHS[m1]} ${meta.py}</th><th class="num">Actual − ${meta.py}</th></tr></thead><tbody>${plRows.join('')}</tbody></table></div>`
+    : `<div class="pl-wrap"><table class="breakdown pl"><thead><tr><th>Line</th>${per.months.map((i) => `<th class="num">${VOL_MONTHS[i]}</th>`).join('')}<th class="num">${esc(per.label)}</th></tr></thead><tbody>${plRows.join('')}</tbody></table></div>`;
   const plToggle = [['cy', `${rec.year} actual`], ['bu', `${rec.year} budget`], ['py', `${meta.py} actual`], ['vb', 'Actual − budget'], ['vp', `Actual − ${meta.py}`]].map(([k, l]) => `<button class="${series === k ? 'on' : ''}" data-act="fin-pl" data-v="${k}">${l}</button>`).join('');
   const hoursCard = a.hours ? `<section class="card" style="margin-top:14px"><div class="card-head"><h2>Staffing hours</h2><span class="hint">${esc(per.label)}</span></div>
       <div class="kpis" style="grid-template-columns:repeat(auto-fit,minmax(140px,1fr))">
@@ -4635,9 +4642,9 @@ function viewFinDept(rec, actions) {
     ${coding ? `<section class="card" style="margin-top:14px"><div class="card-head"><h2>Visit coding and what it is worth</h2><span class="hint">office visit (E/M) levels from the provider RVU report</span></div><div id="fin-coding">${coding}</div></section>` : ''}
     ${hoursCard}
     <section class="card" style="margin-top:14px">
-      <div class="card-head"><h2>Statement by month</h2><div class="toggle" style="flex-wrap:wrap">${plToggle}</div></div>
+      <div class="card-head"><h2>${single ? `Statement for ${esc(per.label)}` : 'Statement by month'}</h2>${single ? '<span class="hint">actual against budget and the same month last year</span>' : `<div class="toggle" style="flex-wrap:wrap">${plToggle}</div>`}</div>
       ${plTable}
-      <p class="help" style="margin:8px 0 0">The + button opens an expense category to its GL lines. On the two "Actual −" views green is better than the comparison and red is worse. The last column totals the period; per-${esc(u1)} lines show the statement's own year-to-date figure. On a narrow screen the months scroll sideways while the line names and the total stay in view.</p>
+      <p class="help" style="margin:8px 0 0">${single ? 'The + button opens an expense category to its GL lines. In the two "Actual −" columns green is better than the comparison and red is worse: more revenue or lower cost is green. Choose Year to date or Last 3 months above to see the months side by side.' : `The + button opens an expense category to its GL lines. On the two "Actual −" views green is better than the comparison and red is worse. The last column totals the period; per-${esc(u1)} lines show the statement's own year-to-date figure. On a narrow screen the months scroll sideways while the line names and the total stay in view.`}</p>
     </section>
     ${chgDeptSectionHTML(rec)}
     ${finDownstreamHTML(rec)}`;
