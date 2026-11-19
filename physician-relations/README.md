@@ -107,7 +107,8 @@ The month the report was run for replaces what is stored; charges dated just out
 are added to their own months without replacing anything. Only totals by performing provider, visit location, month
 and CPT/HCPCS code are stored (encounters, units, work RVUs, charges, and payments by provider, since Meditech posts
 payments to the account, not to a code); patient names and account numbers never leave the browser. Filter by location, provider and month; see
-E/M level mix, wRVU per encounter, collections and every code billed. Locations are tied to their department tab,
+E/M level mix, wRVU per encounter, collections and every code billed. Each billing view states how much of it was **final coded** (the account's Meditech coding status was Final when
+the report was run). Locations are tied to their department tab,
 so a department's financial page also shows billing by provider, and a matched physician's page gets a
 "Billing & RVUs" card.
 

@@ -4208,6 +4208,7 @@ const BILL_TERMS = [
   ['Visit level curve', 'The share of office visits billed at each level, drawn as a curve and compared with all NWSH clinics and with national Medicare figures for the specialty. Often called the E/M bell curve. It shows at a glance whether a clinic codes lower or higher than its peers.'],
   ['Work RVU (wRVU)', 'Medicare\'s measure of the clinician work in a service. It lets you compare productivity across providers no matter who the insurer is. A 99213 is about 1.2 wRVUs and a 99214 about 1.8.'],
   ['Medicare value', 'What Medicare\'s fee schedule pays for the code, as carried in Meditech (the report\'s "Full RVU" column). Commercial plans usually pay more and Medicaid less.'],
+  ['Final coded', 'The account\'s coding status in Meditech was Final when the report was run, meaning coding was finished and the codes shown are the ones that went out. Lines on accounts still on hold or in process can change. A payer lowering a level after the claim is sent does not show here; that appears as a lower payment.'],
   ['Encounter', 'One patient account on one date of service.'],
   ['Charges', 'List price billed for the services, before any insurer discount.'],
   ['Payments', 'Money posted so far to those accounts. Recent months keep collecting for weeks after the visit, so they look low at first. Payments post to the patient account, not to a single code, so they are shown by provider and location only. Hospital facility payments mostly land under "No performing provider".'],
@@ -4348,6 +4349,7 @@ function finCodingHTML(rec) {
   const provs = Object.entries(byProv).map(([p, rs]) => { const ps = chgSum(rs), t = famTot(EM_EST, ps); return { p, t, sh: (c) => (t ? units(c, ps) / t : 0), avg: t ? EM_EST.reduce((x, c) => x + units(c, ps) * (+c.slice(-1)), 0) / t : 0, em: chgEM(ps.cpt) }; }).filter((x) => x.t >= 10 && x.p !== 'No performing provider').sort((x, y) => y.t - x.t);
   const estT = famTot(EM_EST), clinicL4 = estT ? (units('99214') + units('99215')) / estT : 0;
   return `<p style="margin:0 0 12px;font-size:16px;line-height:1.5">Office visits are paid by level. In ${esc(months.length === 1 ? fmtMonth(months[0]) : `${fmtMonth(months[0])} to ${fmtMonth(months[nM - 1])}`)}, <b>${finPctText(clinicL4 * 100)}</b> of established-patient visits here were coded level 4 or 5 (99214 or 99215)${famTot(EM_EST, nw) ? `, against <b>${finPctText(finPct(units('99214', nw) + units('99215', nw), famTot(EM_EST, nw)))}</b> across all NWSH clinics` : ''} and <b>${finPctText(bench.est[3] + bench.est[4])}</b> nationally for ${esc(bench.l.toLowerCase())} (Medicare, ${EM_NATIONAL.year}). A 99214 is worth about <b>${finMoney(emRate('99214') - emRate('99213'))}</b> more than a 99213 at Medicare rates and adds no cost, so the difference goes straight to the bottom line.</p>
+    ${chgCodingNoteHTML(s, true)}
     <h3 style="margin:0 0 8px">Levels billed here</h3>
     <div class="table-wrap"><table class="breakdown"><thead><tr><th>Code</th><th>What it is</th><th class="num">A month</th><th class="num">Share here</th><th class="num">All NWSH</th><th class="num">National</th><th class="num">wRVU</th><th class="num">Medicare value</th></tr></thead><tbody>${famBlock(EM_EST, 'Established patients')}${famBlock(EM_NEW, 'New patients')}</tbody></table></div>
     <h3 style="margin:18px 0 8px">By provider, established patients</h3>
@@ -4544,7 +4546,7 @@ function chgMatchPhysician(name) { const { first, last } = chgProviderParts(name
 function chgParseReport(text, fileName) {
   const rows = parseCSV(text); if (rows.length < 2) throw new Error('the file is empty');
   const hdr = rows[0].map((h) => String(h || '').trim().toLowerCase()); const ix = (n) => hdr.indexOf(n);
-  const I = { acct: ix('account number'), date: ix('service date'), cpt: ix('cpt'), hcpcs: ix('hcpcs'), desc: ix('description'), qty: ix('qty'), w: ix('work rvu'), f: ix('full rvu'), perf: ix('performing provider'), att: ix('attending provider'), dept: ix('dept name'), loc: ix('visit location'), ch: ix('charge amt'), mod: ix('cpt modifiers'), pch: ix('prof charge amt'), pay: ix('payment total'), adj: ix('adjustment total') };
+  const I = { acct: ix('account number'), date: ix('service date'), cpt: ix('cpt'), hcpcs: ix('hcpcs'), desc: ix('description'), qty: ix('qty'), w: ix('work rvu'), f: ix('full rvu'), perf: ix('performing provider'), att: ix('attending provider'), dept: ix('dept name'), loc: ix('visit location'), ch: ix('charge amt'), mod: ix('cpt modifiers'), cs: ix('coding status'), pch: ix('prof charge amt'), pay: ix('payment total'), adj: ix('adjustment total') };
   if (I.date < 0 || I.perf < 0 || (I.cpt < 0 && I.hcpcs < 0)) throw new Error('this is not the Performing Provider RVU report (it needs Service Date, Performing Provider and CPT columns)');
   const agg = new Map(), descs = {}, rates = {}, months = new Set(); let kept = 0, skipped = 0, noProv = 0, minD = '', maxD = '';
   const r2 = (v) => Math.round(v * 100) / 100;
@@ -4555,13 +4557,14 @@ function chgParseReport(text, fileName) {
     let prov = g('perf'), att = ''; if (!prov) { noProv++; prov = CHG_FAC; att = g('att'); }
     const loc = g('loc') || g('dept') || 'Unknown location';
     const key = `${prov}\u0001${loc}\u0001${period}\u0001${att}`;
-    let a = agg.get(key); if (!a) { a = { provider: prov, att, location: loc, period, n: 0, q: 0, w: 0, f: 0, ch: 0, pch: 0, pay: 0, adj: 0, accts: new Set(), cpt: {} }; agg.set(key, a); }
+    let a = agg.get(key); if (!a) { a = { provider: prov, att, location: loc, period, nf: 0, emf: 0, emn: 0, st: {}, n: 0, q: 0, w: 0, f: 0, ch: 0, pch: 0, pay: 0, adj: 0, accts: new Set(), cpt: {} }; agg.set(key, a); }
     const qty = num(g('qty')) || 1, w = num(g('w')) * qty, fr = num(g('f')) * qty, ch = num(g('ch')), pch = num(g('pch')), pay = num(g('pay')), adj = num(g('adj'));
     a.n++; a.q += qty; a.w += w; a.f += fr; a.ch += ch; a.pch += pch; a.pay += pay; a.adj += adj; if (g('acct')) a.accts.add(g('acct') + '|' + date);
+    if (I.cs >= 0) { const st = g('cs') || 'None', isEM = EM_ALL.includes(code); if (/^final$/i.test(st)) { a.nf++; if (isEM) a.emf++; } else a.st[st] = (a.st[st] || 0) + 1; if (isEM) a.emn++; }
     if (code) { const c = a.cpt[code] = a.cpt[code] || [0, 0, 0, 0, 0]; c[0]++; c[1] += qty; c[2] += w; c[3] += ch; c[4] += pay; if (!descs[code] && g('desc')) descs[code] = g('desc'); if (!rates[code] && num(g('f')) > 0 && !(I.mod >= 0 && g('mod'))) rates[code] = r2(num(g('f'))); }
     months.add(period); kept++; if (!minD || date < minD) minD = date; if (date > maxD) maxD = date;
   }
-  const records = [...agg.values()].map((a) => ({ id: chgId(a.att ? 'facility ' + a.att : a.provider, a.location, a.period), provider: a.provider, ...(a.att ? { att: a.att } : {}), location: a.location, dept: finLocDept(a.location), period: a.period, n: a.n, q: r2(a.q), w: r2(a.w), f: r2(a.f), ch: r2(a.ch), pch: r2(a.pch), pay: r2(a.pay), adj: r2(a.adj), enc: a.accts.size, cpt: Object.fromEntries(Object.entries(a.cpt).map(([k, v]) => [k, v.map(r2)])) }));
+  const records = [...agg.values()].map((a) => ({ id: chgId(a.att ? 'facility ' + a.att : a.provider, a.location, a.period), provider: a.provider, ...(a.att ? { att: a.att } : {}), location: a.location, dept: finLocDept(a.location), period: a.period, n: a.n, q: r2(a.q), w: r2(a.w), f: r2(a.f), ch: r2(a.ch), pch: r2(a.pch), pay: r2(a.pay), adj: r2(a.adj), enc: a.accts.size, ...(I.cs >= 0 ? { nf: a.nf, emf: a.emf, emn: a.emn, ...(Object.keys(a.st).length ? { st: a.st } : {}) } : {}), cpt: Object.fromEntries(Object.entries(a.cpt).map(([k, v]) => [k, v.map(r2)])) }));
   return { records, descs, rates, months: [...months].sort(), kept, skipped, noProv, from: minD, asOf: maxD, total: rows.length - 1, source: `${fileName} (uploaded ${todayISO()})` };
 }
 function chgParseJSON(text) {
@@ -4587,6 +4590,7 @@ async function importCharges(file) {
       <li style="display:block"><div style="margin-bottom:6px">Months in this file</div>${parsed.months.map((m) => { const n = parsed.records.filter((r) => r.period === m).reduce((s, r) => s + r.n, 0); const on = n >= Math.max(500, parsed.kept * 0.1); return `<label style="display:flex;gap:8px;align-items:center;margin:4px 0"><input type="checkbox" class="chg-month" value="${m}" data-change="chg-month" ${on ? 'checked' : ''}> <b>${esc(fmtMonth(m))}</b> <span class="muted">${volInt(n)} lines</span></label>`; }).join('')}
         <div id="chg-plan" class="small" style="margin-top:8px"></div></li>
       <li><span>Providers matched to a physician record</span><b>${matched} of ${provs.size}</b></li>
+      ${parsed.records.some((r) => r.nf !== undefined) ? `<li><span>Charge lines on accounts with coding marked Final</span><b>${finPctText(finPct(parsed.records.reduce((t, r) => t + (r.nf || 0), 0), parsed.kept))}</b></li>` : ''}
       ${parsed.noProv ? `<li><span class="muted">Lines with no performing provider (facility charges), kept apart as hospital facility charges, by attending provider</span><span class="muted">${volInt(parsed.noProv)}</span></li>` : ''}
       ${parsed.skipped ? `<li><span class="muted">Lines skipped (no service date)</span><span class="muted">${volInt(parsed.skipped)}</span></li>` : ''}
       ${unmapped.length ? `<li><span class="muted">Locations not tied to a department tab</span><span class="muted">${esc(unmapped.slice(0, 6).join(', '))}${unmapped.length > 6 ? '…' : ''}</span></li>` : ''}
@@ -4632,11 +4636,19 @@ function exportCharges() {
   const meta = chgMeta() || {};
   download(`provider-billing-${todayISO()}.json`, JSON.stringify({ app: 'nwsh-physician-relations', kind: 'provider-billing', exportedAt: nowISO(), exportedBy: session.name, meta: { months: meta.months || {}, asOf: meta.asOf || '', descs: meta.descs || {}, rates: meta.rates || {} }, records: chgRecords().map(({ physicianId, attPhysicianId, id, dept, ...r }) => r) }), 'application/json');
 }
-const EM_NEW = ['99202', '99203', '99204', '99205'], EM_EST = ['99211', '99212', '99213', '99214', '99215'];
+const EM_NEW = ['99202', '99203', '99204', '99205'], EM_EST = ['99211', '99212', '99213', '99214', '99215'], EM_ALL = [...EM_NEW, ...EM_EST];
 function chgSum(recs) {
-  const s = { n: 0, q: 0, w: 0, f: 0, ch: 0, pch: 0, pay: 0, adj: 0, enc: 0, cpt: {}, provs: new Set(), locs: new Set() };
-  recs.forEach((r) => { s.n += r.n; s.q += r.q; s.w += r.w; s.f += r.f; s.ch += r.ch; s.pch += r.pch; s.pay += r.pay; s.adj += r.adj; s.enc += r.enc; s.provs.add(r.provider); s.locs.add(r.location); Object.entries(r.cpt || {}).forEach(([k, v]) => { const c = s.cpt[k] = s.cpt[k] || [0, 0, 0, 0, 0]; v.forEach((x, i) => { c[i] += x; }); }); });
+  const s = { n: 0, q: 0, w: 0, f: 0, ch: 0, pch: 0, pay: 0, adj: 0, enc: 0, cpt: {}, provs: new Set(), locs: new Set(), nf: 0, kn: 0, emf: 0, emn: 0, st: {}, unk: 0 };
+  recs.forEach((r) => { if (r.nf === undefined) s.unk += r.n; else { s.nf += r.nf; s.kn += r.n; s.emf += r.emf || 0; s.emn += r.emn || 0; Object.entries(r.st || {}).forEach(([k, v]) => { s.st[k] = (s.st[k] || 0) + v; }); } s.n += r.n; s.q += r.q; s.w += r.w; s.f += r.f; s.ch += r.ch; s.pch += r.pch; s.pay += r.pay; s.adj += r.adj; s.enc += r.enc; s.provs.add(r.provider); s.locs.add(r.location); Object.entries(r.cpt || {}).forEach(([k, v]) => { const c = s.cpt[k] = s.cpt[k] || [0, 0, 0, 0, 0]; v.forEach((x, i) => { c[i] += x; }); }); });
   return s;
+}
+/* One line saying how much of what is shown had finished coding when the report was run. `em` narrows it to office visits. */
+function chgCodingNoteHTML(s, em) {
+  if (!s.kn) return s.n ? '<p class="small muted" style="margin:0 0 10px">Coding status was not kept when these months were uploaded. Upload the RVU reports again to see how much was final coded.</p>' : '';
+  const tot = em ? s.emn : s.kn, fin = em ? s.emf : s.nf; if (!tot) return '';
+  const rest = Object.entries(s.st).sort((a, b) => b[1] - a[1]).map(([k, v]) => `${volInt(v)} ${esc(k === 'Pat Acct' ? 'Pat Acct (patient account)' : k)}`).join(', ');
+  const pc = finPct(fin, tot);
+  return `<p class="small" style="margin:0 0 10px"><b class="${pc >= 95 ? 'vol-up' : pc < 80 ? 'vol-down' : ''}">${finPctText(pc)} final coded</b> <span class="muted">· ${volInt(fin)} of ${volInt(tot)} ${em ? 'office visits' : 'charge lines'} were on accounts with coding finished when the report was run; those are the codes as they went out.${pc < 80 ? ' The rest had not finished coding, so the levels shown here may not be what was billed.' : ''}${!em && rest ? ` Not final: ${rest} lines.` : ''}${s.unk ? ` Coding status is missing for ${volInt(s.unk)} lines from months uploaded earlier.` : ''}</span></p>`;
 }
 function chgEM(cpt) { const em = { new: 0, est: 0, lvl: {} }; EM_NEW.forEach((c) => { const v = cpt[c] ? cpt[c][1] : 0; em.new += v; if (v) em.lvl[c] = v; }); EM_EST.forEach((c) => { const v = cpt[c] ? cpt[c][1] : 0; em.est += v; if (v) em.lvl[c] = v; }); em.g0463 = cpt['G0463'] ? cpt['G0463'][1] : 0; return em; }
 function chgEMBar(em, bare) {
@@ -4747,6 +4759,7 @@ function viewBilling() {
     </div>
     <div class="kpis" style="margin-bottom:14px">${kpis.map((k) => `<div class="kpi"><div class="label">${k.l}</div><div class="value" style="font-size:24px">${k.v}</div><span class="small">${k.c || ''}</span></div>`).join('')}</div>
     ${facNote}
+    ${chgCodingNoteHTML(s)}
     ${finGlossaryHTML('billing')}
     ${view === 'fac' ? `<section class="card"><div class="card-head"><h2>By attending provider${f.loc ? ` · ${esc(f.loc)}` : ''}</h2><span class="hint">${esc(perLabel)}</span></div>${recs.length ? chgFacTableHTML(recs, 40) : '<p class="muted">No hospital facility charges in this selection.</p>'}
         <p class="help" style="margin:10px 0 0">Facility charges are what the hospital bills for the room, staff time, implants and supplies on a case: operating room minutes, recovery, endoscopy, pain procedure rooms and the technical side of imaging. They are list price; what is collected is a fraction of it. The attending is the provider Meditech names on the account, usually the surgeon or proceduralist.</p></section>`
@@ -4838,6 +4851,7 @@ function chgDeptSectionHTML(rec) {
         <div class="kpi"><div class="label">Office visit levels</div><div style="margin-top:10px">${chgEMBar(em)}</div></div>
         <div class="kpi"><div class="label">Charges</div><div class="value" style="font-size:22px">${finShort(s.ch)}</div><span class="small">${finShort(s.pay)} paid so far</span></div>
       </div>
+      ${chgCodingNoteHTML(s)}
       ${chgProviderTableHTML(recs, { limit: 15, dept: rec.code })}
       ${fs.ch ? `<p class="small" style="margin:10px 0 0"><b>${finShort(fs.ch)}</b> of hospital facility charges on ${volInt(fs.enc)} cases were also billed at this location (room time, supplies and technical fees, not tied to a clinician's work). <a href="#/reports/billing" data-act="bl-goto" data-view="fac" data-loc="${esc(locs.length === 1 ? locs[0] : '')}">See them by attending provider</a>.</p>` : ''}
       <details style="margin-top:10px"><summary style="cursor:pointer;font-weight:600">Codes billed at ${esc(rec.label)}</summary>${chgCPTTableHTML(s.cpt, meta.descs || {}, 40)}</details>
