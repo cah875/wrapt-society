@@ -111,6 +111,9 @@ E/M level mix, wRVU per encounter, collections and every code billed. Locations 
 so a department's financial page also shows billing by provider, and a matched physician's page gets a
 "Billing & RVUs" card.
 
+The chart area of a clinic page includes a **visit level curve** (the E/M bell curve): the share of office visits
+billed at each level, for established and new patients, drawn against all NWSH clinics.
+
 Charge lines with no performing provider are the hospital's own facility billing (room time, implants, supplies,
 recovery, technical fees). Provider billing keeps them out of the provider table and shows them under
 **Hospital facility charges**, by attending provider. Each clinic's financial page ends with **What this clinic's

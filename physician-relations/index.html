@@ -4205,6 +4205,7 @@ const BILL_TERMS = [
   ['CPT code', 'A five-character code for a service a clinician performs, for example 99213 for an office visit. Codes ending in F are quality-tracking codes with no payment.'],
   ['HCPCS code', 'A letter followed by four digits, used by Medicare and other payers for things CPT does not cover. Common here: G0463 (the hospital\'s facility fee for a clinic visit), G2211 (add-on for ongoing, complex care) and S9088 (urgent care service fee).'],
   ['E/M level', 'Office visits are coded by level. New patients use 99202 to 99205 and established patients 99211 to 99215. A higher level means more complex medical decision making or more time, and pays more. The level has to match what is documented in the chart.'],
+  ['Visit level curve', 'The share of office visits billed at each level, drawn as a curve and compared with all NWSH clinics. Often called the E/M bell curve. It shows at a glance whether a clinic codes lower or higher than its peers.'],
   ['Work RVU (wRVU)', 'Medicare\'s measure of the clinician work in a service. It lets you compare productivity across providers no matter who the insurer is. A 99213 is about 1.2 wRVUs and a 99214 about 1.8.'],
   ['Medicare value', 'What Medicare\'s fee schedule pays for the code, as carried in Meditech (the report\'s "Full RVU" column). Commercial plans usually pay more and Medicaid less.'],
   ['Encounter', 'One patient account on one date of service.'],
@@ -4367,6 +4368,59 @@ function finCodingHTML(rec) {
     </div>
     <p class="help" style="margin:12px 0 0"><b>A code has to match the chart.</b> ${st.to} needs ${esc(EM_NEEDS[st.to] || 'the documentation to support it')} (medical decision making or total time on the day of the visit). This shows what the mix is worth, not what it should be; coding and compliance decide that. Visit counts come from the provider RVU report for ${months.map(fmtMonth).join(', ')}; revenue, cost and break-even come from the operating statement for ${esc(per.label)}. "Payment compared with Medicare" scales the estimate: 100% pays every moved visit at the Medicare fee schedule; commercial plans usually pay more and Medicaid less, so ask billing for this clinic's blended figure.</p>` : ''}`;
 }
+/* ---------- visit level curve: share of office visits at each level, this clinic against all NWSH ---------- */
+/* A smooth line through the points that never overshoots them (monotone cubic), as an SVG path. */
+function smoothPath(pts) {
+  const n = pts.length; if (n < 2) return '';
+  const dx = [], m = [], t = [];
+  for (let i = 0; i < n - 1; i++) { dx[i] = pts[i + 1][0] - pts[i][0]; m[i] = (pts[i + 1][1] - pts[i][1]) / dx[i]; }
+  t[0] = m[0]; t[n - 1] = m[n - 2];
+  for (let i = 1; i < n - 1; i++) t[i] = m[i - 1] * m[i] <= 0 ? 0 : (m[i - 1] + m[i]) / 2;
+  for (let i = 0; i < n - 1; i++) { if (m[i] === 0) { t[i] = 0; t[i + 1] = 0; continue; } const a = t[i] / m[i], b = t[i + 1] / m[i], h = a * a + b * b; if (h > 9) { const k = 3 / Math.sqrt(h); t[i] = k * a * m[i]; t[i + 1] = k * b * m[i]; } }
+  let d = `M${pts[0][0].toFixed(1)},${pts[0][1].toFixed(1)}`;
+  for (let i = 0; i < n - 1; i++) d += ` C${(pts[i][0] + dx[i] / 3).toFixed(1)},${(pts[i][1] + t[i] * dx[i] / 3).toFixed(1)} ${(pts[i + 1][0] - dx[i] / 3).toFixed(1)},${(pts[i + 1][1] - t[i + 1] * dx[i] / 3).toFixed(1)} ${pts[i + 1][0].toFixed(1)},${pts[i + 1][1].toFixed(1)}`;
+  return d;
+}
+function emCurveSVG({ codes, here, nw, label }) {
+  const W = 560, H = 260, padL = 44, padR = 14, padT = 26, padB = 46, n = codes.length;
+  const max = Math.max(0.1, ...here, ...nw) * 100, { tick, top } = volTicks(max * 1.08, 4);
+  const step = (W - padL - padR) / n, x = (i) => padL + step * (i + 0.5), y = (v) => padT + (H - padT - padB) * (1 - (v * 100) / top), y0 = y(0);
+  const ticks = []; for (let v = 0; v <= top + 1e-9; v += tick) ticks.push(v);
+  const grid = ticks.map((v) => `<line x1="${padL}" x2="${W - padR}" y1="${y(v / 100)}" y2="${y(v / 100)}" class="grid"/><text x="${padL - 6}" y="${y(v / 100) + 4}" class="ax" text-anchor="end">${Math.round(v)}%</text>`).join('');
+  const xl = codes.map((c, i) => `<text x="${x(i)}" y="${H - 24}" class="ax" text-anchor="middle" style="font-size:12.5px;font-weight:700;fill:var(--text)">Level ${c.slice(-1)}</text><text x="${x(i)}" y="${H - 8}" class="ax" text-anchor="middle">${c}</text>`).join('');
+  const pts = (v) => [[x(0) - step / 2, y0], ...v.map((s, i) => [x(i), y(s)]), [x(n - 1) + step / 2, y0]];
+  const hp = pts(here), np = pts(nw), hd = smoothPath(hp), nd = smoothPath(np);
+  const lab = (v, i, col, dy, bold) => `<text x="${x(i)}" y="${(y(v) + dy).toFixed(1)}" class="ax" text-anchor="middle" style="font-size:12px;fill:${col};${bold ? 'font-weight:700' : ''}">${(v * 100).toFixed(v < 0.1 ? 1 : 0)}%</text>`;
+  const hereLab = here.map((v, i) => lab(v, i, 'var(--text)', -10, true)).join('');
+  const nwLab = nw.map((v, i) => (v - here[i] > 0.09 ? lab(v, i, '#6b7785', -10) : here[i] - v > 0.09 ? lab(v, i, '#6b7785', 17) : '')).join('');
+  return `<svg class="chart" viewBox="0 0 ${W} ${H}" role="img" aria-label="${esc(label)}">${grid}<line x1="${padL}" x2="${W - padR}" y1="${y0}" y2="${y0}" class="axis"/>${xl}
+    <path d="${hd} L${hp[hp.length - 1][0].toFixed(1)},${y0} L${hp[0][0].toFixed(1)},${y0} Z" fill="${FIN_C.cy}" opacity="0.14"/>
+    <path d="${nd}" fill="none" stroke="#7f8b97" stroke-width="2" stroke-dasharray="6 4" stroke-linejoin="round"/>
+    <path d="${hd}" fill="none" stroke="${FIN_C.cy}" stroke-width="2.8" stroke-linejoin="round"/>
+    ${nw.map((v, i) => `<circle cx="${x(i)}" cy="${y(v).toFixed(1)}" r="3.2" fill="#7f8b97"><title>All NWSH clinics, ${codes[i]}: ${(v * 100).toFixed(1)}%</title></circle>`).join('')}
+    ${here.map((v, i) => `<circle cx="${x(i)}" cy="${y(v).toFixed(1)}" r="4.4" fill="${FIN_C.cy}" stroke="var(--surface)" stroke-width="1.5"><title>This clinic, ${codes[i]}: ${(v * 100).toFixed(1)}%</title></circle>`).join('')}
+    ${nwLab}${hereLab}</svg>`;
+}
+function finEMCurveCardHTML(rec) {
+  const all = chgRecords().filter((r) => r.dept === rec.code), months = chgMainMonths(all); if (!months.length) return '';
+  const s = chgSum(all.filter((r) => months.includes(r.period))), nw = chgSum(chgRecords().filter((r) => !r.src || months.includes(r.period)));
+  const u = (c, x) => (x.cpt[c] ? x.cpt[c][1] : 0);
+  const panel = (fam, title) => {
+    const t = fam.reduce((a, c) => a + u(c, s), 0), tn = fam.reduce((a, c) => a + u(c, nw), 0); if (t < 20 || !tn) return '';
+    const here = fam.map((c) => u(c, s) / t), net = fam.map((c) => u(c, nw) / tn), lv = (v) => fam.reduce((a, c, i) => a + (+c.slice(-1)) * v[i], 0), aH = lv(here), aN = lv(net);
+    const peak = (v) => fam[v.indexOf(Math.max(...v))], d = aH - aN;
+    const read = Math.abs(d) < 0.12 ? 'The two curves sit close together.' : d < 0 ? `This clinic's curve sits to the <b>left</b> of NWSH: visits are coded lower on average.` : `This clinic's curve sits to the <b>right</b> of NWSH: visits are coded higher on average.`;
+    return `<div><h3 style="margin:0 0 2px;font-size:15px">${title} <span class="muted" style="font-weight:400">· ${volInt(t / months.length)} a month</span></h3>
+        ${emCurveSVG({ codes: fam, here, nw: net, label: `${title}: share of visits at each level, ${rec.label} against all NWSH clinics` })}
+        <p class="small" style="margin:4px 0 0">Most common here: <b>level ${peak(here).slice(-1)}</b> (${finPctText(Math.max(...here) * 100)}); across NWSH: <b>level ${peak(net).slice(-1)}</b> (${finPctText(Math.max(...net) * 100)}). Average level <b>${aH.toFixed(2)}</b> here against <b>${aN.toFixed(2)}</b>. ${read}</p></div>`;
+  };
+  const a = panel(EM_EST, 'Established patients'), b = panel(EM_NEW, 'New patients'); if (!a && !b) return '';
+  return `<section class="card" style="grid-column:1 / -1"><div class="card-head"><h2>Visit level curve</h2><span class="hint">share of office visits coded at each level · ${months.length === 1 ? fmtMonth(months[0]) : `${fmtMonth(months[0])} to ${fmtMonth(months[months.length - 1])}`}</span></div>
+      ${finLegend([{ l: rec.label, c: FIN_C.cy }, { l: 'All NWSH clinics', c: '#7f8b97', dash: true }])}
+      <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(min(400px,100%),1fr));gap:10px 26px">${a}${b}</div>
+      <p class="help" style="margin:10px 0 0">Each point is the share of visits billed at that level, so each curve adds up to 100%. A typical clinic peaks at level 3 or 4 and tails off on both sides. A curve well to the left of its peers can mean visits are under-coded and revenue is being left behind; a curve well to the right is what payers audit first. Neither proves anything on its own: the level has to match what is in the chart. The table and the what-if are further down under "Visit coding and what it is worth".</p>
+    </section>`;
+}
 function viewFinDept(rec, actions) {
   const f = ui.fin, meta = finMeta(), per = finPeriod(rec, f.period), unit = (rec.unit || 'Units').toLowerCase(), u1 = finOne(unit);
   const a = finCalc(rec, per.months, 'cy'), b = finCalc(rec, per.months, 'bu'), p = finCalc(rec, per.months, 'py');
@@ -4444,6 +4498,7 @@ function viewFinDept(rec, actions) {
       <section class="card"><div class="card-head"><h2>Net revenue, expenses and EBITDA</h2><span class="hint">${rec.year} by month</span></div>${finLegend([{ l: 'Net revenue', c: FIN_C.rev }, { l: 'Total expenses', c: FIN_C.exp }, { l: 'EBITDA', c: '#1d2730', dash: true }])}${revExp}</section>
       <section class="card"><div class="card-head"><h2>Expenses by category</h2><span class="hint">as on the statement</span></div>${finLegend(groups)}${mixChart}</section>
       <section class="card"><div class="card-head"><h2>Cost by how it behaves</h2><span class="hint">provider pay, per-visit costs, overhead</span></div>${finLegend([{ l: 'Staff, benefits, rent and overhead', c: '#6250d6' }, { l: 'Provider pay', c: '#2a78d6' }, { l: 'Supplies and per-visit costs', c: '#eda100' }])}${costStack}</section>
+      ${finEMCurveCardHTML(rec)}
     </div>
     ${finDriversHTML(rec, per, a, rec.unit)}
     ${finCostCardHTML(rec, per, a, unit)}
