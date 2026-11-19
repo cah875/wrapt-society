@@ -1204,7 +1204,7 @@ const ui = {
   act: { q: '', who: '', method: '', from: '', to: '' },
   sx: { vol: '', metric: 'cases', smooth: 4, rooms: {} },
   im: { id: '', period: '6', mods: {}, sites: {}, showAll: false, rank: '' },
-  fin: { group: 'clinic', period: 'ytd', sort: 'ebitda', dir: 1, pl: 'cy', open: {}, what: {}, showHosp: false, cost: 'finance', cmp: 'bu', code: {} },
+  fin: { group: 'clinic', period: 'ytd', sort: 'ebitda', dir: 1, pl: 'cy', open: {}, what: {}, showHosp: false, cost: 'finance', cmp: 'bu', code: {}, pay: null },
   bl: { loc: '', prov: '', month: '', sort: 'w', dir: -1, showAll: false, view: 'prof' },
   tidy: { field: 'specialty', from: '', into: '' },
   year: new Date().getFullYear(),
@@ -4194,6 +4194,7 @@ const FIN_TERMS = [
   ['Cost per visit', 'Total expenses divided by visits: what one average visit costs at today\'s volume. It falls as volume rises, because fixed costs are spread over more visits.'],
   ['Margin per visit', 'Net revenue per visit minus cost per visit. Negative means each visit, on average, loses money at today\'s volume.'],
   ['Provider pay', 'Salaries of physicians, nurse practitioners and physician assistants (GL 0502800000, 0501700000 and 0501800000). Their benefits sit with all other benefits.'],
+  ['Pay per work RVU', 'Provider pay divided by the work RVUs those providers billed: what the clinic pays for one unit of clinician work, whatever the pay method. A production plan pays a set dollar amount per work RVU instead of, or on top of, a base salary. Compare it with what a work RVU brings in after supplies and overhead.'],
   ['Variable cost', 'Cost that goes up with each added visit. The finance statement counts provider pay plus supplies, drugs, lab, implants and professional fees as variable.'],
   ['Fixed cost', 'Cost that stays about the same whether the clinic sees 500 visits or 700 in a month: support staff pay, benefits, rent, purchased services and other operating costs.'],
   ['Contribution per visit', 'Net revenue per visit minus variable cost per visit: what each extra visit adds toward covering fixed cost.'],
@@ -4315,6 +4316,120 @@ function finWhatIfHTML(rec) {
       <div class="kpi"><div class="label">EBITDA per month at these inputs</div><div class="value ${volCls((contrib || 0) * (a.visMo || 0) - (fixM || 0))}" style="font-size:22px">${contrib !== null && fixM !== null && a.visMo !== null ? finShort(contrib * a.visMo - fixM) : '—'}</div><span class="small">at ${volInt(a.visMo || 0)} ${esc(unit)} a month</span></div>
     </div>
     <p class="help" style="margin:12px 0 0">Using the <b>${finCostMode() === 'salaried' ? 'providers on salary' : 'finance statement'}</b> method. To break even at today's volume without more ${esc(unit)}: ${needRev !== null ? `net revenue of <b>${finMoney(needRev)}</b> per ${esc(u1)} (now ${finMoney(a.revUnit)})` : '—'}, or ${needVar !== null ? `variable cost of <b>${finMoney(needVar)}</b> per ${esc(u1)} (now ${finMoney(a.varUnit)})` : '—'}, or ${needFixed !== null ? `fixed cost of <b>${finShort(needFixed)}</b> a month (now ${finShort(a.fixedMo)})` : '—'}. <button class="btn sm link" data-act="fin-what-reset">Reset to actuals</button></p>`;
+}
+/* ---------- provider pay planner ---------- */
+/* The statement carries provider pay as one total per type (physician, NP, PA), so a plan is built per type, not per person.
+   Work RVUs and encounters come from the provider RVU report for the same months where both are loaded. */
+const PAY_GROUPS = [['phys', 'Physicians', 'a:0502800000'], ['np', 'Nurse practitioners', 'a:0501700000'], ['pa', 'Physician assistants', 'a:0501800000']];
+function payGroupOf(cred) { const c = String(cred || '').replace(/[^a-z]/gi, '').toLowerCase(); return /^(md|do|mbbs|dpm|mdphd)$/.test(c) ? 'phys' : /np$|^aprn|^arnp/.test(c) ? 'np' : /^pa/.test(c) ? 'pa' : ''; }
+function finPayData(rec, per) {
+  const a = finCalc(rec, per.months, 'cy'); if (!a.vis || a.totExp === null || a.netRev === null || !a.provPay) return null;
+  const n = a.n, ym = (i) => `${rec.year}-${String(i + 1).padStart(2, '0')}`;
+  const own = chgRecords().filter((r) => r.dept === rec.code && !chgIsFac(r));
+  const loaded = chgMainMonths(own), overlap = loaded.filter((m) => per.months.some((i) => ym(i) === m));
+  const basis = overlap.length ? overlap : loaded, bn = Math.max(1, basis.length), bset = new Set(basis);
+  const groups = PAY_GROUPS.map(([k, l, gl]) => ({ k, l, pay: (finSum(rec, gl, 'cy', per.months) || 0) / n, w: 0, enc: 0, provs: [] }));
+  const other = { w: 0, enc: 0, n: 0 }, byProv = new Map();
+  own.filter((r) => bset.has(r.period)).forEach((r) => { let p = byProv.get(r.provider); if (!p) { p = { name: r.provider, g: payGroupOf(chgProviderParts(r.provider).cred), w: 0, enc: 0 }; byProv.set(r.provider, p); } p.w += r.w / bn; p.enc += r.enc / bn; });
+  byProv.forEach((p) => { const g = groups.find((x) => x.k === p.g); if (g) { g.w += p.w; g.enc += p.enc; g.provs.push(p); } else { other.w += p.w; other.enc += p.enc; other.n++; } });
+  const shown = groups.filter((g) => g.pay > 0 || g.enc > 0), gEnc = shown.reduce((s, g) => s + g.enc, 0), wAll = shown.reduce((s, g) => s + g.w, 0);
+  return { a, n, groups: shown, other, basis, overlap: overlap.length > 0, gEnc, encAll: gEnc + other.enc, wAll, visMo: a.visMo, revMo: a.netRev / n, revUnit: a.revUnit, supUnit: a.supplies / a.vis, overMo: a.overhead / n };
+}
+function finPayState(rec) { const s = ui.fin.pay; return s && s.code === rec.code ? s : (ui.fin.pay = { code: rec.code, g: {}, add: {} }); }
+/* One month under a pay plan. Each type is paid a base amount plus a rate per work RVU; changing encounters moves visits,
+   revenue and supplies in step, at today's revenue and supply cost per visit. Staff, benefits, rent and overhead stay as they are. */
+function finPayCalc(d, st) {
+  const rows = d.groups.map((g) => { const s = (st.g || {})[g.k] || {}, wpe = g.enc ? g.w / g.enc : 0, base = s.base ?? g.pay, rate = g.w ? (s.rate ?? 0) : 0, encP = g.enc ? (s.enc ?? g.enc) : 0, wP = encP * wpe; return { ...g, wpe, base, rate, encP, wP, payP: base + rate * wP }; });
+  const ad = st.add || {}, addWpe = d.gEnc ? d.wAll / d.gEnc : 0;
+  const add = { base: ad.base || 0, rate: addWpe ? (ad.rate || 0) : 0, enc: ad.enc || 0 }; add.w = add.enc * addWpe; add.pay = add.base + add.rate * add.w;
+  const kv = d.encAll ? d.visMo / d.encAll : 1;
+  const vis = Math.max(0, d.visMo + kv * (rows.reduce((s, r) => s + (r.encP - r.enc), 0) + add.enc));
+  const rev = d.revMo + d.revUnit * (vis - d.visMo), sup = d.supUnit * vis;
+  const pay = rows.reduce((s, r) => s + r.payP, 0) + add.pay, w = rows.reduce((s, r) => s + r.wP, 0) + add.w;
+  const varPay = rows.reduce((s, r) => s + r.rate * r.wP, 0) + add.rate * add.w, basePay = pay - varPay;
+  const contrib = vis ? d.revUnit - d.supUnit - varPay / vis : null, be = contrib !== null && contrib > 0 ? (d.overMo + basePay) / contrib : null;
+  return { rows, add, addWpe, kv, vis, rev, sup, pay, w, varPay, basePay, eb: rev - sup - d.overMo - pay, contrib, be, maxPPW: w ? (rev - sup - d.overMo) / w : null };
+}
+function finRate(v) { return v === null || v === undefined || !Number.isFinite(v) ? '—' : (v < 0 ? '−$' : '$') + Math.abs(v).toFixed(2); }
+/* The cells of the plan table that change as inputs change, by key, so typing never rebuilds the inputs. */
+function finPayCells(c) {
+  const o = {};
+  c.rows.forEach((r) => { o[r.k + ':pay'] = `<b>${finMoney(r.payP)}</b>`; o[r.k + ':ppw'] = r.wP ? finRate(r.payP / r.wP) : '<span class="muted">—</span>'; });
+  o['add:pay'] = c.add.pay ? `<b>${finMoney(c.add.pay)}</b>` : '<span class="muted">—</span>'; o['add:ppw'] = c.add.w && c.add.pay ? finRate(c.add.pay / c.add.w) : '<span class="muted">—</span>';
+  o['tot:pay'] = `<b>${finMoney(c.pay)}</b>`; o['tot:ppw'] = c.w ? `<b>${finRate(c.pay / c.w)}</b>` : '<span class="muted">—</span>'; o['tot:enc'] = `<b>${volInt(c.rows.reduce((s, r) => s + r.encP, 0) + (c.addWpe ? c.add.enc : 0))}</b>`;
+  return o;
+}
+function finPayOutHTML(rec, d, now, c) {
+  const unit = (rec.unit || 'Visits').toLowerCase(), u1 = finOne(unit), dPay = c.pay - now.pay, dEb = c.eb - now.eb, moved = Math.abs(dPay) >= 1 || Math.abs(dEb) >= 1 || Math.abs(c.vis - now.vis) >= 0.5 || Math.abs((c.be || 0) - (now.be || 0)) >= 0.5;
+  const ppw = c.w ? c.pay / c.w : null, ppwNow = now.w ? now.pay / now.w : null, share = c.rev ? finPct(c.pay, c.rev) : null, shareNow = now.rev ? finPct(now.pay, now.rev) : null;
+  const sayEb = (v) => `${v < 0 ? 'a loss of' : 'a gain of'} <b>${finShort(Math.abs(v))}</b>`;
+  const story = moved ? `Under this plan provider pay is <b>${finShort(c.pay)}</b> a month, <b class="${Math.abs(dPay) < 50 ? '' : volCls(-dPay)}">${Math.abs(dPay) < 50 ? 'the same as' : finShort(Math.abs(dPay)) + (dPay < 0 ? ' less than' : ' more than')}</b> today${Math.abs(c.vis - now.vis) >= 0.5 ? `, on <b>${volInt(c.vis)}</b> ${unit} a month instead of ${volInt(now.vis)}` : ''}. ${Math.abs(dEb) < 50 ? `The department's result stays at ${sayEb(c.eb)} a month.` : `The department goes from ${sayEb(now.eb)} a month to ${sayEb(c.eb)}: <b class="${volCls(dEb)}">${volSigned(dEb * 12, finShort)}</b> over a year.`}${c.varPay > 0 ? ` ${Math.round(c.varPay / c.pay * 100)}% of pay now rises and falls with production, so a slow month costs less and a busy month costs more.` : ''}`
+    : `This is today's position: providers are paid <b>${finShort(now.pay)}</b> a month${ppwNow !== null ? `, which works out to <b>${finRate(ppwNow)}</b> per work RVU` : ''}, and the department shows ${sayEb(now.eb)} a month. Change a base pay, a rate per work RVU or the encounters a month to see what it does.`;
+  const tile = (l, v, sub, red) => `<div class="kpi ${red ? 'red' : ''}"><div class="label">${l}</div><div class="value" style="font-size:22px">${v}</div><span class="small">${sub}</span></div>`;
+  const provRows = c.rows.flatMap((r) => r.provs.map((p) => { const k = r.enc ? r.encP / r.enc : 1, w = p.w * k; return { p, r, w, enc: p.enc * k, pay: r.wP ? r.payP * w / r.wP : 0 }; })).filter((x) => x.p.enc >= 0.5).sort((x, y) => y.w - x.w);
+  const provTable = provRows.length ? `<h3 style="margin:18px 0 8px">By provider under this plan</h3>
+      <div class="table-wrap"><table class="breakdown bill tight">
+        <thead><tr><th>Provider</th><th>Type</th><th class="num">Work RVUs / month</th><th class="num">Encounters / month</th><th class="num">wRVU / encounter</th><th class="num">Share of type</th><th class="num">Share of plan pay / year</th></tr></thead>
+        <tbody>${provRows.map((x) => { const ph = chgMatchPhysician(x.p.name); return `<tr><td>${ph ? `<a href="#/physician/${ph.id}"><b>${esc(x.p.name)}</b></a>` : `<b>${esc(x.p.name)}</b>`}</td><td class="nowrap">${{ phys: 'Physician', np: 'NP', pa: 'PA' }[x.r.k]}</td><td class="num">${volInt(x.w)}</td><td class="num">${volInt(x.enc)}</td><td class="num">${x.enc ? (x.w / x.enc).toFixed(2) : '—'}</td><td class="num">${x.r.wP ? finPctText(finPct(x.w, x.r.wP)) : '—'}</td><td class="num">${x.pay ? finMoney(x.pay * 12) : '<span class="muted">—</span>'}</td></tr>`; }).join('')}</tbody>
+      </table></div>
+      <p class="help" style="margin:8px 0 0">The statement has one pay total per provider type, not per person, so the last column is not anyone's actual pay. It shows what each provider would earn if the type's pay under this plan were shared out by work RVUs billed in this clinic. Providers who also work elsewhere show only their work here.</p>` : '';
+  const odd = ppwNow !== null && (ppwNow < 20 || ppwNow > 150) ? `<div class="notice info" style="margin:12px 0 0">${ico('i-info')}<div><b>Today's pay per work RVU (${finRate(ppwNow)}) is ${ppwNow < 20 ? 'far lower' : 'far higher'} than is usual.</b> ${ppwNow < 20 ? 'Some of the providers billing here are probably paid from another department or under a contract, so their work shows here and their pay does not.' : 'Some of the pay on this statement is probably for providers whose work is billed at another location, or for time that produces no billing.'} Treat the figures per work RVU with care for this department.</div></div>` : '';
+  return `${odd}<p style="font-size:16px;line-height:1.5;margin:14px 0 12px">${story}</p>
+    <div class="kpis" style="grid-template-columns:repeat(auto-fit,minmax(190px,1fr))">
+      ${tile('Provider pay / month', finShort(c.pay), `today ${finShort(now.pay)}${Math.abs(dPay) >= 50 ? ` · <span class="${volCls(-dPay)}">${volSigned(dPay * 12, finShort)} a year</span>` : ''}`)}
+      ${tile('Pay per work RVU', finRate(ppw), ppwNow !== null ? `today ${finRate(ppwNow)} · ${volInt(c.w)} wRVUs a month` : 'load the provider RVU report to see this')}
+      ${tile('Most the clinic can pay per wRVU and break even', finRate(c.maxPPW), c.maxPPW !== null ? (c.maxPPW <= 0 ? 'revenue does not cover supplies and overhead before any provider is paid' : `what is left of each wRVU after supplies and overhead, at ${volInt(c.vis)} ${unit} a month`) : '', c.maxPPW !== null && ppw !== null && ppw > c.maxPPW)}
+      ${tile('Provider pay as a share of net revenue', share === null ? '—' : finPctText(share), `${c.vis ? finMoney(c.pay / c.vis) + ' per ' + esc(u1) : ''}${shareNow !== null ? ` · today ${finPctText(shareNow)}` : ''}`)}
+      ${tile('EBITDA / month', `<span class="${volCls(c.eb)}">${finShort(c.eb)}</span>`, `today ${finShort(now.eb)}${Math.abs(dEb) >= 50 ? ` · <span class="${volCls(dEb)}">${volSigned(dEb, finShort)}</span>` : ''}`, c.eb < 0)}
+      ${tile(`Break-even ${esc(unit)} / month`, c.be === null ? 'Not reachable' : volInt(c.be), c.be === null ? `each ${esc(u1)} adds nothing after supplies and per-wRVU pay` : `plan has ${volInt(c.vis)} (${Math.round(c.vis / c.be * 100)}%)${now.be !== null ? ` · today ${volInt(now.be)}` : ''}`, c.be === null || c.vis < c.be)}
+    </div>
+    ${provTable}`;
+}
+function finPayHTML(rec) {
+  const per = finPeriod(rec, ui.fin.period), d = finPayData(rec, per); if (!d) return '';
+  const st = finPayState(rec), now = finPayCalc(d, {}), c = finPayCalc(d, st), cells = finPayCells(c), unit = (rec.unit || 'Visits').toLowerCase(), hasW = d.wAll > 0;
+  const mLabel = (ms) => (ms.length === 1 ? fmtMonth(ms[0]) : `${fmtMonth(ms[0])} to ${fmtMonth(ms[ms.length - 1])}`);
+  const inp = (g, k, v, step, label, off) => off ? '<span class="muted">—</span>' : `<input type="number" min="0" step="${step}" data-input="fin-pay" data-g="${g}" data-k="${k}" value="${v}" aria-label="${esc(label)}" style="width:96px;min-height:38px;padding:4px 8px;text-align:right">`;
+  const r2 = (v) => String(Math.round(v * 100) / 100), dash = '<span class="muted">—</span>';
+  const out = (k) => `<td class="num" data-payout="${k}">${cells[k]}</td>`;
+  const rows = c.rows.map((r) => `<tr><td><b>${esc(r.l)}</b><div class="sub">${r.provs.length ? `${r.provs.length} billing here · ${volInt(r.enc)} encounters a month${r.wpe ? ` · ${r.wpe.toFixed(2)} wRVU each` : ''}` : 'no billing under this type in the months loaded'}</div></td>
+      <td class="num">${finMoney(r.pay)}</td><td class="num">${r.w ? volInt(r.w) : dash}</td><td class="num">${r.w && r.pay ? finRate(r.pay / r.w) : dash}</td>
+      <td class="num">${inp(r.k, 'base', Math.round(r.base), 500, `${r.l}: base pay per month`)}</td><td class="num">${inp(r.k, 'rate', r2(r.rate), 1, `${r.l}: dollars per work RVU`, !r.w)}</td><td class="num">${inp(r.k, 'enc', Math.round(r.encP), 10, `${r.l}: encounters per month`, !r.enc)}</td>
+      ${out(r.k + ':pay')}${out(r.k + ':ppw')}</tr>`).join('');
+  const addRow = `<tr><td><b>Add a provider</b><div class="sub">${c.addWpe ? `a hire or added sessions, at ${c.addWpe.toFixed(2)} wRVU per encounter` : `a hire or added sessions; enter ${esc(unit)} a month`}</div></td>
+      <td class="num">${dash}</td><td class="num">${dash}</td><td class="num">${dash}</td>
+      <td class="num">${inp('add', 'base', Math.round(c.add.base), 500, 'Added provider: base pay per month')}</td><td class="num">${inp('add', 'rate', r2(c.add.rate), 1, 'Added provider: dollars per work RVU', !c.addWpe)}</td><td class="num">${inp('add', 'enc', Math.round(c.add.enc), 10, 'Added provider: encounters per month')}</td>
+      ${out('add:pay')}${out('add:ppw')}</tr>`;
+  const basisNote = !hasW ? 'No provider RVU report is loaded for this clinic, so work RVUs and encounters are blank and only base pay can be changed. Upload the Meditech Performing Provider RVU report to plan pay per work RVU.'
+    : d.overlap ? `Work RVUs and encounters are monthly averages from the provider RVU report for ${esc(mLabel(d.basis))}, the months that also have a statement.`
+    : `<b>Different months:</b> the statement covers ${esc(per.label)} and the provider RVU report covers ${esc(mLabel(d.basis))}, so pay per work RVU compares two different periods. Load RVU reports for the statement months for a like-for-like figure.`;
+  return `<p style="margin:0 0 12px;font-size:15.5px;line-height:1.5">Try a different way of paying providers, or a different staffing mix, and see what it does to the department. For each provider type set a <b>base pay</b> (salary), a <b>rate per work RVU</b> (production pay), or both, and how many encounters they see. Nothing here is saved or sent anywhere.</p>
+    <div class="no-print" style="display:flex;gap:8px;flex-wrap:wrap;margin:0 0 12px">
+      <button class="btn sm" data-act="fin-pay-preset" data-v="prod" ${hasW ? '' : 'disabled'}>All pay per work RVU, at today's cost</button>
+      <button class="btn sm" data-act="fin-pay-preset" data-v="half" ${hasW ? '' : 'disabled'}>Half base, half per work RVU</button>
+      <button class="btn sm" data-act="fin-pay-preset" data-v="reset">Reset to today</button>
+    </div>
+    <div class="table-wrap"><table class="breakdown bill tight">
+      <thead><tr><th rowspan="2">Provider type</th><th colspan="3" style="text-align:center;border-bottom:1px solid var(--border)">Today, a month (${esc(per.label)})</th><th colspan="3" style="text-align:center;border-bottom:1px solid var(--border)">The plan to try</th><th colspan="2" style="text-align:center;border-bottom:1px solid var(--border)">Result</th></tr>
+        <tr><th class="num">Pay</th><th class="num">Work RVUs</th><th class="num">Pay per wRVU</th><th class="num">Base pay</th><th class="num">+ $ per wRVU</th><th class="num">Encounters</th><th class="num">Pay</th><th class="num">Pay per wRVU</th></tr></thead>
+      <tbody>${rows}${addRow}
+        <tr class="total-row"><td><b>All providers</b>${d.gEnc ? `<div class="sub">${volInt(d.gEnc)} encounters a month today</div>` : ''}</td><td class="num"><b>${finMoney(now.pay)}</b></td><td class="num"><b>${now.w ? volInt(now.w) : '—'}</b></td><td class="num"><b>${now.w ? finRate(now.pay / now.w) : '—'}</b></td><td></td><td></td>${out('tot:enc')}${out('tot:pay')}${out('tot:ppw')}</tr></tbody>
+    </table></div>
+    <div id="fin-pay-out">${finPayOutHTML(rec, d, now, c)}</div>
+    <p class="help" style="margin:12px 0 0">${basisNote} Pay is the salary lines for physicians, nurse practitioners and physician assistants on the statement; benefits and payroll taxes are left as they are, so a real change in pay moves cost a little more than shown. Changing encounters moves ${esc(unit)}, net revenue (${finMoney(d.revUnit)} each) and supplies (${finMoney(d.supUnit)} each) in step; staff, rent and overhead stay at ${finShort(d.overMo)} a month. Break-even here counts base pay as fixed and per-wRVU pay as rising with volume.${d.other.n ? ` ${d.other.n} other billing provider${d.other.n === 1 ? '' : 's'} here (therapists, nurses or dietitians) ${d.other.n === 1 ? 'is' : 'are'} paid from staff cost and ${d.other.n === 1 ? 'is' : 'are'} not in the plan.` : ''}</p>`;
+}
+function updateFinPay() {
+  const rec = finCurrentDept(), root = $('#fin-pay'); if (!rec || !root) return;
+  const d = finPayData(rec, finPeriod(rec, ui.fin.period)); if (!d) return;
+  const now = finPayCalc(d, {}), c = finPayCalc(d, finPayState(rec)), cells = finPayCells(c);
+  root.querySelectorAll('[data-payout]').forEach((el) => { el.innerHTML = cells[el.dataset.payout] ?? ''; });
+  const out = $('#fin-pay-out'); if (out) out.innerHTML = finPayOutHTML(rec, d, now, c);
+}
+function finPayPreset(v) {
+  const rec = finCurrentDept(), root = $('#fin-pay'); if (!rec || !root) return;
+  ui.fin.pay = { code: rec.code, g: {}, add: {} };
+  if (v !== 'reset') { const d = finPayData(rec, finPeriod(rec, ui.fin.period)); if (d) d.groups.forEach((g) => { if (g.w && g.pay) ui.fin.pay.g[g.k] = v === 'prod' ? { base: 0, rate: Math.round(g.pay / g.w * 100) / 100 } : { base: Math.round(g.pay / 2), rate: Math.round(g.pay / 2 / g.w * 100) / 100 }; }); }
+  root.innerHTML = finPayHTML(rec);
 }
 /* ---------- visit coding (E/M levels) and what a change is worth ---------- */
 /* Medicare fee schedule value per code as carried in Meditech (the RVU report's "Full RVU" column, October 2026); newer uploads store their own. */
@@ -4492,7 +4607,7 @@ function viewFinDept(rec, actions) {
         <div class="kpi"><div class="label">PTO</div><div class="value" style="font-size:22px">${a.pto !== null ? finPctText(finPct(a.pto, a.hours)) : '—'}</div><span class="small">${a.pto !== null ? volInt(a.pto) + ' hours' : ''}</span></div>
         <div class="kpi"><div class="label">Salaries & benefits per ${esc(u1)}</div><div class="value" style="font-size:22px">${a.sb !== null && a.vis ? finMoney(a.sb / a.vis) : '—'}</div><span class="small">${a.sb !== null && a.netRev ? finPctText(finPct(a.sb, a.netRev)) + ' of net revenue' : ''}</span></div>
       </div></section>` : '';
-  const coding = finCodingHTML(rec);
+  const coding = finCodingHTML(rec), payPlan = finPayHTML(rec);
   return finHead(rec.label, `${esc(rec.code)} · ${esc(rec.name)} · ${esc(FIN_GROUPS.find((x) => x[0] === rec.group)[1])}`, 'clinics', actions) + `
     <div class="card no-print" style="margin-bottom:14px">
       <div class="pair fbar" style="display:flex;gap:14px 22px;flex-wrap:wrap;align-items:flex-end">
@@ -4516,6 +4631,7 @@ function viewFinDept(rec, actions) {
     ${finDriversHTML(rec, per, a, rec.unit)}
     ${finCostCardHTML(rec, per, a, unit)}
     <section class="card" style="margin-top:14px"><div class="card-head"><h2>What it takes to break even</h2><span class="hint">change any input; the rest recalculates</span></div><div id="fin-whatif">${finWhatIfHTML(rec)}</div></section>
+    ${payPlan ? `<section class="card" style="margin-top:14px"><div class="card-head"><h2>Provider pay planner</h2><span class="hint">try a pay plan or a staffing change; the results recalculate</span></div><div id="fin-pay">${payPlan}</div></section>` : ''}
     ${coding ? `<section class="card" style="margin-top:14px"><div class="card-head"><h2>Visit coding and what it is worth</h2><span class="hint">office visit (E/M) levels from the provider RVU report</span></div><div id="fin-coding">${coding}</div></section>` : ''}
     ${hoursCard}
     <section class="card" style="margin-top:14px">
@@ -4772,35 +4888,53 @@ function viewBilling() {
     <p class="help" style="margin:10px 0 0">Work RVUs come from Meditech's fee schedule line by line, multiplied by units. Encounters are distinct account and service date pairs. Payments are what has posted so far, so recent months collect further after upload; they post to the patient account, not to a code. To see what a change in visit coding is worth for one clinic, open that clinic under Clinic financials. Months loaded: ${months.map(fmtMonth).join(', ')}${meta.importedAt ? ` · last uploaded ${fmtTS(meta.importedAt)} by ${esc(meta.importedBy || '')}` : ''}.</p>`;
 }
 /* ---------- what a clinic's providers bring to the rest of the hospital ---------- */
+/* Imaging is told apart by code: CPT 70000-79999 and the vascular ultrasound studies, less image guidance during a procedure. */
+const IMG_LOC_DEPTS = ['51505', '50505', '53505', '54505', '50005'];
+const IMG_GUIDE_CODES = ['76000', '76937', '76942', '77001', '77002', '77003', '77011', '77012', '77021'];
+function isImgCode(code) { return /^(7\d{4}|93[89]\d\d)$/.test(code) && !IMG_GUIDE_CODES.includes(code); }
+/* Imaging lines and their charges in a set of billing records. 77063 is the tomosynthesis add-on to a screening mammogram: charged, not a second exam. */
+function chgImgOf(recs) { let n = 0, ch = 0; recs.forEach((r) => Object.entries(r.cpt || {}).forEach(([k, v]) => { if (isImgCode(k)) { if (k !== '77063') n += v[0]; ch += v[3]; } })); return { n, ch }; }
+function imgLocLabel(loc) { const s = String(loc || '').toLowerCase(); return /\bmri\b/.test(s) ? 'MRI' : /\bct\b/.test(s) ? 'CT' : /ultrasound/.test(s) ? 'US' : /breast|mammo/.test(s) ? 'mammo' : /dexa/.test(s) ? 'DEXA' : /x-?ray/.test(s) ? 'X-ray' : 'imaging'; }
 function finDownstreamHTML(rec) {
   const own = chgRecords().filter((r) => r.dept === rec.code && !chgIsFac(r)); if (!own.length) return '';
-  const byProv = {}; own.forEach((r) => { (byProv[r.provider] = byProv[r.provider] || { enc: 0 }).enc += r.enc; });
-  const provs = Object.entries(byProv).filter(([, v]) => v.enc >= 10).map(([name, v]) => ({ name, enc: v.enc, parts: chgProviderParts(name) })).filter((x) => x.parts.last);
+  const byProv = {}; own.forEach((r) => { const v = byProv[r.provider] = byProv[r.provider] || { enc: 0, recs: [] }; v.enc += r.enc; v.recs.push(r); });
+  const provs = Object.entries(byProv).filter(([, v]) => v.enc >= 10).map(([name, v]) => ({ name, enc: v.enc, recs: v.recs, parts: chgProviderParts(name) })).filter((x) => x.parts.last);
   if (!provs.length) return '';
   const fac = chgFacByAttending(chgRecords()).filter((x) => x.att).map((x) => ({ ...x, parts: chgAttParts(x.att) }));
   const noAtt = chgRecords().some((r) => chgIsFac(r) && !r.att);
   const imgCap = imgMonths(), imgSet = new Set(imgCap), imgs = imgRecords().map((r) => ({ r, parts: imgNameParts(r.referrer) })).filter((x) => x.parts);
-  const asOf = volAsOf(), yr = asOf ? asOf.year : 0, vols = volRecords().map((r) => ({ r, parts: volNameParts(r.surgeon) }));
   const rows = provs.map((p) => {
-    const f = fac.filter((x) => samePerson(p.parts, x.parts)), fch = f.reduce((s, x) => s + x.ch, 0), fenc = f.reduce((s, x) => s + x.enc, 0);
-    const locs = {}; f.forEach((x) => Object.entries(x.locs).forEach(([k, v]) => { locs[k] = (locs[k] || 0) + v; })); const top = Object.entries(locs).sort((a, b) => b[1] - a[1])[0];
-    const im = imgs.find((x) => samePerson(p.parts, x.parts)), exams = im ? im.r.series.reduce((s, e) => s + (imgSet.has(e.p) && e.m !== IMG_GUIDE ? imgN(e) : 0), 0) : 0;
-    const vo = vols.find((x) => samePerson(p.parts, x.parts)), cases = vo && yr ? vo.r.series.reduce((s, e) => s + (e.period[5] !== 'W' && e.period.startsWith(String(yr)) ? e.cases : 0), 0) : 0;
-    return { ...p, fch, fenc, top: top ? top[0] : '', exams, cases, ph: chgMatchPhysician(p.name) };
-  }).filter((x) => x.fch || x.exams || x.cases).sort((a, b) => b.fch - a.fch || b.exams - a.exams);
+    const fr = fac.filter((x) => samePerson(p.parts, x.parts)).flatMap((x) => x.recs);
+    const hiR = fr.filter((r) => IMG_LOC_DEPTS.includes(finLocDept(r.location))), prR = fr.filter((r) => !IMG_LOC_DEPTS.includes(finLocDept(r.location)));
+    const mix = {}; hiR.forEach((r) => { const k = imgLocLabel(r.location); mix[k] = (mix[k] || 0) + chgImgOf([r]).n; });
+    const hi = { n: chgImgOf(hiR).n, ch: hiR.reduce((s, r) => s + r.ch, 0), mix: Object.entries(mix).filter(([, v]) => v).sort((a, b) => b[1] - a[1]).map(([k, v]) => `${volInt(v)} ${k}`).join(' · ') };
+    const locs = {}; prR.forEach((r) => { locs[r.location] = (locs[r.location] || 0) + r.ch; }); const top = Object.entries(locs).sort((a, b) => b[1] - a[1])[0];
+    const pr = { enc: prR.reduce((s, r) => s + r.enc, 0), ch: prR.reduce((s, r) => s + r.ch, 0), top: top ? top[0] : '' };
+    const ci = chgImgOf(p.recs);
+    const im = imgs.find((x) => samePerson(p.parts, x.parts)), orders = im ? im.r.series.reduce((s, e) => s + (imgSet.has(e.p) && e.m !== IMG_GUIDE ? imgN(e) : 0), 0) : 0;
+    return { ...p, hi, pr, ci, tot: hi.ch + pr.ch + ci.ch, orders, ph: chgMatchPhysician(p.name) };
+  }).filter((x) => x.tot || x.orders).sort((a, b) => b.tot - a.tot || b.orders - a.orders);
   if (!rows.length) return '';
-  const T = rows.reduce((s, x) => { s.fch += x.fch; s.fenc += x.fenc; s.exams += x.exams; s.cases += x.cases; return s; }, { fch: 0, fenc: 0, exams: 0, cases: 0 });
-  const chgM = chgMainMonths(chgRecords()), chgLabel = chgM.length ? (chgM.length === 1 ? fmtMonth(chgM[0]) : `${fmtMonth(chgM[0])} to ${fmtMonth(chgM[chgM.length - 1])}`) : '', imgLabel = imgCap.length ? `${fmtMonth(imgCap[0])} to ${fmtMonth(imgCap[imgCap.length - 1])}` : '';
-  const bits = [T.fch ? `<b>${finShort(T.fch)}</b> of hospital facility charges on <b>${volInt(T.fenc)}</b> cases (${esc(chgLabel)})` : '', T.cases ? `<b>${volInt(T.cases)}</b> procedure case${T.cases === 1 ? '' : 's'} in ${yr}` : '', T.exams ? `<b>${volInt(T.exams)}</b> imaging exams ordered at NWSH (${esc(imgLabel)})` : ''].filter(Boolean);
+  const T = rows.reduce((s, x) => { s.hiN += x.hi.n; s.hiC += x.hi.ch; s.prE += x.pr.enc; s.prC += x.pr.ch; s.ciN += x.ci.n; s.ciC += x.ci.ch; s.tot += x.tot; s.orders += x.orders; return s; }, { hiN: 0, hiC: 0, prE: 0, prC: 0, ciN: 0, ciC: 0, tot: 0, orders: 0 });
+  const chgM = chgMonthsAvailable(), chgLabel = chgM.length ? (chgM.length === 1 ? fmtMonth(chgM[0]) : `${fmtMonth(chgM[0])} to ${fmtMonth(chgM[chgM.length - 1])}`) : '', imgLabel = imgCap.length ? `${fmtMonth(imgCap[0])} to ${fmtMonth(imgCap[imgCap.length - 1])}` : '';
+  const pl = (n, one, many) => `<b>${volInt(n)}</b> ${n === 1 ? one : many}`;
+  const bits = [T.hiC ? `<b>${finShort(T.hiC)}</b> for ${pl(T.hiN, 'imaging exam', 'imaging exams')} they ordered at the hospital` : '', T.ciC ? `<b>${finShort(T.ciC)}</b> for ${pl(T.ciN, 'X-ray or other image', 'X-rays and other images')} taken in the clinic` : '', T.prC ? `<b>${finShort(T.prC)}</b> of facility charges on ${pl(T.prE, 'surgery, procedure or therapy case', 'surgery, procedure and therapy cases')}` : ''].filter(Boolean);
+  const say = bits.length > 2 ? `${bits.slice(0, -1).join(', ')} and ${bits[bits.length - 1]}` : bits.join(' and ');
+  const dash = '<span class="muted">—</span>', money = (v) => (v ? finMoney(v) : dash), cnt = (v) => (v ? volInt(v) : dash), gh = 'style="text-align:center;white-space:normal;border-bottom:1px solid var(--border)"', sub = 'class="sub" style="white-space:normal;max-width:150px;margin-left:auto"';
   return `<section class="card" style="margin-top:14px">
-      <div class="card-head"><h2>What this clinic's providers bring to the rest of the hospital</h2><span class="hint">not on this department's statement</span></div>
-      <p style="margin:0 0 12px;font-size:16px;line-height:1.5">The ${rows.length} provider${rows.length === 1 ? '' : 's'} below who see patients in ${esc(rec.label)} also account for ${bits.length === 3 ? `${bits[0]}, ${bits[1]} and ${bits[2]}` : bits.join(' and ')}. That business is booked to the operating room, surgery center, endoscopy and imaging, so it does not show up in this department's revenue or EBITDA.</p>
-      <div class="table-wrap"><table class="breakdown bill">
-        <thead><tr><th>Provider</th><th class="num">Encounters here</th><th class="num">Hospital facility charges</th><th class="num">Cases</th><th>Mostly at</th><th class="num">Procedure cases ${yr || ''}</th><th class="num">Imaging exams ordered</th></tr></thead>
-        <tbody>${rows.map((x) => `<tr><td>${x.ph ? `<a href="#/physician/${x.ph.id}"><b>${esc(x.name)}</b></a>` : `<b>${esc(x.name)}</b>`}</td><td class="num">${volInt(x.enc)}</td><td class="num">${x.fch ? `<b>${finMoney(x.fch)}</b>` : '<span class="muted">—</span>'}</td><td class="num">${x.fenc ? volInt(x.fenc) : '<span class="muted">—</span>'}</td><td>${esc(x.top)}</td><td class="num">${x.cases ? volInt(x.cases) : '<span class="muted">—</span>'}</td><td class="num">${x.exams ? volInt(x.exams) : '<span class="muted">—</span>'}</td></tr>`).join('')}
-        <tr class="total-row"><td><b>Total</b></td><td></td><td class="num"><b>${finMoney(T.fch)}</b></td><td class="num"><b>${volInt(T.fenc)}</b></td><td></td><td class="num"><b>${volInt(T.cases)}</b></td><td class="num"><b>${volInt(T.exams)}</b></td></tr></tbody>
+      <div class="card-head"><h2>What this clinic's providers bring to the rest of the hospital</h2><span class="hint">charges not on this department's statement${chgLabel ? ` · ${esc(chgLabel)}` : ''}</span></div>
+      <p style="margin:0 0 12px;font-size:16px;line-height:1.5">${T.tot ? `The ${rows.length} provider${rows.length === 1 ? '' : 's'} below who see patients in ${esc(rec.label)} also account for <b>${finShort(T.tot)}</b> of charges booked to other departments: ${say}. None of it shows up in this department's revenue or EBITDA.` : `Providers who see patients in ${esc(rec.label)} ordered <b>${volInt(T.orders)}</b> imaging exams at NWSH (${esc(imgLabel)}). Charges for them will show here once the provider RVU reports for those months are loaded.`}</p>
+      <div class="table-wrap"><table class="breakdown bill tight">
+        <thead><tr><th rowspan="2">Provider</th><th rowspan="2" class="num" style="white-space:normal">Encounters here</th><th colspan="2" ${gh}>Imaging ordered at the hospital</th><th colspan="2" ${gh}>Imaging taken in this clinic</th><th colspan="2" ${gh}>Surgery, procedures, therapy</th><th rowspan="2" class="num" style="white-space:normal">Total charges</th>${T.orders ? '<th rowspan="2" class="num">Orders in<br>imaging report</th>' : ''}</tr>
+          <tr><th class="num">Exams</th><th class="num">Charges</th><th class="num">Exams</th><th class="num">Charges</th><th class="num">Cases</th><th class="num">Facility charges</th></tr></thead>
+        <tbody>${rows.map((x) => `<tr><td>${x.ph ? `<a href="#/physician/${x.ph.id}"><b>${esc(x.name)}</b></a>` : `<b>${esc(x.name)}</b>`}</td><td class="num">${volInt(x.enc)}</td>
+          <td class="num">${cnt(x.hi.n)}</td><td class="num">${money(x.hi.ch)}${x.hi.mix ? `<div ${sub}>${esc(x.hi.mix)}</div>` : ''}</td>
+          <td class="num">${cnt(x.ci.n)}</td><td class="num">${money(x.ci.ch)}</td>
+          <td class="num">${cnt(x.pr.enc)}</td><td class="num">${money(x.pr.ch)}${x.pr.top ? `<div ${sub}>mostly ${esc(x.pr.top.replace(/^NW /, ''))}</div>` : ''}</td>
+          <td class="num">${x.tot ? `<b>${finMoney(x.tot)}</b>` : dash}</td>${T.orders ? `<td class="num">${cnt(x.orders)}</td>` : ''}</tr>`).join('')}
+        <tr class="total-row"><td><b>Total</b></td><td></td><td class="num"><b>${volInt(T.hiN)}</b></td><td class="num"><b>${finMoney(T.hiC)}</b></td><td class="num"><b>${volInt(T.ciN)}</b></td><td class="num"><b>${finMoney(T.ciC)}</b></td><td class="num"><b>${volInt(T.prE)}</b></td><td class="num"><b>${finMoney(T.prC)}</b></td><td class="num"><b>${finMoney(T.tot)}</b></td>${T.orders ? `<td class="num"><b>${volInt(T.orders)}</b></td>` : ''}</tr></tbody>
       </table></div>
-      <p class="help" style="margin:8px 0 0">Facility charges are list price for room time, implants, supplies and technical fees on cases where the provider is the attending; collections are a fraction of that. A provider who works in more than one clinic is counted on each clinic's page, so these totals should not be added across clinics. Imaging counts leave out cancelled orders and fluoroscopy during procedures. Referrals a provider sends to another surgeon are not captured here.${noAtt ? ' Some loaded months were uploaded before attendings were kept; upload those RVU reports again to include their facility charges.' : ''}</p>
+      <p class="help" style="margin:8px 0 0">All dollar figures are charges at list price from the provider RVU reports loaded (${esc(chgLabel)}); what is collected is a fraction of that. <b>Imaging ordered at the hospital</b> is the hospital's charge for MRI, CT, ultrasound (US), mammography, DEXA and X-ray exams on accounts where the provider is the attending, which for outpatient imaging is the provider who ordered it. <b>Imaging taken in this clinic</b> is X-rays and other images billed under the provider at this location; Meditech books them to the Imaging department, not to this clinic. <b>Surgery, procedures, therapy</b> is the hospital's charge for room time, implants, supplies, recovery and therapy visits on cases where the provider is the attending. Image guidance during a procedure is left out of the exam counts.${T.orders ? ` The last column counts orders in the imaging report (${esc(imgLabel)}), a longer span than the charges, so it is larger than the exams billed.` : ''} A provider who works in more than one clinic is counted on each clinic's page, so do not add these totals across clinics. Referrals a provider sends to another surgeon are not captured here.${noAtt ? ' Some loaded months were uploaded before attendings were kept; upload those RVU reports again to include their hospital charges.' : ''}</p>
     </section>`;
 }
 /* ---------- what stands out across departments ---------- */
@@ -5529,6 +5663,7 @@ const actions = {
   'fin-pl': (el) => { ui.fin.pl = el.dataset.v; rerender(); },
   'fin-open': (el) => { ui.fin.open = ui.fin.open || {}; ui.fin.open[el.dataset.k] = !ui.fin.open[el.dataset.k]; const y = window.scrollY; rerender(); window.scrollTo(0, y); },
   'fin-what-reset': () => { ui.fin.what = {}; updateFinWhatIf(); },
+  'fin-pay-preset': (el) => finPayPreset(el.dataset.v),
   'bl-sort': (el) => { const k = el.dataset.k; if (ui.bl.sort === k) ui.bl.dir = -(ui.bl.dir || -1); else { ui.bl.sort = k; ui.bl.dir = k === 'name' ? 1 : -1; } const y = window.scrollY; rerender(); window.scrollTo(0, y); },
   'bl-cpt': (el) => openCPTModal(el.dataset.prov || '', el.dataset.loc || '', el.dataset.dept || '', { fac: !!el.dataset.fac, att: el.dataset.att || '' }),
   'bl-view': (el, e) => { if (e) e.preventDefault(); ui.bl.view = el.dataset.v; ui.bl.showAll = false; const y = window.scrollY; rerender(); window.scrollTo(0, el.tagName === 'A' ? 0 : y); },
@@ -5626,6 +5761,7 @@ document.addEventListener('input', (e) => {
   if (k === 'act-q') { ui.act.q = e.target.value; updateActivityTable(); }
   if (k === 'clin-q') { ui.clin.q = e.target.value; ui.clin.limit = 100; const y = window.scrollY; $('#view').innerHTML = viewClinics(); window.scrollTo(0, y); const s = $('#clinic-search'); s.focus(); s.setSelectionRange(s.value.length, s.value.length); }
   if (k === 'fin-what') { const code = decodeURIComponent(location.hash.split('/')[3] || ''); if (!ui.fin.what || ui.fin.what.code !== code) ui.fin.what = { code }; const v = e.target.value === '' ? null : num(e.target.value); if (v === null) delete ui.fin.what[e.target.dataset.k]; else ui.fin.what[e.target.dataset.k] = v; clearTimeout(ui.fin._t); ui.fin._t = setTimeout(() => { const el = $('#fin-whatif'); const active = document.activeElement; const k = active && active.dataset ? active.dataset.k : ''; updateFinWhatIf(); if (k && el) { const again = el.querySelector(`[data-input="fin-what"][data-k="${k}"]`); if (again) { again.focus(); } } }, 350); }
+  if (k === 'fin-pay') { const rec = finCurrentDept(); if (rec) { const st = finPayState(rec), t = e.target, g = t.dataset.g, tgt = g === 'add' ? st.add : (st.g[g] = st.g[g] || {}); if (t.value === '') delete tgt[t.dataset.k]; else tgt[t.dataset.k] = Math.max(0, num(t.value)); clearTimeout(ui.fin._t3); ui.fin._t3 = setTimeout(updateFinPay, 200); } }
   if (k === 'fin-code') { const st = ui.fin.code || (ui.fin.code = {}); const v = e.target.value === '' ? undefined : num(e.target.value); st[e.target.dataset.k] = v; clearTimeout(ui.fin._t2); ui.fin._t2 = setTimeout(() => { const kk = e.target.dataset.k; updateFinCoding(); const again = document.querySelector(`#fin-coding [data-input="fin-code"][data-k="${kk}"]`); if (again) again.focus(); }, 450); }
   if (k === 'ref-q') { ui.ref.q = e.target.value; clearTimeout(ui.ref._t); ui.ref._t = setTimeout(() => { const y = window.scrollY; updateRefList(); window.scrollTo(0, y); }, 180); }
 });

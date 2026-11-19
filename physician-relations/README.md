@@ -97,7 +97,9 @@ Each department page also has: a **key** defining every term in plain language; 
 (the gap to budget or prior year split into visits, revenue per visit and each expense category); **Fixed and variable
 cost** worked out both ways, since provider pay is the largest cost in a clinic and behaves differently from supplies
 (the finance statement counts physician, NP and PA salaries as variable; "Providers on salary" counts them as fixed,
-which is the right view when existing providers have open slots); **Visit coding and what it is worth** (office-visit
+which is the right view when existing providers have open slots); a **Provider pay planner** (set a base pay, a rate
+per work RVU and the encounters a month for physicians, NPs and PAs, or add a provider, and see provider pay, pay per
+work RVU, EBITDA and break-even recalculate; nothing is saved); **Visit coding and what it is worth** (office-visit
 levels by provider against all NWSH clinics, and what moving visits from one level to another adds in revenue and
 takes off break-even, valued at the Medicare fee schedule carried in Meditech); and a **purpose note** anyone can
 edit, for departments that run at a loss on purpose.
@@ -121,8 +123,9 @@ To refresh the national figures when CMS posts a new year, replace the `EM_NATIO
 Charge lines with no performing provider are the hospital's own facility billing (room time, implants, supplies,
 recovery, technical fees). Provider billing keeps them out of the provider table and shows them under
 **Hospital facility charges**, by attending provider. Each clinic's financial page ends with **What this clinic's
-providers bring to the rest of the hospital**: facility charges on their cases, procedure cases and imaging exams
-ordered, none of which sit on the clinic's own statement. The Clinic financials overview opens with **What stands
+providers bring to the rest of the hospital**, in charges from the RVU reports: imaging they ordered at the hospital
+(MRI, CT, ultrasound, mammography), X-rays taken in the clinic (booked to Imaging) and facility charges on their
+surgery, procedure and therapy cases, none of which sit on the clinic's own statement. The Clinic financials overview opens with **What stands
 out**: the largest losses, the biggest budget misses and their main cause, departments within reach of break-even,
 and what closing each clinic's visit-coding gap to the NWSH average would be worth. Months uploaded before this
 version need their RVU report uploaded again for facility charges to be tied to an attending.
