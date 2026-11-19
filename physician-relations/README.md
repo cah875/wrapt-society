@@ -112,7 +112,10 @@ so a department's financial page also shows billing by provider, and a matched p
 "Billing & RVUs" card.
 
 The chart area of a clinic page includes a **visit level curve** (the E/M bell curve): the share of office visits
-billed at each level, for established and new patients, drawn against all NWSH clinics.
+billed at each level, for established and new patients, drawn against all NWSH clinics and against the national
+Medicare distribution for the clinic's specialty (CMS, Medicare Part B Physician/Supplier National Data, CY2025,
+Evaluation and Management Codes by Specialty; the specialty can be changed on the card and is saved for everyone).
+To refresh the national figures when CMS posts a new year, replace the `EM_NATIONAL` constant in index.html.
 
 Charge lines with no performing provider are the hospital's own facility billing (room time, implants, supplies,
 recovery, technical fees). Provider billing keeps them out of the provider table and shows them under
