@@ -12,6 +12,10 @@ const COLLECTIONS = ['clinics', 'physicians', 'contacts', 'referrals', 'tasks', 
 interface Store {
   public function version(): int;
   public function all(): array;
+  /** The records of one collection. Routine requests use this, never all(), so their cost does not grow with the reports loaded. */
+  public function collection(string $collection): array;
+  /** Echoes `"collection":[...],...` for every collection not in $skip, straight from storage, and returns the version it belongs to. */
+  public function streamAll(array $skip = []): int;
   public function get(string $collection, string $id): ?array;
   public function apply(array $ops, string $by): int;
   public function replace(array $data, string $by): int;
@@ -33,6 +37,28 @@ class SqliteStore implements Store {
     $out = array_fill_keys(COLLECTIONS, []);
     foreach ($this->pdo->query('SELECT collection, json FROM records') as $r) $out[$r['collection']][] = json_decode($r['json'], true);
     return $out;
+  }
+  public function collection(string $collection): array {
+    $st = $this->pdo->prepare('SELECT json FROM records WHERE collection = ?'); $st->execute([$collection]);
+    $out = []; while (($j = $st->fetchColumn()) !== false) $out[] = json_decode($j, true);
+    return $out;
+  }
+  /* Records are stored as JSON text, so they are sent as they are: no decoding, no re-encoding, a few MB of memory at most. */
+  public function streamAll(array $skip = []): int {
+    $this->pdo->beginTransaction();   // one consistent snapshot of the data and its version
+    try {
+      $st = $this->pdo->prepare('SELECT json FROM records WHERE collection = ?'); $first = true;
+      foreach (COLLECTIONS as $c) {
+        if (in_array($c, $skip, true)) continue;
+        echo ($first ? '' : ','), json_encode($c), ':['; $first = false;
+        $st->execute([$c]); $n = 0;
+        while (($j = $st->fetchColumn()) !== false) { echo ($n++ ? ',' : ''), $j; }
+        echo ']';
+      }
+      $v = $this->version();
+      $this->pdo->commit();
+      return $v;
+    } catch (Throwable $e) { $this->pdo->rollBack(); throw $e; }
   }
   public function get(string $collection, string $id): ?array {
     $st = $this->pdo->prepare('SELECT json FROM records WHERE collection = ? AND id = ?'); $st->execute([$collection, $id]);
@@ -84,6 +110,12 @@ class JsonStore implements Store {
     $out = array_fill_keys(COLLECTIONS, []);
     foreach ($this->d['records'] as $key => $row) { [$coll] = explode('/', $key, 2); $out[$coll][] = $row; }
     return $out;
+  }
+  public function collection(string $collection): array { return $this->all()[$collection] ?? []; }
+  public function streamAll(array $skip = []): int {
+    $first = true;
+    foreach ($this->all() as $c => $rows) { if (in_array($c, $skip, true)) continue; echo ($first ? '' : ','), json_encode($c), ':', json_encode($rows, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES); $first = false; }
+    return $this->version();
   }
   public function get(string $collection, string $id): ?array { return $this->d['records'][$collection . '/' . $id] ?? null; }
   public function apply(array $ops, string $by): int {

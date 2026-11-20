@@ -49,7 +49,7 @@ session_start();
    Settings. config.php only seeds the very first set; after that it is a fallback. */
 function dbUsers(): array {
   static $cache = null;
-  if ($cache === null) { $cache = store()->all()['users'] ?? []; usort($cache, fn($a, $b) => strcasecmp($a['username'], $b['username'])); }
+  if ($cache === null) { $cache = store()->collection('users'); usort($cache, fn($a, $b) => strcasecmp($a['username'], $b['username'])); }
   return $cache;
 }
 function allUsers(): array { global $CFG; $d = dbUsers(); return $d ?: $CFG['users']; }
@@ -202,7 +202,7 @@ try {
       global $MAIL_ERROR;
       seedUsersIfEmpty();
       $event = ($body['event'] ?? '') === 'done' ? 'done' : 'assigned';
-      $task = null; foreach (store()->all()['tasks'] as $t) if (($t['id'] ?? '') === ($body['taskId'] ?? '')) $task = $t;
+      $task = $validId($body['taskId'] ?? null) ? store()->get('tasks', $body['taskId']) : null;
       if (!$task) fail('That task could not be found (it may not have finished saving).');
       $toName = $event === 'done' ? ($task['assignedBy'] ?? '') : ($task['assignedTo'] ?? '');
       $target = null; foreach (allUsers() as $u) if ($u['name'] === $toName) $target = $u;
@@ -226,7 +226,7 @@ try {
 
     case 'digest_status': {
       requireAdmin();
-      $row = null; foreach (store()->all()['settings'] as $s) if (($s['id'] ?? '') === 'digest') $row = $s;
+      $row = store()->get('settings', 'digest');
       out(['ok' => true, 'status' => $row ?: ['lastRun' => '', 'sent' => []]]);
     }
 
@@ -305,13 +305,21 @@ try {
 
     case 'version':
       requireUser();
+      session_write_close();
       out(['ok' => true, 'version' => store()->version()]);
 
     case 'load': {
       requireUser();
-      $s = store();
-      $data = $s->all(); unset($data['users']);   // password hashes never leave the server
-      out(['ok' => true, 'version' => $s->version(), 'data' => $data, 'defaults' => ['team' => teamDefault()]]);
+      $team = json_encode(teamDefault(), JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES);
+      session_write_close();   // a long download must not hold up this person's other requests
+      header('Content-Type: application/json; charset=utf-8');
+      header('Cache-Control: no-store');
+      /* Sent record by record as stored, so memory and time stay small however many reports are loaded.
+         "users" is left out: password hashes never leave the server. */
+      echo '{"ok":true,"defaults":{"team":', $team, '},"data":{';
+      $v = store()->streamAll(['users']);
+      echo '},"version":', $v, '}';
+      exit;
     }
 
     case 'batch': {

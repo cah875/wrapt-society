@@ -29,7 +29,7 @@ date_default_timezone_set($CFG['timezone'] ?? 'America/Los_Angeles');
 function digestData(): array {
   static $d = null;
   if ($d === null) {
-    $all = store()->all();
+    $st = store(); $all = []; foreach (['settings', 'clinics', 'physicians', 'contacts', 'referrals', 'tasks', 'users'] as $c) $all[$c] = $st->collection($c);
     $settings = []; foreach ($all['settings'] as $s) if (($s['id'] ?? '') === 'main') $settings = $s;
     $d = ['clinics' => $all['clinics'] ?? [], 'physicians' => $all['physicians'], 'contacts' => $all['contacts'], 'referrals' => $all['referrals'], 'tasks' => $all['tasks'] ?? [], 'users' => $all['users'], 'settings' => $settings, 'riskDays' => max(1, (int)($settings['riskDays'] ?? 14))];
   }
@@ -156,7 +156,7 @@ $force = in_array('--force', $args, true); $dry = in_array('--dry', $args, true)
 foreach ($args as $a) if (str_starts_with($a, '--to=')) $to = substr($a, 5);
 
 $today = date('Y-m-d');
-$log = null; foreach (store()->all()['settings'] as $s) if (($s['id'] ?? '') === 'digest') $log = $s;
+$log = store()->get('settings', 'digest');
 if (!$force) {
   if ((int)date('N') >= 6) exit("Weekend — nothing sent.\n");
   if (($log['lastRun'] ?? '') === $today) exit("Already ran today ({$log['lastRunAt']}) — nothing sent. Use --force to send again.\n");
