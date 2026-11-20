@@ -4940,11 +4940,12 @@ function isImgCode(code) { return /^(7\d{4}|93[89]\d\d)$/.test(code) && !IMG_GUI
 /* Imaging lines and their charges in a set of billing records. 77063 is the tomosynthesis add-on to a screening mammogram: charged, not a second exam. */
 function chgImgOf(recs) { let n = 0, ch = 0; recs.forEach((r) => Object.entries(r.cpt || {}).forEach(([k, v]) => { if (isImgCode(k)) { if (k !== '77063') n += v[0]; ch += v[3]; } })); return { n, ch }; }
 function imgLocLabel(loc) { const s = String(loc || '').toLowerCase(); return /\bmri\b/.test(s) ? 'MRI' : /\bct\b/.test(s) ? 'CT' : /ultrasound/.test(s) ? 'US' : /breast|mammo/.test(s) ? 'mammo' : /dexa/.test(s) ? 'DEXA' : /x-?ray/.test(s) ? 'X-ray' : 'imaging'; }
-function finDownstreamHTML(rec) {
-  const own = chgRecords().filter((r) => r.dept === rec.code && !chgIsFac(r)); if (!own.length) return '';
+function finDownstreamRows(rec) {
+  const none = { rows: [], noAtt: false, imgCap: [] };
+  const own = chgRecords().filter((r) => r.dept === rec.code && !chgIsFac(r)); if (!own.length) return none;
   const byProv = {}; own.forEach((r) => { const v = byProv[r.provider] = byProv[r.provider] || { enc: 0, recs: [] }; v.enc += r.enc; v.recs.push(r); });
   const provs = Object.entries(byProv).filter(([, v]) => v.enc >= 10).map(([name, v]) => ({ name, enc: v.enc, recs: v.recs, parts: chgProviderParts(name) })).filter((x) => x.parts.last);
-  if (!provs.length) return '';
+  if (!provs.length) return none;
   const fac = chgFacByAttending(chgRecords()).filter((x) => x.att).map((x) => ({ ...x, parts: chgAttParts(x.att) }));
   const noAtt = chgRecords().some((r) => chgIsFac(r) && !r.att);
   const imgCap = imgMonths(), imgSet = new Set(imgCap), imgs = imgRecords().map((r) => ({ r, parts: imgNameParts(r.referrer) })).filter((x) => x.parts);
@@ -4957,8 +4958,12 @@ function finDownstreamHTML(rec) {
     const pr = { enc: prR.reduce((s, r) => s + r.enc, 0), ch: prR.reduce((s, r) => s + r.ch, 0), top: top ? top[0] : '' };
     const ci = chgImgOf(p.recs);
     const im = imgs.find((x) => samePerson(p.parts, x.parts)), orders = im ? im.r.series.reduce((s, e) => s + (imgSet.has(e.p) && e.m !== IMG_GUIDE ? imgN(e) : 0), 0) : 0;
-    return { ...p, hi, pr, ci, tot: hi.ch + pr.ch + ci.ch, orders, ph: chgMatchPhysician(p.name) };
+    return { ...p, hi, pr, ci, hiR, prR, im, tot: hi.ch + pr.ch + ci.ch, orders, ph: chgMatchPhysician(p.name) };
   }).filter((x) => x.tot || x.orders).sort((a, b) => b.tot - a.tot || b.orders - a.orders);
+  return { rows, noAtt, imgCap };
+}
+function finDownstreamHTML(rec) {
+  const { rows, noAtt, imgCap } = finDownstreamRows(rec);
   if (!rows.length) return '';
   const T = rows.reduce((s, x) => { s.hiN += x.hi.n; s.hiC += x.hi.ch; s.prE += x.pr.enc; s.prC += x.pr.ch; s.ciN += x.ci.n; s.ciC += x.ci.ch; s.tot += x.tot; s.orders += x.orders; return s; }, { hiN: 0, hiC: 0, prE: 0, prC: 0, ciN: 0, ciC: 0, tot: 0, orders: 0 });
   const chgM = chgMonthsAvailable(), chgLabel = chgM.length ? (chgM.length === 1 ? fmtMonth(chgM[0]) : `${fmtMonth(chgM[0])} to ${fmtMonth(chgM[chgM.length - 1])}`) : '', imgLabel = imgCap.length ? `${fmtMonth(imgCap[0])} to ${fmtMonth(imgCap[imgCap.length - 1])}` : '';
@@ -4972,15 +4977,70 @@ function finDownstreamHTML(rec) {
       <div class="table-wrap"><table class="breakdown bill tight">
         <thead><tr><th rowspan="2">Provider</th><th rowspan="2" class="num" style="white-space:normal">Encounters here</th><th colspan="2" ${gh}>Imaging ordered at the hospital</th><th colspan="2" ${gh}>Imaging taken in this clinic</th><th colspan="2" ${gh}>Surgery, procedures, therapy</th><th rowspan="2" class="num" style="white-space:normal">Total charges</th>${T.orders ? '<th rowspan="2" class="num">Orders in<br>imaging report</th>' : ''}</tr>
           <tr><th class="num">Exams</th><th class="num">Charges</th><th class="num">Exams</th><th class="num">Charges</th><th class="num">Cases</th><th class="num">Facility charges</th></tr></thead>
-        <tbody>${rows.map((x) => `<tr><td>${x.ph ? `<a href="#/physician/${x.ph.id}"><b>${esc(x.name)}</b></a>` : `<b>${esc(x.name)}</b>`}</td><td class="num">${volInt(x.enc)}</td>
+        <tbody>${rows.map((x) => `<tr><td>${x.ph ? `<a href="#/physician/${x.ph.id}"><b>${esc(x.name)}</b></a>` : `<b>${esc(x.name)}</b>`}<div class="no-print"><button class="btn sm link" data-act="fin-down" data-prov="${esc(x.name)}" style="padding-left:0">See the detail</button></div></td><td class="num">${volInt(x.enc)}</td>
           <td class="num">${cnt(x.hi.n)}</td><td class="num">${money(x.hi.ch)}${x.hi.mix ? `<div ${sub}>${esc(x.hi.mix)}</div>` : ''}</td>
           <td class="num">${cnt(x.ci.n)}</td><td class="num">${money(x.ci.ch)}</td>
           <td class="num">${cnt(x.pr.enc)}</td><td class="num">${money(x.pr.ch)}${x.pr.top ? `<div ${sub}>mostly ${esc(x.pr.top.replace(/^NW /, ''))}</div>` : ''}</td>
           <td class="num">${x.tot ? `<b>${finMoney(x.tot)}</b>` : dash}</td>${T.orders ? `<td class="num">${cnt(x.orders)}</td>` : ''}</tr>`).join('')}
         <tr class="total-row"><td><b>Total</b></td><td></td><td class="num"><b>${volInt(T.hiN)}</b></td><td class="num"><b>${finMoney(T.hiC)}</b></td><td class="num"><b>${volInt(T.ciN)}</b></td><td class="num"><b>${finMoney(T.ciC)}</b></td><td class="num"><b>${volInt(T.prE)}</b></td><td class="num"><b>${finMoney(T.prC)}</b></td><td class="num"><b>${finMoney(T.tot)}</b></td>${T.orders ? `<td class="num"><b>${volInt(T.orders)}</b></td>` : ''}</tr></tbody>
       </table></div>
-      <p class="help" style="margin:8px 0 0">All dollar figures are charges at list price from the provider RVU reports loaded (${esc(chgLabel)}); what is collected is a fraction of that. <b>Imaging ordered at the hospital</b> is the hospital's charge for MRI, CT, ultrasound (US), mammography, DEXA and X-ray exams on accounts where the provider is the attending, which for outpatient imaging is the provider who ordered it. <b>Imaging taken in this clinic</b> is X-rays and other images billed under the provider at this location; Meditech books them to the Imaging department, not to this clinic. <b>Surgery, procedures, therapy</b> is the hospital's charge for room time, implants, supplies, recovery and therapy visits on cases where the provider is the attending. Image guidance during a procedure is left out of the exam counts.${T.orders ? ` The last column counts orders in the imaging report (${esc(imgLabel)}), a longer span than the charges, so it is larger than the exams billed.` : ''} A provider who works in more than one clinic is counted on each clinic's page, so do not add these totals across clinics. Referrals a provider sends to another surgeon are not captured here.${noAtt ? ' Some loaded months were uploaded before attendings were kept; upload those RVU reports again to include their hospital charges.' : ''}</p>
+      <p class="help" style="margin:8px 0 0"><b>See the detail</b> under a name opens that provider's figures by month, by exam and by place. All dollar figures are charges at list price from the provider RVU reports loaded (${esc(chgLabel)}); what is collected is a fraction of that. <b>Imaging ordered at the hospital</b> is the hospital's charge for MRI, CT, ultrasound (US), mammography, DEXA and X-ray exams on accounts where the provider is the attending, which for outpatient imaging is the provider who ordered it. <b>Imaging taken in this clinic</b> is X-rays and other images billed under the provider at this location; Meditech books them to the Imaging department, not to this clinic. <b>Surgery, procedures, therapy</b> is the hospital's charge for room time, implants, supplies, recovery and therapy visits on cases where the provider is the attending. Image guidance during a procedure is left out of the exam counts.${T.orders ? ` The last column counts orders in the imaging report (${esc(imgLabel)}), a longer span than the charges, so it is larger than the exams billed.` : ''} A provider who works in more than one clinic is counted on each clinic's page, so do not add these totals across clinics. Referrals a provider sends to another surgeon are not captured here.${noAtt ? ' Some loaded months were uploaded before attendings were kept; upload those RVU reports again to include their hospital charges.' : ''}</p>
     </section>`;
+}
+/* ---------- one provider's hospital business in detail: by month, by exam, by place ---------- */
+function chgCodeLabel(code) { const d = ((chgMeta() || {}).descs || {})[code] || ''; return d.replace(/\s+(RT|LT|BIL|BILAT)$/i, ''); }
+function openDownstreamModal(name) {
+  const rec = finCurrentDept(); if (!rec) return;
+  const x = finDownstreamRows(rec).rows.find((r) => r.name === name); if (!x) return;
+  const dash = '<span class="muted">—</span>', money = (v) => (v ? finMoney(v) : dash), cnt = (v) => (v ? volInt(v) : dash), sum = (a, f) => a.reduce((s, r) => s + f(r), 0);
+  const gh = 'style="text-align:center;white-space:normal;border-bottom:1px solid var(--border)"', full = (k) => ({ US: 'Ultrasound', mammo: 'Mammography', imaging: 'Other imaging' }[k] || k), coll = (pay, ch) => (ch && pay ? finPctText(finPct(pay, ch)) : dash), many = (n, w) => `${n} different ${w}${n === 1 ? '' : 's'}`;
+  const imgSet = new Set(imgMonths());
+  const orders = x.im ? x.im.r.series.filter((e) => imgSet.has(e.p) && e.m !== IMG_GUIDE) : [];
+  // by month
+  const months = [...new Set([...x.hiR, ...x.prR, ...x.recs].map((r) => r.period).concat(orders.map((e) => e.p)))].sort();
+  const byMonth = months.map((m) => { const hi = x.hiR.filter((r) => r.period === m), pr = x.prR.filter((r) => r.period === m), ci = chgImgOf(x.recs.filter((r) => r.period === m)); const o = { m, hiN: chgImgOf(hi).n, hiC: sum(hi, (r) => r.ch), ciN: ci.n, ciC: ci.ch, prE: sum(pr, (r) => r.enc), prC: sum(pr, (r) => r.ch), ord: sum(orders.filter((e) => e.p === m), imgN) }; o.tot = o.hiC + o.ciC + o.prC; return o; });
+  const maxTot = Math.max(1, ...byMonth.map((o) => o.tot));
+  // hospital imaging by kind and by exam
+  const kinds = {}; x.hiR.forEach((r) => { const k = imgLocLabel(r.location), a = kinds[k] = kinds[k] || { k, n: 0, ch: 0, pay: 0 }; a.n += chgImgOf([r]).n; a.ch += r.ch; a.pay += r.pay; });
+  const exams = (recs, withKind) => { const by = {}; recs.forEach((r) => Object.entries(r.cpt || {}).forEach(([code, v]) => { if (!isImgCode(code)) return; const a = by[code] = by[code] || { code, n: 0, ch: 0, kinds: {} }; a.n += v[0]; a.ch += v[3]; if (withKind) { const k = imgLocLabel(r.location); a.kinds[k] = (a.kinds[k] || 0) + v[0]; } })); return Object.values(by).sort((p, q) => q.ch - p.ch); };
+  const examTable = (rows, withKind, tot) => `<div class="table-wrap"><table class="breakdown tight"><thead><tr><th>Code</th><th>Exam</th>${withKind ? '<th>Type</th>' : ''}<th class="num">Billed</th><th class="num">Charges</th><th class="num">Average</th><th class="num">Share</th></tr></thead>
+      <tbody>${rows.slice(0, 40).map((a) => `<tr><td class="mono">${esc(a.code)}</td><td>${esc(chgCodeLabel(a.code)) || dash}</td>${withKind ? `<td>${esc(full((Object.entries(a.kinds).sort((p, q) => q[1] - p[1])[0] || [''])[0]))}</td>` : ''}<td class="num">${volInt(a.n)}</td><td class="num"><b>${finMoney(a.ch)}</b></td><td class="num">${a.n ? finMoney(a.ch / a.n) : '—'}</td><td class="num">${finPctText(finPct(a.ch, tot))}</td></tr>`).join('')}</tbody></table></div>${rows.length > 40 ? `<p class="small muted" style="margin:6px 0 0">The 40 largest of ${rows.length} exam codes are shown.</p>` : ''}`;
+  const hiExams = exams(x.hiR, true), ciExams = exams(x.recs, false), hiPay = sum(x.hiR, (r) => r.pay), prPay = sum(x.prR, (r) => r.pay);
+  // surgery, procedures, therapy by place, and the largest charge items
+  const places = {}; x.prR.forEach((r) => { const a = places[r.location] = places[r.location] || { loc: r.location, enc: 0, ch: 0, pay: 0 }; a.enc += r.enc; a.ch += r.ch; a.pay += r.pay; });
+  const prCodes = Object.entries(chgSum(x.prR).cpt).map(([code, v]) => ({ code, n: v[0], ch: v[3] })).sort((p, q) => q.ch - p.ch);
+  // orders in the imaging report by type and where done
+  const ordBy = {}; orders.forEach((e) => { const k = e.m + '\u0001' + (e.s || ''), a = ordBy[k] = ordBy[k] || { m: e.m, s: e.s || '', n: 0, r: 0, c: 0 }; a.n += imgN(e); a.r += num(e.r); a.c += num(e.c); });
+  const ordRows = Object.values(ordBy).filter((a) => a.n || a.c).sort((p, q) => q.n - p.n);
+  const h3 = (t, hint) => `<h3 style="margin:22px 0 8px">${t}${hint ? ` <span class="muted small" style="font-weight:400">· ${hint}</span>` : ''}</h3>`;
+  const tile = (l, v, sub) => `<div class="kpi"><div class="label">${l}</div><div class="value" style="font-size:22px">${v}</div><span class="small">${sub}</span></div>`;
+  const body = `
+    <div class="kpis" style="grid-template-columns:repeat(auto-fit,minmax(180px,1fr))">
+      ${tile('Total charges to other departments', finShort(x.tot), `${volInt(x.enc)} encounters in ${esc(rec.label)}`)}
+      ${tile('Imaging ordered at the hospital', finShort(x.hi.ch), x.hi.n ? `${volInt(x.hi.n)} exams · ${finMoney(x.hi.ch / x.hi.n)} each${hiPay ? ` · ${finShort(hiPay)} paid so far` : ''}` : 'none in the months loaded')}
+      ${tile('Imaging taken in this clinic', finShort(x.ci.ch), x.ci.n ? `${volInt(x.ci.n)} exams · ${finMoney(x.ci.ch / x.ci.n)} each` : 'none in the months loaded')}
+      ${tile('Surgery, procedures, therapy', finShort(x.pr.ch), x.pr.enc ? `${volInt(x.pr.enc)} cases${prPay ? ` · ${finShort(prPay)} paid so far` : ''}` : 'none in the months loaded')}
+    </div>
+    ${h3('By month')}
+    <div class="table-wrap"><table class="breakdown tight"><thead><tr><th rowspan="2">Month</th><th colspan="2" ${gh}>Hospital imaging</th><th colspan="2" ${gh}>Clinic imaging</th><th colspan="2" ${gh}>Surgery, procedures, therapy</th><th rowspan="2" class="num">Total</th><th rowspan="2" style="min-width:70px"></th>${orders.length ? '<th rowspan="2" class="num" style="white-space:normal">Orders in imaging report</th>' : ''}</tr>
+        <tr><th class="num">Exams</th><th class="num">Charges</th><th class="num">Exams</th><th class="num">Charges</th><th class="num">Cases</th><th class="num">Charges</th></tr></thead>
+      <tbody>${byMonth.map((o) => `<tr><td class="nowrap">${esc(fmtMonth(o.m))}</td><td class="num">${cnt(o.hiN)}</td><td class="num">${money(o.hiC)}</td><td class="num">${cnt(o.ciN)}</td><td class="num">${money(o.ciC)}</td><td class="num">${cnt(o.prE)}</td><td class="num">${money(o.prC)}</td><td class="num"><b>${money(o.tot)}</b></td><td><div style="height:10px;border-radius:5px;background:#2a78d6;width:${Math.round(o.tot / maxTot * 100)}%" aria-hidden="true"></div></td>${orders.length ? `<td class="num">${cnt(o.ord)}</td>` : ''}</tr>`).join('')}</tbody></table></div>
+    ${x.hiR.length ? `${h3('Imaging ordered at the hospital, by type')}
+    <div class="table-wrap"><table class="breakdown tight"><thead><tr><th>Type</th><th class="num">Exams</th><th class="num">Charges</th><th class="num">Average charge</th><th class="num">Paid so far</th><th class="num">Collected</th></tr></thead>
+      <tbody>${Object.values(kinds).sort((p, q) => q.ch - p.ch).map((a) => `<tr><td><b>${esc(full(a.k))}</b></td><td class="num">${volInt(a.n)}</td><td class="num"><b>${finMoney(a.ch)}</b></td><td class="num">${a.n ? finMoney(a.ch / a.n) : '—'}</td><td class="num">${money(a.pay)}</td><td class="num">${coll(a.pay, a.ch)}</td></tr>`).join('')}</tbody></table></div>
+    ${h3('Imaging ordered at the hospital, by exam', many(hiExams.length, 'exam'))}${examTable(hiExams, true, sum(hiExams, (a) => a.ch))}` : ''}
+    ${ciExams.length ? `${h3('Imaging taken in this clinic, by exam', many(ciExams.length, 'exam'))}${examTable(ciExams, false, x.ci.ch)}` : ''}
+    ${x.prR.length ? `${h3('Surgery, procedures and therapy, by place')}
+    <div class="table-wrap"><table class="breakdown tight"><thead><tr><th>Where</th><th class="num">Cases</th><th class="num">Facility charges</th><th class="num">Per case</th><th class="num">Paid so far</th><th class="num">Collected</th></tr></thead>
+      <tbody>${Object.values(places).sort((p, q) => q.ch - p.ch).map((a) => `<tr><td><b>${esc(a.loc)}</b></td><td class="num">${volInt(a.enc)}</td><td class="num"><b>${finMoney(a.ch)}</b></td><td class="num">${a.enc ? finMoney(a.ch / a.enc) : '—'}</td><td class="num">${money(a.pay)}</td><td class="num">${coll(a.pay, a.ch)}</td></tr>`).join('')}</tbody></table></div>
+    ${h3('Largest charge items on those cases', many(prCodes.length, 'code'))}
+    <div class="table-wrap"><table class="breakdown tight"><thead><tr><th>Code</th><th>Item</th><th class="num">Lines</th><th class="num">Charges</th><th class="num">Share</th></tr></thead>
+      <tbody>${prCodes.slice(0, 20).map((a) => `<tr><td class="mono">${esc(a.code)}</td><td>${esc(chgCodeLabel(a.code)) || dash}</td><td class="num">${volInt(a.n)}</td><td class="num"><b>${finMoney(a.ch)}</b></td><td class="num">${finPctText(finPct(a.ch, x.pr.ch))}</td></tr>`).join('')}</tbody></table></div>` : ''}
+    ${ordRows.length ? `${h3('Orders in the imaging report', 'what was ordered, whether or not it has been billed yet')}
+    <div class="table-wrap"><table class="breakdown tight"><thead><tr><th>Type</th><th>Where it was done</th><th class="num">Orders</th><th class="num">Resulted</th><th class="num">Cancelled, not counted</th></tr></thead>
+      <tbody>${ordRows.map((a) => `<tr><td><b>${esc(a.m)}</b></td><td>${esc(a.s) || dash}</td><td class="num">${volInt(a.n)}</td><td class="num">${cnt(a.r)}</td><td class="num">${cnt(a.c)}</td></tr>`).join('')}</tbody></table></div>` : ''}
+    <p class="help" style="margin:16px 0 0">Charges are list price from the provider RVU reports loaded; paid so far is what has posted to those accounts and keeps rising for weeks after the visit. Imaging taken in the clinic has no paid figure of its own, because its payment posts to the visit's account with everything else. Exam names are Meditech's short descriptions. DocDock keeps totals by provider, month, place and code only, so this is as far as the detail goes here: patient names and account numbers are never stored. To see the individual patients behind a number, run the same report in Meditech for that provider and month.</p>`;
+  openModal({ title: `${x.name}: what they bring to the rest of the hospital`, wide: true, body });
 }
 /* ---------- what stands out across departments ---------- */
 function finCodingGap(code, nw) {
@@ -5709,6 +5769,7 @@ const actions = {
   'fin-open': (el) => { ui.fin.open = ui.fin.open || {}; ui.fin.open[el.dataset.k] = !ui.fin.open[el.dataset.k]; const y = window.scrollY; rerender(); window.scrollTo(0, y); },
   'fin-what-reset': () => { ui.fin.what = {}; updateFinWhatIf(); },
   'fin-pay-preset': (el) => finPayPreset(el.dataset.v),
+  'fin-down': (el) => openDownstreamModal(el.dataset.prov || ''),
   'bl-sort': (el) => { const k = el.dataset.k; if (ui.bl.sort === k) ui.bl.dir = -(ui.bl.dir || -1); else { ui.bl.sort = k; ui.bl.dir = k === 'name' ? 1 : -1; } const y = window.scrollY; rerender(); window.scrollTo(0, y); },
   'bl-cpt': (el) => openCPTModal(el.dataset.prov || '', el.dataset.loc || '', el.dataset.dept || '', { fac: !!el.dataset.fac, att: el.dataset.att || '' }),
   'bl-view': (el, e) => { if (e) e.preventDefault(); ui.bl.view = el.dataset.v; ui.bl.showAll = false; const y = window.scrollY; rerender(); window.scrollTo(0, el.tagName === 'A' ? 0 : y); },
