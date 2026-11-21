@@ -491,6 +491,7 @@
 <input type="file" id="imaging-input" accept=".txt,.csv,.json,text/plain,text/csv,application/json" hidden>
 <input type="file" id="fin-input" accept=".xlsm,.xlsx,.json,application/vnd.ms-excel.sheet.macroEnabled.12,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet,application/json" hidden>
 <input type="file" id="chg-input" accept=".txt,.csv,.json,text/plain,text/csv,application/json" hidden>
+<input type="file" id="pw-input" accept=".txt,.csv,text/plain,text/csv" multiple hidden>
 <input type="file" id="volumes-input" accept=".xlsx,.xls,.csv,.json,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet,text/csv,application/json" hidden>
 
 <script>
@@ -827,7 +828,7 @@ async function pushOps() {
   if (pushing) return pushing;
   pushing = (async () => {
     while (pendingOps.length) {
-      const batch = pendingOps.splice(0, pendingOps.length);
+      const batch = pendingOps.splice(0, 4000);
       try {
         const r = await api('batch', { ops: batch });
         serverVersion = r.version;
@@ -1244,6 +1245,7 @@ const ui = {
   im: { id: '', period: '6', mods: {}, sites: {}, showAll: false, rank: '' },
   fin: { group: 'clinic', period: 'ytd', sort: 'ebitda', dir: 1, pl: 'cy', open: {}, what: {}, showHosp: false, cost: 'finance', cmp: 'bu', code: {}, pay: null },
   bl: { loc: '', prov: '', month: '', sort: 'w', dir: -1, showAll: false, view: 'prof' },
+  pw: { win: 90 },
   tidy: { field: 'specialty', from: '', into: '' },
   year: new Date().getFullYear(),
 };
@@ -2377,7 +2379,7 @@ function repairMeditechData() {
       if (con.merged) { const meta = volMeta(); db.volumes = [...(meta ? [meta] : []), ...con.recs]; fixed += con.merged; }
     }
   } catch (e) { console.error('volumes repair', e); }
-  try { (db.charges || []).forEach((r) => { if (r.id === 'meta') return; if (chgIsFac(r)) { if (r.att && (!r.attPhysicianId || !getPhys(r.attPhysicianId))) { const ap = chgAttPhysician(r.att); if (ap && ap.id !== r.attPhysicianId) { r.attPhysicianId = ap.id; fixed++; } } return; } if (!r.physicianId || !getPhys(r.physicianId)) { const p = chgMatchPhysician(r.provider); if (p && p.id !== r.physicianId) { r.physicianId = p.id; fixed++; } } }); } catch (e) { console.error('charges repair', e); }
+  try { (db.charges || []).forEach((r) => { if (r.id === 'meta' || r.kind) return; if (chgIsFac(r)) { if (r.att && (!r.attPhysicianId || !getPhys(r.attPhysicianId))) { const ap = chgAttPhysician(r.att); if (ap && ap.id !== r.attPhysicianId) { r.attPhysicianId = ap.id; fixed++; } } return; } if (!r.physicianId || !getPhys(r.physicianId)) { const p = chgMatchPhysician(r.provider); if (p && p.id !== r.physicianId) { r.physicianId = p.id; fixed++; } } }); } catch (e) { console.error('charges repair', e); }
   if (drop.size || fixed) { saveDB(); if (drop.size) toast(`${drop.size} duplicate Meditech referral${drop.size === 1 ? '' : 's'} merged`); }
 }
 function planMeditechImport(parsed) {
@@ -4251,6 +4253,7 @@ const BILL_TERMS = [
   ['Encounter', 'One patient account on one date of service.'],
   ['Charges', 'List price billed for the services, before any insurer discount.'],
   ['Payments', 'Money posted so far to those accounts. Recent months keep collecting for weeks after the visit, so they look low at first. Payments post to the patient account, not to a single code, so they are shown by provider and location only. Hospital facility payments mostly land under "No performing provider".'],
+  ['Followed to a procedure', 'A surgery, endoscopy or other procedure counted for a clinic provider because the same patient had a visit with that provider in the days before it (30, 60, 90 or 180, as chosen). It shows where a clinic\'s patients went next and what that was worth to the hospital. It is not proof of a referral: Meditech\'s RVU report does not record who sent the patient.'],
   ['Collected', 'Payments divided by charges. Because charges are list price, a figure of 35 to 45 percent is normal.'],
 ];
 function finGlossaryHTML(which, open) {
@@ -4685,7 +4688,8 @@ function viewFinDept(rec, actions) {
       <p class="help" style="margin:8px 0 0">${single ? 'The + button opens an expense category to its GL lines. In the two "Actual −" columns green is better than the comparison and red is worse: more revenue or lower cost is green. Choose Year to date or Last 3 months above to see the months side by side.' : `The + button opens an expense category to its GL lines. On the two "Actual −" views green is better than the comparison and red is worse. The last column totals the period; per-${esc(u1)} lines show the statement's own year-to-date figure. On a narrow screen the months scroll sideways while the line names and the total stay in view.`}</p>
     </section>
     ${chgDeptSectionHTML(rec)}
-    ${finDownstreamHTML(rec)}`;
+    ${finDownstreamHTML(rec)}
+    ${pwDeptHTML(rec)}`;
 }
 function pickFinDept(v) { const h = v ? '#/reports/clinics/' + encodeURIComponent(v) : '#/reports/clinics'; if (location.hash === h) rerender(); else location.hash = h; }
 function finCurrentDept() { return finDept(decodeURIComponent(location.hash.split('/')[3] || '')); }
@@ -4789,7 +4793,7 @@ function applyChargesImport(parsed, mainMonths) {
   meta.descs = Object.assign({}, meta.descs || {}, parsed.descs || {});
   meta.rates = Object.assign({}, meta.rates || {}, parsed.rates || {});
   meta.asOf = [meta.asOf || '', parsed.asOf || ''].sort().pop(); meta.importedAt = nowISO(); meta.importedBy = session.name;
-  db.charges = [meta, ...keep, ...recs];
+  db.charges = [meta, ...keep, ...recs, ...(db.charges || []).filter((r) => r.kind === 'path' || r.id === 'pwmeta')];
   saveDB(); toast(`Provider billing saved — ${[...pl.main].map(fmtMonth).join(', ')}${pl.spill.length ? ` plus late charges for ${pl.spill.map(fmtMonth).join(', ')}` : ''}`);
   if (!location.hash.startsWith('#/reports/billing') && !location.hash.startsWith('#/reports/clinics')) location.hash = '#/reports/billing'; else rerender();
 }
@@ -4876,7 +4880,9 @@ function chgFacTableHTML(recs, limit) {
 }
 function viewBilling() {
   const f = ui.bl, all = chgRecords(), meta = chgMeta();
-  const actions = `${all.length ? `<button class="btn" data-act="print">${ico('i-print')}Print</button><button class="btn" data-act="export-chg">${ico('i-download')}Download data file</button>` : ''}${isAdmin() ? `<button class="btn" data-act="import-chg">${ico('i-upload')}Upload provider RVU report</button>` : ''}`;
+  const actions = `${all.length ? `<button class="btn" data-act="print">${ico('i-print')}Print</button><button class="btn" data-act="export-chg">${ico('i-download')}Download data file</button>` : ''}${isAdmin() ? `<button class="btn" data-act="import-chg">${ico('i-upload')}Upload provider RVU report</button>` : ''}${isAdmin() && f.view === 'path' ? `<button class="btn primary" data-act="import-pw">${ico('i-upload')}Trace patients to procedures</button>` : ''}`;
+  const showToggle = `<label><span>Show</span><div class="toggle" style="flex-wrap:wrap"><button class="${f.view !== 'fac' && f.view !== 'path' ? 'on' : ''}" data-act="bl-view" data-v="prof">Provider billing</button><button class="${f.view === 'fac' ? 'on' : ''}" data-act="bl-view" data-v="fac">Hospital facility charges</button><button class="${f.view === 'path' ? 'on' : ''}" data-act="bl-view" data-v="path">Clinic to procedure</button></div></label>`;
+  if (f.view === 'path') return viewBillingPath(actions, `<div class="card no-print" style="margin-bottom:14px"><div class="pair fbar" style="display:flex;gap:14px 22px;flex-wrap:wrap;align-items:flex-end">${showToggle}</div></div>`);
   if (!all.length) return finHead('Provider billing', 'CPT codes, work RVUs, charges and payments by performing provider and visit location.', 'billing', actions) + `<div class="card empty"><p style="margin:0 0 8px;font-size:17px"><b>No provider billing has been loaded yet.</b></p>
       <p class="muted" style="max-width:640px;margin:0 auto">${isAdmin() ? 'Click <b>Upload provider RVU report</b> and pick the Meditech "Performing Provider RVU" export (.txt or .csv). Run it one month at a time; each upload adds that month.' : 'Ask the administrator to upload the Meditech Performing Provider RVU report.'}</p></div>`;
   const months = chgMonthsAvailable(); if (f.month && !months.includes(f.month)) f.month = '';
@@ -4912,7 +4918,7 @@ function viewBilling() {
   return finHead('Provider billing', view === 'fac' ? 'Hospital facility charges by attending provider: what each provider\'s cases bring to the hospital.' : 'CPT and HCPCS codes, work RVUs, charges and payments by performing provider and visit location, from the Meditech RVU report.', 'billing', actions) + `
     <div class="card no-print" style="margin-bottom:14px">
       <div class="pair fbar" style="display:flex;gap:14px 22px;flex-wrap:wrap;align-items:flex-end">
-        <label><span>Show</span><div class="toggle"><button class="${view === 'prof' ? 'on' : ''}" data-act="bl-view" data-v="prof">Provider billing</button><button class="${view === 'fac' ? 'on' : ''}" data-act="bl-view" data-v="fac">Hospital facility charges</button></div></label>
+        ${showToggle}
         <label><span>Location</span>${comboHTML('bl-loc', locs.map((l) => ({ v: l, l, g: FIN_DEPT_LABELS[finLocDept(l)] || '' })), f.loc, 'All locations')}</label>
         ${view === 'prof' ? `<label><span>Provider</span>${comboHTML('bl-prov', provs.map((p) => ({ v: p, l: p })), f.prov, 'All providers')}</label>` : ''}
         <label><span>Month</span><select data-change="bl-month"><option value="">All loaded (${months.length})</option>${months.map((m) => `<option value="${m}" ${f.month === m ? 'selected' : ''}>${fmtMonth(m)}</option>`).join('')}</select></label>
@@ -4931,6 +4937,225 @@ function viewBilling() {
       <section class="card"><div class="card-head"><h2>All codes</h2><span class="hint">${Object.keys(s.cpt).length} distinct</span></div>${chgCPTTableHTML(s.cpt, meta.descs || {}, 60)}</section>
     </div>
     <p class="help" style="margin:10px 0 0">Work RVUs come from Meditech's fee schedule line by line, multiplied by units. Encounters are distinct account and service date pairs. Payments are what has posted so far, so recent months collect further after upload; they post to the patient account, not to a code. To see what a change in visit coding is worth for one clinic, open that clinic under Clinic financials. Months loaded: ${months.map(fmtMonth).join(', ')}${meta.importedAt ? ` · last uploaded ${fmtTS(meta.importedAt)} by ${esc(meta.importedBy || '')}` : ''}.</p>`;
+}
+/* ============================================================================================
+   Clinic to procedure: the surgeries, endoscopies and other procedures a clinic's patients went on to.
+   A surgery account in the RVU report names the surgeon, never who sent the patient, so patients are followed
+   instead: a procedure counts for a clinic provider when the same patient had a visit with that provider in the
+   180 days before it. The following is done in this browser from the report files; only counts and charges by
+   provider, proceduralist, type and month are kept. Patient names and account numbers are never stored or sent.
+   ============================================================================================ */
+const PW_TYPES = { S: 'Surgery', C: 'Surgery center', E: 'Endoscopy', P: 'Pain procedure', I: 'Interventional radiology' };
+const PW_GROUPS = [['surg', 'Surgery', ['S', 'C']], ['endo', 'Endoscopy', ['E']], ['other', 'Pain and other procedures', ['P', 'I']]];
+const PW_BUCKETS = [30, 60, 90, 180];
+/* places whose visits are part of the procedure itself, not a clinic the patient came from */
+const PW_NOT_SOURCE = /hospitalist|inpatient|pre-?surgical|pre-?op|operating room|endoscopy|surgery center|interventional radiology/i;
+function pwRecords() { return (db.charges || []).filter((r) => r.kind === 'path'); }
+function pwMeta() { return (db.charges || []).find((r) => r.id === 'pwmeta') || null; }
+function pwWindow() { return PW_BUCKETS.includes(ui.pw.win) ? ui.pw.win : 90; }
+function pwNameKey(s) { return String(s || '').toUpperCase().replace(/\s*,\s*/g, ',').replace(/\s+/g, ' ').trim(); }
+function pwTop(o) { let best = '', n = -1; Object.entries(o).forEach(([k, v]) => { if (v > n) { best = k; n = v; } }); return best; }
+function pwDay(iso) { return Date.UTC(+iso.slice(0, 4), +iso.slice(5, 7) - 1, +iso.slice(8, 10)) / 86400000; }
+/* What kind of procedure a hospital account is, or '' when it is not one (imaging, therapy, a medical stay). */
+function pwProcType(a) {
+  const loc = pwTop(a.locs).toLowerCase(), t = String(a.type || '').toUpperCase();
+  if (/endoscopy/.test(loc) || t === 'ENDO') return 'E';
+  if (/pain/.test(loc) || t === 'IPM') return 'P';
+  if (/surgery center/.test(loc) || t === 'SC') return 'C';
+  if (/interventional radiology/.test(loc)) return a.or ? 'I' : '';
+  return a.or ? 'S' : '';
+}
+/* Reads one RVU report into the running state: clinic visits by patient, and hospital accounts with their facility charges. */
+function pwScan(text, fileName, st) {
+  const rows = parseCSV(text); if (rows.length < 2) throw new Error('the file is empty');
+  const hdr = rows[0].map((h) => String(h || '').trim().toLowerCase()), ix = (n) => hdr.indexOf(n);
+  const I = { acct: ix('account number'), name: ix('name'), date: ix('service date'), perf: ix('performing provider'), att: ix('attending provider'), dept: ix('dept name'), loc: ix('visit location'), type: ix('acct type'), ch: ix('charge amt'), pay: ix('payment total') };
+  if (I.acct < 0 || I.name < 0 || I.date < 0 || I.perf < 0 || I.att < 0 || I.loc < 0) throw new Error('this is not the Performing Provider RVU report (it needs Account Number, Name, Service Date, Performing Provider, Attending Provider and Visit Location columns)');
+  const accts = new Map(), months = {}; let lines = 0, minD = '', maxD = '';
+  for (let r = 1; r < rows.length; r++) {
+    const row = rows[r]; if (!row || row.length < 5) continue; const g = (k) => (I[k] >= 0 ? String(row[I[k]] ?? '').trim() : '');
+    const date = volCellDate(g('date')), name = pwNameKey(g('name')), acct = g('acct'); if (!date || !name || !acct) continue;
+    lines++; months[date.slice(0, 7)] = (months[date.slice(0, 7)] || 0) + 1; if (!minD || date < minD) minD = date; if (date > maxD) maxD = date;
+    const perf = g('perf'), loc = g('loc') || g('dept') || 'Unknown location';
+    if (perf) {
+      if ((I.type >= 0 && !/^AMB/i.test(g('type'))) || PW_NOT_SOURCE.test(loc)) continue;
+      let v = st.visits.get(name); if (!v) st.visits.set(name, v = new Map());
+      const k = perf + '\u0001' + loc; let s = v.get(k); if (!s) v.set(k, s = new Set()); s.add(date);
+      if (!st.visitFrom || date < st.visitFrom) st.visitFrom = date; if (date > st.visitTo) st.visitTo = date;
+    } else {
+      let a = accts.get(acct); if (!a) accts.set(acct, a = { name, n: 0, ch: 0, pay: 0, date, atts: {}, locs: {}, type: g('type'), or: false });
+      a.n++; a.ch += num(g('ch')); a.pay += num(g('pay')); if (date < a.date) a.date = date;
+      const att = g('att'); if (att) a.atts[att] = (a.atts[att] || 0) + 1; a.locs[loc] = (a.locs[loc] || 0) + 1;
+      if (I.dept >= 0 ? /^(operating room|endoscopy)$/i.test(g('dept')) : /operating room/i.test(loc)) a.or = true;
+    }
+  }
+  /* an account that shows up in two months' files (late charges) is taken once, from the file that has more of it */
+  accts.forEach((a, k) => { const old = st.accts.get(k); if (!old || a.n >= old.n) st.accts.set(k, a); });
+  const main = Object.entries(months).filter(([, n]) => n >= Math.max(500, lines * 0.1)).map(([m]) => m).sort();
+  st.files.push({ name: fileName, lines, from: minD, to: maxD, months: main });
+}
+/* Follows every procedure back to the clinic visits before it and adds it up by provider, place, proceduralist, type and month. */
+function pwLink(st) {
+  const recs = new Map(), stats = { procs: 0, byType: {}, traced: [0, 0, 0, 0], procFrom: '', procTo: '', ch: 0 };
+  const add = (key, base, xk, b, a) => { let r = recs.get(key); if (!r) recs.set(key, r = { ...base, x: {} }); const v = r.x[xk] = r.x[xk] || Array(12).fill(0); v[b * 3]++; v[b * 3 + 1] += a.ch; v[b * 3 + 2] += a.pay; };
+  st.accts.forEach((a) => {
+    const T = pwProcType(a); if (!T) return;
+    stats.procs++; stats.byType[T] = (stats.byType[T] || 0) + 1; stats.ch += a.ch;
+    if (!stats.procFrom || a.date < stats.procFrom) stats.procFrom = a.date; if (a.date > stats.procTo) stats.procTo = a.date;
+    const v = st.visits.get(a.name); if (!v) return;
+    const att = pwTop(a.atts), ap = chgAttParts(att), pd = pwDay(a.date), pm = a.date.slice(0, 7), xk = att + '|' + T, perPlace = {}; let best = 9;
+    v.forEach((dates, k) => {
+      const [prov, loc] = k.split('\u0001'); if (att && samePerson(chgProviderParts(prov), ap)) return;
+      let lag = Infinity; dates.forEach((d) => { const gap = pd - pwDay(d); if (gap >= 0 && gap < lag) lag = gap; }); if (lag > 180) return;
+      const b = lag <= 30 ? 0 : lag <= 60 ? 1 : lag <= 90 ? 2 : 3, dept = finLocDept(loc);
+      add(prov + '\u0001' + loc + '\u0001' + pm, { provider: prov, loc, dept, pm }, xk, b, a);
+      const pk = dept || 'loc:' + loc; if (!perPlace[pk] || b < perPlace[pk].b) perPlace[pk] = { b, loc, dept };
+      if (b < best) best = b;
+    });
+    /* once per clinic, however many of its providers the patient saw: these are the totals */
+    Object.entries(perPlace).forEach(([pk, o]) => add('all\u0001' + pk + '\u0001' + pm, { all: 1, loc: o.dept ? (FIN_DEPT_LABELS[o.dept] || o.loc) : o.loc, dept: o.dept, pm }, xk, o.b, a));
+    for (let b = best; b < 4; b++) stats.traced[b]++;
+  });
+  const out = [...recs.entries()].map(([key, r]) => {
+    Object.values(r.x).forEach((v) => v.forEach((n, i) => { v[i] = Math.round(n); }));
+    const p = r.all ? null : chgMatchPhysician(r.provider);
+    return { id: r.all ? `pwd_${chgHash(key)}_${r.pm}` : `pw_${chgHash(r.provider + '|' + r.loc)}_${chgSlug(r.provider).slice(0, 18)}_${r.pm}`, kind: 'path', ...r, ...(r.all ? {} : { physicianId: p ? p.id : '' }) };
+  });
+  return { records: out, stats };
+}
+async function importPathways(files) {
+  if (!isAdmin()) { toast('Only the administrator can run the trace.', 'err'); return; }
+  const list = [...files]; if (!list.length) return;
+  const st = { visits: new Map(), accts: new Map(), files: [], visitFrom: '', visitTo: '' };
+  try { for (let i = 0; i < list.length; i++) { toast(`Reading file ${i + 1} of ${list.length}…`); await new Promise((r) => setTimeout(r, 30)); pwScan(await list[i].text(), list[i].name, st); } }
+  catch (e) { toast(`${list[st.files.length] ? list[st.files.length].name + ': ' : ''}that file could not be read: ` + (e && e.message ? e.message : e), 'err'); return; }
+  const { records, stats } = pwLink(st);
+  if (!stats.procs) { toast('No surgery, endoscopy or procedure accounts were found in those files.', 'err'); return; }
+  const months = [...new Set(st.files.flatMap((f) => f.months))].sort(), unique = records.filter((r) => r.all);
+  const top = Object.values(unique.reduce((o, r) => { const s = pwSum([r], 90), a = o[r.dept || r.loc] = o[r.dept || r.loc] || { l: r.loc, n: 0, ch: 0 }; a.n += s.n; a.ch += s.ch; return o; }, {})).filter((a) => a.n).sort((a, b) => b.n - a.n).slice(0, 8);
+  const meta = { id: 'pwmeta', kind: 'pathmeta', files: st.files.map((f) => ({ name: f.name, from: f.from, to: f.to, lines: f.lines })), months, visitFrom: st.visitFrom, visitTo: st.visitTo, procFrom: stats.procFrom, procTo: stats.procTo, procs: stats.procs, byType: stats.byType, traced: stats.traced, importedAt: nowISO(), importedBy: session.name };
+  const body = `
+    <p><b>${list.length}</b> report file${list.length === 1 ? '' : 's'} read, covering ${months.length ? `${esc(fmtMonth(months[0]))}${months.length > 1 ? ' to ' + esc(fmtMonth(months[months.length - 1])) : ''}` : 'no full month'}. <b>${volInt(stats.procs)}</b> surgery, endoscopy and procedure cases were found, with <b>${finShort(stats.ch)}</b> of hospital facility charges.</p>
+    ${list.length === 1 ? `<div class="notice info" style="margin:10px 0">${ico('i-info')}<div><b>One month on its own finds very little.</b> Most procedures happen weeks after the clinic visit, so the visit is usually in an earlier month's file. Cancel, then pick every monthly RVU report together (hold Ctrl or Shift, or Command on a Mac, while you click them).</div></div>` : ''}
+    <ul class="list small" style="margin:10px 0">
+      <li style="display:block"><div style="margin-bottom:6px">Cases by type</div>${Object.entries(PW_TYPES).filter(([k]) => stats.byType[k]).map(([k, l]) => `<span class="tag" style="margin:0 6px 6px 0">${esc(l)} ${volInt(stats.byType[k])}</span>`).join('')}</li>
+      ${PW_BUCKETS.map((d, i) => `<li><span>Cases with a clinic visit to another provider in the ${d} days before</span><b>${volInt(stats.traced[i])} <span class="muted" style="font-weight:400">(${finPctText(finPct(stats.traced[i], stats.procs))})</span></b></li>`).join('')}
+      ${top.length ? `<li style="display:block"><div style="margin-bottom:6px">Clinics whose patients went on to the most cases within 90 days</div>${top.map((a) => `<div style="display:flex;justify-content:space-between;gap:12px"><span>${esc(a.l)}</span><span><b>${volInt(a.n)}</b> cases · ${finShort(a.ch)}</span></div>`).join('')}</li>` : ''}
+      <li style="display:block"><div style="margin-bottom:6px">Files</div>${st.files.map((f) => `<div style="display:flex;justify-content:space-between;gap:12px"><span>${esc(f.name)}</span><span class="muted">${fmtDate(f.from)} to ${fmtDate(f.to)} · ${volInt(f.lines)} lines</span></div>`).join('')}</li>
+    </ul>
+    <p class="help" style="margin-top:12px">Saving replaces any earlier trace, so pick every month's file each time. Patients are matched by name inside this browser only to follow them from a clinic visit to a later procedure. What is saved is counts and charges by provider, proceduralist, type and month. Patient names and account numbers are not stored and never leave this browser. This does not change provider billing: load the same files there, one month at a time, as before.</p>`;
+  openModal({ title: 'Trace patients from clinic to procedure — review before saving', wide: true, body, submitLabel: 'Save the trace', onSubmit: () => { applyPathways(meta, records); return true; } });
+}
+function applyPathways(meta, records) {
+  db.charges = [...(db.charges || []).filter((r) => r.kind !== 'path' && r.id !== 'pwmeta'), meta, ...records];
+  saveDB(); toast(`Trace saved: ${volInt(meta.procs)} procedure cases followed back to clinic visits`);
+  ui.bl.view = 'path'; if (location.hash.startsWith('#/reports/clinics')) rerender(); else if (location.hash === '#/reports/billing') rerender(); else location.hash = '#/reports/billing';
+}
+/* Adds records up within a look-back window: totals, by type, by group, by proceduralist, by month and by time since the visit. */
+function pwSum(recs, win) {
+  const nb = Math.max(1, PW_BUCKETS.indexOf(win) + 1), z = () => ({ n: 0, ch: 0, pay: 0 });
+  const s = { ...z(), byType: {}, byGroup: {}, byAtt: {}, byMonth: {}, byBucket: PW_BUCKETS.map(z) };
+  PW_GROUPS.forEach(([k]) => { s.byGroup[k] = z(); });
+  const put = (o, n, ch, pay) => { o.n += n; o.ch += ch; o.pay += pay; };
+  recs.forEach((r) => Object.entries(r.x || {}).forEach(([xk, v]) => {
+    const i = xk.lastIndexOf('|'), att = xk.slice(0, i), T = xk.slice(i + 1), grp = (PW_GROUPS.find((g) => g[2].includes(T)) || PW_GROUPS[2])[0];
+    for (let b = 0; b < 4; b++) {
+      const n = v[b * 3] || 0, ch = v[b * 3 + 1] || 0, pay = v[b * 3 + 2] || 0; if (!n && !ch) continue;
+      put(s.byBucket[b], n, ch, pay); if (b >= nb) continue;
+      put(s, n, ch, pay); put(s.byType[T] = s.byType[T] || z(), n, ch, pay); put(s.byGroup[grp], n, ch, pay); put(s.byMonth[r.pm] = s.byMonth[r.pm] || z(), n, ch, pay);
+      const a = s.byAtt[att] = s.byAtt[att] || { ...z(), att, types: {} }; put(a, n, ch, pay); put(a.types[T] = a.types[T] || z(), n, ch, pay);
+    }
+  }));
+  return s;
+}
+function pwWinToggle() { const w = pwWindow(); return `<div class="toggle no-print" role="group" aria-label="Days after the visit">${PW_BUCKETS.map((d) => `<button class="${w === d ? 'on' : ''}" data-act="pw-win" data-v="${d}">${d} days</button>`).join('')}</div>`; }
+function pwCoverage(meta) { return meta ? `procedures ${esc(fmtDate(meta.procFrom))} to ${esc(fmtDate(meta.procTo))}, clinic visits from ${esc(fmtDate(meta.visitFrom))}` : ''; }
+function pwCaveat(meta, win) {
+  return `A case is counted when the same patient had a clinic visit with the provider in the ${win} days before the procedure, and the provider is not the one who did it. That shows where the clinic's patients went next. It does not prove the provider sent them: the RVU report does not record who referred a surgery. Patients are matched by name, so two patients with the same name can be confused (about 1 name in 700). ${meta ? `This trace covers ${pwCoverage(meta)}; a procedure early in that span may have followed a visit from before the first file and will be missed.` : ''} Charges are the hospital's facility charges at list price for the whole case.`;
+}
+function pwAttName(att) { return chgAttDisplay(att) || 'Not recorded'; }
+/* The card on a clinic's financial page. */
+function pwDeptHTML(rec) {
+  const meta = pwMeta(), hasBilling = chgRecords().some((r) => r.dept === rec.code && !chgIsFac(r));
+  if (!meta) return hasBilling ? `<section class="card no-print" style="margin-top:14px"><div class="card-head"><h2>Surgery, endoscopy and procedures this clinic's patients went on to</h2><span class="hint">not traced yet</span></div>
+      <p class="muted" style="margin:0">${isAdmin() ? 'To see which surgeries, endoscopies and procedures followed a visit here, open <a href="#/reports/billing" data-act="pw-goto">Provider billing, Clinic to procedure</a> and choose <b>Trace patients to procedures</b>. Pick all the monthly RVU report files together.' : 'The administrator can trace which surgeries, endoscopies and procedures followed a visit here, from the monthly RVU reports.'}</p></section>` : '';
+  const win = pwWindow(), mine = pwRecords().filter((r) => r.dept === rec.code), byProv = {};
+  mine.filter((r) => !r.all).forEach((r) => { (byProv[r.provider] = byProv[r.provider] || []).push(r); });
+  const rows = Object.entries(byProv).map(([name, rs]) => ({ name, s: pwSum(rs, win), ph: chgMatchPhysician(name) })).filter((x) => x.s.n).sort((a, b) => b.s.ch - a.s.ch || b.s.n - a.s.n);
+  const T = pwSum(mine.filter((r) => r.all), win), g = (s, k) => s.byGroup[k];
+  const dash = '<span class="muted">—</span>', money = (v) => (v ? finMoney(v) : dash), cnt = (v) => (v ? volInt(v) : dash), gh = 'style="text-align:center;white-space:normal;border-bottom:1px solid var(--border)"';
+  const pl = (n, one, many) => `<b>${volInt(n)}</b> ${n === 1 ? one : many}`;
+  const bits = [g(T, 'surg').n ? pl(g(T, 'surg').n, 'surgery', 'surgeries') : '', g(T, 'endo').n ? pl(g(T, 'endo').n, 'endoscopy', 'endoscopies') : '', g(T, 'other').n ? pl(g(T, 'other').n, 'pain or other procedure', 'pain and other procedures') : ''].filter(Boolean);
+  const say = bits.length > 2 ? `${bits.slice(0, -1).join(', ')} and ${bits[bits.length - 1]}` : bits.join(' and ');
+  const cells = (s) => PW_GROUPS.map(([k]) => `<td class="num">${cnt(g(s, k).n)}</td><td class="num">${money(g(s, k).ch)}</td>`).join('');
+  const topAtt = (s) => { const a = Object.values(s.byAtt).sort((p, q) => q.n - p.n || q.ch - p.ch)[0]; return a ? `${esc(pwAttName(a.att))}${Object.keys(s.byAtt).length > 1 ? ` <span class="muted">(${volInt(a.n)} of ${volInt(s.n)})</span>` : ''}` : ''; };
+  return `<section class="card" style="margin-top:14px">
+      <div class="card-head"><h2>Surgery, endoscopy and procedures this clinic's patients went on to</h2>${pwWinToggle()}</div>
+      <p style="margin:0 0 12px;font-size:16px;line-height:1.5">${T.n ? `In the ${win} days after a visit to ${esc(rec.label)}, its patients had ${say} at NWSH, with <b>${finShort(T.ch)}</b> of hospital facility charges${T.pay ? ` and <b>${finShort(T.pay)}</b> paid so far` : ''}. None of it is on this department's statement.` : `No surgery, endoscopy or procedure was found within ${win} days of a visit to ${esc(rec.label)} in the files traced.`}</p>
+      ${rows.length ? `<div class="table-wrap"><table class="breakdown bill tight">
+        <thead><tr><th rowspan="2">Provider seen first</th><th rowspan="2" class="num">Cases</th>${PW_GROUPS.map(([, l]) => `<th colspan="2" ${gh}>${l}</th>`).join('')}<th rowspan="2" class="num" style="white-space:normal">Total charges</th><th rowspan="2" style="white-space:normal">Most often done by</th></tr>
+          <tr>${PW_GROUPS.map(() => '<th class="num">Cases</th><th class="num">Charges</th>').join('')}</tr></thead>
+        <tbody>${rows.map((x) => `<tr><td>${x.ph ? `<a href="#/physician/${x.ph.id}"><b>${esc(x.name)}</b></a>` : `<b>${esc(x.name)}</b>`}<div class="no-print"><button class="btn sm link" data-act="pw-detail" data-prov="${esc(x.name)}" style="padding-left:0">See the detail</button></div></td><td class="num"><b>${volInt(x.s.n)}</b></td>${cells(x.s)}<td class="num"><b>${finMoney(x.s.ch)}</b></td><td style="white-space:normal;min-width:130px">${topAtt(x.s)}</td></tr>`).join('')}
+        <tr class="total-row"><td><b>All providers, each case once</b><div class="no-print"><button class="btn sm link" data-act="pw-detail" data-prov="" style="padding-left:0">See the detail</button></div></td><td class="num"><b>${volInt(T.n)}</b></td>${PW_GROUPS.map(([k]) => `<td class="num"><b>${volInt(g(T, k).n)}</b></td><td class="num"><b>${finMoney(g(T, k).ch)}</b></td>`).join('')}<td class="num"><b>${finMoney(T.ch)}</b></td><td></td></tr></tbody>
+      </table></div>` : ''}
+      <p class="help" style="margin:8px 0 0">${pwCaveat(meta, win)} A patient who saw two providers here counts under each of them, so the provider rows add up to more than the last row. Surgery includes the surgery center; pain and other procedures are pain injections and the interventional radiology suite.</p>
+    </section>`;
+}
+/* Detail window: one provider's patients, or the whole clinic with each case once. */
+function openPathModal(name) {
+  const rec = finCurrentDept(); if (!rec) return;
+  const meta = pwMeta(), win = pwWindow(), mine = pwRecords().filter((r) => r.dept === rec.code), recs = name ? mine.filter((r) => !r.all && r.provider === name) : mine.filter((r) => r.all);
+  const s = pwSum(recs, win), dash = '<span class="muted">—</span>', money = (v) => (v ? finMoney(v) : dash), coll = (o) => (o.ch && o.pay ? finPctText(finPct(o.pay, o.ch)) : dash);
+  const h3 = (t, hint) => `<h3 style="margin:22px 0 8px">${t}${hint ? ` <span class="muted small" style="font-weight:400">· ${hint}</span>` : ''}</h3>`;
+  const tile = (l, o) => `<div class="kpi"><div class="label">${l}</div><div class="value" style="font-size:22px">${volInt(o.n)}</div><span class="small">${o.n ? `${finShort(o.ch)} charged · ${finMoney(o.ch / o.n)} a case` : `none within ${win} days`}</span></div>`;
+  const atts = Object.values(s.byAtt).sort((p, q) => q.ch - p.ch || q.n - p.n), months = Object.keys(s.byMonth).sort(), maxM = Math.max(1, ...months.map((m) => s.byMonth[m].ch));
+  const lo = [0, 31, 61, 91];
+  const body = `
+    <div class="kpis" style="grid-template-columns:repeat(auto-fit,minmax(170px,1fr))">
+      <div class="kpi"><div class="label">Cases within ${win} days of a visit</div><div class="value" style="font-size:22px">${volInt(s.n)}</div><span class="small">${finShort(s.ch)} charged${s.pay ? ` · ${finShort(s.pay)} paid so far` : ''}</span></div>
+      ${PW_GROUPS.map(([k, l]) => tile(l, s.byGroup[k])).join('')}
+    </div>
+    ${atts.length ? `${h3('Who did the procedure', `${atts.length} ${atts.length === 1 ? 'surgeon or proceduralist' : 'surgeons and proceduralists'}`)}
+    <div class="table-wrap"><table class="breakdown tight"><thead><tr><th>Done by</th><th>What</th><th class="num">Cases</th><th class="num">Facility charges</th><th class="num">Per case</th><th class="num">Paid so far</th><th class="num">Collected</th></tr></thead>
+      <tbody>${atts.slice(0, 40).map((a) => { const p = a.att ? chgAttPhysician(a.att) : null; return `<tr><td>${p ? `<a href="#/physician/${p.id}"><b>${esc(pwAttName(a.att))}</b></a>` : `<b>${esc(pwAttName(a.att))}</b>`}</td><td>${Object.entries(a.types).sort((x, y) => y[1].n - x[1].n).map(([t, o]) => `${volInt(o.n)} ${esc(PW_TYPES[t] || t).toLowerCase()}`).join(' · ')}</td><td class="num">${volInt(a.n)}</td><td class="num"><b>${finMoney(a.ch)}</b></td><td class="num">${a.n ? finMoney(a.ch / a.n) : '—'}</td><td class="num">${money(a.pay)}</td><td class="num">${coll(a)}</td></tr>`; }).join('')}</tbody></table></div>${atts.length > 40 ? `<p class="small muted" style="margin:6px 0 0">The 40 largest of ${atts.length} are shown.</p>` : ''}
+    ${h3('By type')}
+    <div class="table-wrap"><table class="breakdown tight"><thead><tr><th>Type</th><th class="num">Cases</th><th class="num">Facility charges</th><th class="num">Per case</th><th class="num">Paid so far</th><th class="num">Collected</th></tr></thead>
+      <tbody>${Object.entries(PW_TYPES).filter(([t]) => s.byType[t]).map(([t, l]) => { const o = s.byType[t]; return `<tr><td><b>${esc(l)}</b></td><td class="num">${volInt(o.n)}</td><td class="num"><b>${finMoney(o.ch)}</b></td><td class="num">${finMoney(o.ch / o.n)}</td><td class="num">${money(o.pay)}</td><td class="num">${coll(o)}</td></tr>`; }).join('')}</tbody></table></div>
+    ${h3('By month of the procedure')}
+    <div class="table-wrap"><table class="breakdown tight"><thead><tr><th>Month</th><th class="num">Cases</th><th class="num">Facility charges</th><th style="min-width:140px"></th><th class="num">Paid so far</th></tr></thead>
+      <tbody>${months.map((m) => { const o = s.byMonth[m]; return `<tr><td class="nowrap">${esc(fmtMonth(m))}</td><td class="num">${volInt(o.n)}</td><td class="num"><b>${finMoney(o.ch)}</b></td><td><div style="height:10px;border-radius:5px;background:#2a78d6;width:${Math.round(o.ch / maxM * 100)}%" aria-hidden="true"></div></td><td class="num">${money(o.pay)}</td></tr>`; }).join('')}</tbody></table></div>` : ''}
+    ${h3('How long after the visit', 'all cases up to 180 days, whatever window is chosen')}
+    <div class="table-wrap"><table class="breakdown tight"><thead><tr><th>Days from the last visit to the procedure</th><th class="num">Cases</th><th class="num">Facility charges</th></tr></thead>
+      <tbody>${s.byBucket.map((o, i) => `<tr><td>${lo[i]} to ${PW_BUCKETS[i]} days${PW_BUCKETS[i] <= win ? '' : ' <span class="muted">(outside the window chosen)</span>'}</td><td class="num">${o.n ? volInt(o.n) : dash}</td><td class="num">${money(o.ch)}</td></tr>`).join('')}</tbody></table></div>
+    <p class="help" style="margin:16px 0 0">${pwCaveat(meta, win)} Paid so far is what has posted to those hospital accounts. To see the individual patients behind a number, run the report in Meditech; DocDock keeps totals only.</p>`;
+  openModal({ title: `${name || rec.label + ', all providers'}: procedures their patients went on to`, wide: true, body });
+}
+/* The Provider billing view: every clinic side by side, and which proceduralists their patients reach. */
+function viewBillingPath(actions, filterCard) {
+  const meta = pwMeta(), win = pwWindow();
+  const head = finHead('Provider billing', 'Clinic to procedure: the surgeries, endoscopies and procedures each clinic\'s patients went on to.', 'billing', actions) + filterCard;
+  if (!meta) return head + `<div class="card empty"><p style="margin:0 0 8px;font-size:17px"><b>No trace has been run yet.</b></p>
+      <p class="muted" style="max-width:680px;margin:0 auto">${isAdmin() ? 'Click <b>Trace patients to procedures</b> and pick all the monthly Meditech "Performing Provider RVU" files together (hold Ctrl or Shift, or Command on a Mac, while you click them). The browser follows each patient from a clinic visit to any surgery, endoscopy or procedure in the 180 days after it, and saves the totals only.' : 'Ask the administrator to run the trace from the monthly RVU reports.'}</p></div>`;
+  const all = pwRecords().filter((r) => r.all), byPlace = {};
+  all.forEach((r) => { const k = r.dept || 'loc:' + r.loc; (byPlace[k] = byPlace[k] || { dept: r.dept, loc: r.loc, recs: [] }).recs.push(r); });
+  const rows = Object.values(byPlace).map((p) => ({ ...p, s: pwSum(p.recs, win), d: p.dept ? finDept(p.dept) : null })).filter((x) => x.s.n).sort((a, b) => b.s.ch - a.s.ch);
+  const g = (s, k) => s.byGroup[k], dash = '<span class="muted">—</span>', money = (v) => (v ? finMoney(v) : dash), cnt = (v) => (v ? volInt(v) : dash), gh = 'style="text-align:center;white-space:normal;border-bottom:1px solid var(--border)"';
+  const traced = meta.traced ? meta.traced[PW_BUCKETS.indexOf(win)] : 0;
+  const kpis = [
+    { l: 'Procedure cases in the files', v: volInt(meta.procs), c: Object.entries(PW_TYPES).filter(([k]) => (meta.byType || {})[k]).map(([k, l]) => `${volInt(meta.byType[k])} ${l.toLowerCase()}`).join(' · ') },
+    { l: `Followed a clinic visit within ${win} days`, v: volInt(traced), c: meta.procs ? `${finPctText(finPct(traced, meta.procs))} of cases, with a provider other than the one who did the procedure` : '' },
+    { l: 'Files traced', v: volInt((meta.files || []).length), c: pwCoverage(meta) },
+  ];
+  return head + `
+    <div class="kpis" style="margin-bottom:14px;grid-template-columns:repeat(auto-fit,minmax(240px,1fr))">${kpis.map((k) => `<div class="kpi"><div class="label">${k.l}</div><div class="value" style="font-size:24px">${k.v}</div><span class="small">${k.c || ''}</span></div>`).join('')}</div>
+    <section class="card"><div class="card-head"><h2>By clinic the patient visited first</h2>${pwWinToggle()}</div>
+      ${rows.length ? `<div class="table-wrap"><table class="breakdown bill tight">
+        <thead><tr><th rowspan="2">Clinic</th><th rowspan="2" class="num">Cases</th>${PW_GROUPS.map(([, l]) => `<th colspan="2" ${gh}>${l}</th>`).join('')}<th rowspan="2" class="num" style="white-space:normal">Total charges</th><th rowspan="2" class="num" style="white-space:normal">Paid so far</th></tr>
+          <tr>${PW_GROUPS.map(() => '<th class="num">Cases</th><th class="num">Charges</th>').join('')}</tr></thead>
+        <tbody>${rows.map((x) => `<tr><td>${x.d ? `<a href="#/reports/clinics/${encodeURIComponent(x.d.code)}"><b>${esc(x.d.label)}</b></a>` : `<b>${esc(x.loc)}</b>`}</td><td class="num"><b>${volInt(x.s.n)}</b></td>${PW_GROUPS.map(([k]) => `<td class="num">${cnt(g(x.s, k).n)}</td><td class="num">${money(g(x.s, k).ch)}</td>`).join('')}<td class="num"><b>${finMoney(x.s.ch)}</b></td><td class="num">${money(x.s.pay)}</td></tr>`).join('')}</tbody>
+      </table></div>` : `<p class="muted">No procedure followed a clinic visit within ${win} days in the files traced.</p>`}
+      <p class="help" style="margin:10px 0 0">Each case is counted once per clinic. A patient seen at two clinics before a procedure counts under both, so do not add the rows together. Click a clinic for its providers. ${pwCaveat(meta, win)} Last traced ${meta.importedAt ? fmtTS(meta.importedAt) : ''}${meta.importedBy ? ' by ' + esc(meta.importedBy) : ''} from ${(meta.files || []).length} file${(meta.files || []).length === 1 ? '' : 's'}.</p>
+    </section>`;
 }
 /* ---------- what a clinic's providers bring to the rest of the hospital ---------- */
 /* Imaging is told apart by code: CPT 70000-79999 and the vascular ultrasound studies, less image guidance during a procedure. */
@@ -5761,6 +5986,10 @@ const actions = {
   'import-fin': () => $('#fin-input').click(),
   'export-fin': () => exportFinancials(),
   'import-chg': () => $('#chg-input').click(),
+  'import-pw': () => $('#pw-input').click(),
+  'pw-win': (el) => { ui.pw.win = +el.dataset.v; const y = window.scrollY; rerender(); window.scrollTo(0, y); },
+  'pw-detail': (el) => openPathModal(el.dataset.prov || ''),
+  'pw-goto': (el, e) => { if (e) e.preventDefault(); ui.bl.view = 'path'; if (location.hash === '#/reports/billing') rerender(); else location.hash = '#/reports/billing'; },
   'export-chg': () => exportCharges(),
   'fin-group': (el) => { ui.fin.group = el.dataset.v; rerender(); },
   'fin-period': (el) => { ui.fin.period = el.dataset.v; rerender(); },
@@ -5940,6 +6169,7 @@ $('#volumes-input').addEventListener('change', (e) => { const f = e.target.files
 $('#imaging-input').addEventListener('change', (e) => { const f = e.target.files[0]; if (f) importImaging(f); e.target.value = ''; });
 $('#fin-input').addEventListener('change', (e) => { const f = e.target.files[0]; if (f) importFinancials(f); e.target.value = ''; });
 $('#chg-input').addEventListener('change', (e) => { const f = e.target.files[0]; if (f) importCharges(f); e.target.value = ''; });
+$('#pw-input').addEventListener('change', (e) => { const fs = [...e.target.files]; e.target.value = ''; if (fs.length) importPathways(fs); });
 
 // Keep multiple open tabs in sync
 window.addEventListener('storage', (e) => { if (e.key === STORE_KEY && session) { db = loadDB(); rerender(); } });
