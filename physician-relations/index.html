@@ -2763,7 +2763,7 @@ function refFindTally(list) { const t = { n: list.length, done: 0, sched: 0, ope
 /* Endoscopies the provider's patients went on to, from the clinic to procedure trace (180 days), to set beside the referrals. */
 function refFindScopes() {
   if (!pwMeta()) return null;
-  const by = []; pwRecords().forEach((r) => { if (r.all) return; let n = 0; Object.entries(r.x || {}).forEach(([k, v]) => { if (k.slice(k.lastIndexOf('|') + 1) === 'E') for (let b = 0; b < 4; b++) n += v[b * 2] || 0; }); if (n) by.push({ id: r.physicianId || '', parts: chgProviderParts(r.provider), n }); });
+  const by = []; pwRecords().forEach((r) => { if (r.all) return; let n = 0; Object.entries(r.x || {}).forEach(([k, v]) => { if (pwKey(k).T === 'E') for (let b = 0; b < 4; b++) n += v[b * 2] || 0; }); if (n) by.push({ id: r.physicianId || '', parts: chgProviderParts(r.provider), n }); });
   return (fromId, label) => { const parts = refLabelParts(label); return by.reduce((s, x) => s + ((fromId && x.id === fromId) || (parts && samePerson(x.parts, parts)) ? x.n : 0), 0); };
 }
 function refFinderOutHTML(range) {
@@ -5094,8 +5094,13 @@ const PW_ASSIST = /^(AS|80|81|82|62)$/i;
 /* office, preventive, consult and transition-of-care visit codes: a same-day line counts as a visit only with one of these */
 const PW_VISIT_CODE = /^(992(0[2-5]|1[1-5])|9924[1-5]|9938[1-7]|9939[1-7]|9949[56]|G0402|G0438|G0439|S9083)$/i;
 /* The saved trace carries a format number. One saved in another format is treated as not there, so its numbers are never misread. */
-const PW_FORMAT = 2;
-function pwMeta() { const m = (db.charges || []).find((r) => r.id === 'pwmeta'); return m && m.v === PW_FORMAT ? m : null; }
+const PW_FORMAT = 3;
+function pwMeta() { const m = (db.charges || []).find((r) => r.id === 'pwmeta'); return m && (m.v === 2 || m.v === PW_FORMAT) ? m : null; }
+/* The procedure itself: a surgical-range CPT (10004 to 69990) or a screening colonoscopy HCPCS. Not anesthesia, imaging, lab or a visit. */
+const PW_PROC_CODE = /^([1-6]\d{4}|G0105|G0121)$/i;
+/* A cell is keyed "who did it|type|procedure code"; a format 2 trace has "who did it|type". */
+function pwKey(xk) { const parts = String(xk).split('|'); let code = ''; if (parts.length >= 3 && PW_TYPES[parts[parts.length - 2]]) code = parts.pop(); const T = parts.pop(); return { att: parts.join('|'), T, code }; }
+function pwProcName(code) { if (!code) return ''; const m = pwMeta(); return (m && m.codes && m.codes[code]) || chgCodeLabel(code) || ''; }
 function pwRecords() { return pwMeta() ? (db.charges || []).filter((r) => r.kind === 'path') : []; }
 function pwWindow() { return PW_BUCKETS.includes(ui.pw.win) ? ui.pw.win : 90; }
 function pwNameKey(s) { return String(s || '').toUpperCase().replace(/\s*,\s*/g, ',').replace(/\s+/g, ' ').trim(); }
@@ -5114,15 +5119,19 @@ function pwProcType(a) {
 function pwScan(text, fileName, st) {
   const rows = parseCSV(text); if (rows.length < 2) throw new Error('the file is empty');
   const hdr = rows[0].map((h) => String(h || '').trim().toLowerCase()), ix = (n) => hdr.indexOf(n);
-  const I = { acct: ix('account number'), name: ix('name'), date: ix('service date'), perf: ix('performing provider'), att: ix('attending provider'), dept: ix('dept name'), loc: ix('visit location'), type: ix('acct type'), ch: ix('charge amt'), cpt: ix('cpt'), hcpcs: ix('hcpcs'), mod: ix('cpt modifiers'), hmod: ix('hcpcs modifiers'), link: ix('linked account#') };
+  const I = { acct: ix('account number'), name: ix('name'), date: ix('service date'), perf: ix('performing provider'), att: ix('attending provider'), dept: ix('dept name'), loc: ix('visit location'), type: ix('acct type'), ch: ix('charge amt'), cpt: ix('cpt'), hcpcs: ix('hcpcs'), mod: ix('cpt modifiers'), hmod: ix('hcpcs modifiers'), link: ix('linked account#'), w: ix('work rvu'), desc: ix('description') };
   if (I.acct < 0 || I.name < 0 || I.date < 0 || I.perf < 0 || I.att < 0 || I.loc < 0 || I.dept < 0 || I.type < 0 || I.mod < 0 || I.link < 0 || (I.cpt < 0 && I.hcpcs < 0)) throw new Error('this is not the full Performing Provider RVU report (it needs Account Number, Name, Service Date, CPT, CPT Modifiers, Performing Provider, Attending Provider, Visit Location, Dept Name, Acct Type and Linked Account# columns)');
   const accts = new Map(), months = {}; let lines = 0, skipped = 0, minD = '', maxD = '';
   for (let r = 1; r < rows.length; r++) {
     const row = rvuFixRow(rows[r], I.name, hdr.length); if (!row || row.length < 5) continue; const g = (k) => (I[k] >= 0 ? String(row[I[k]] ?? '').trim() : '');
     const date = volCellDate(g('date')), name = pwNameKey(g('name')), acct = g('acct'); if (!date || !name || !acct) { skipped++; continue; }
     lines++; months[date.slice(0, 7)] = (months[date.slice(0, 7)] || 0) + 1; if (!minD || date < minD) minD = date; if (date > maxD) maxD = date;
-    const perf = g('perf'), loc = g('loc') || g('dept') || 'Unknown location';
+    const perf = g('perf'), loc = g('loc') || g('dept') || 'Unknown location', code = PW_PROC_CODE.test(g('cpt')) ? g('cpt') : PW_PROC_CODE.test(g('hcpcs')) ? g('hcpcs').toUpperCase() : '';
+    if (code && !st.codes[code] && g('desc')) st.codes[code] = g('desc').replace(/\s+(RT|LT|BIL|BILAT)$/i, '');
     if (perf) {
+      /* what was done comes from the surgeon's or proceduralist's own fee line, which names the hospital account it belongs to:
+         the code with the most work is taken as the procedure */
+      if (code) { const w = num(g('w')); (g('link') + ',' + acct).split(/[,\s]+/).forEach((t) => { if (!t) return; const cur = st.pro.get(t); if (!cur || w > cur.w) st.pro.set(t, { code, w }); }); }
       if (!PW_VISIT_ACCT.test(g('type')) || PW_NOT_SOURCE.test(loc) || g('link') || (g('mod') + ' ' + g('hmod')).split(/[\s,]+/).some((m) => PW_ASSIST.test(m))) continue;
       st.depts.add(finLocDept(loc));
       let v = st.visits.get(name); if (!v) st.visits.set(name, v = new Map());
@@ -5134,6 +5143,7 @@ function pwScan(text, fileName, st) {
       a.n++; a.ch += num(g('ch')); if (date < a.date) a.date = date;
       const att = g('att'); if (att) a.atts[att] = (a.atts[att] || 0) + 1; a.locs[loc] = (a.locs[loc] || 0) + 1;
       if (/^(operating room|endoscopy)$/i.test(g('dept'))) a.or = true;
+      if (code) { const ch = num(g('ch')); if (!a.fcode || ch > a.fch) { a.fcode = code; a.fch = ch; } }   // fallback: the hospital's own line for the procedure
     }
   }
   /* an account that shows up in two months' files (late charges) is taken once, from the file that has more of it */
@@ -5143,14 +5153,15 @@ function pwScan(text, fileName, st) {
 }
 /* Follows every procedure back to the clinic visits before it and adds it up by provider, place, proceduralist, type and month. */
 function pwLink(st) {
-  const recs = new Map(), stats = { procs: 0, byType: {}, traced: [0, 0, 0, 0], procFrom: '', procTo: '', ch: 0 };
+  const recs = new Map(), stats = { procs: 0, named: 0, used: {}, byType: {}, traced: [0, 0, 0, 0], procFrom: '', procTo: '', ch: 0 };
   const add = (key, base, xk, b, a) => { let r = recs.get(key); if (!r) recs.set(key, r = { ...base, x: {} }); const v = r.x[xk] = r.x[xk] || Array(8).fill(0); v[b * 2]++; v[b * 2 + 1] += a.ch; };
-  st.accts.forEach((a) => {
+  st.accts.forEach((a, acctKey) => {
     const T = pwProcType(a); if (!T) return;
+    const code = (st.pro.get(acctKey) || {}).code || a.fcode || ''; if (code) { stats.named++; stats.used[code] = 1; }
     stats.procs++; stats.byType[T] = (stats.byType[T] || 0) + 1; stats.ch += a.ch;
     if (!stats.procFrom || a.date < stats.procFrom) stats.procFrom = a.date; if (a.date > stats.procTo) stats.procTo = a.date;
     const v = st.visits.get(a.name); if (!v) return;
-    const att = pwTop(a.atts), ap = chgAttParts(att), pd = pwDay(a.date), pm = a.date.slice(0, 7), xk = att + '|' + T, perPlace = {}, perProv = {}; let best = 9;
+    const att = pwTop(a.atts), ap = chgAttParts(att), pd = pwDay(a.date), pm = a.date.slice(0, 7), xk = att + '|' + T + '|' + code, perPlace = {}, perProv = {}; let best = 9;
     v.forEach((dates, k) => {
       const [prov, loc] = k.split('\u0001'); if (att && samePerson(chgProviderParts(prov), ap)) return;
       /* the latest visit before the procedure; a line on the day itself counts only when an office visit was billed that day */
@@ -5176,7 +5187,7 @@ function pwLink(st) {
 async function importPathways(files) {
   if (!isAdmin()) { toast('Only the administrator can run the trace.', 'err'); return; }
   const list = [...files]; if (!list.length) return;
-  const st = { visits: new Map(), accts: new Map(), files: [], depts: new Set(), visitFrom: '', visitTo: '' };
+  const st = { visits: new Map(), accts: new Map(), pro: new Map(), codes: {}, files: [], depts: new Set(), visitFrom: '', visitTo: '' };
   importBusy++;
   try { for (let i = 0; i < list.length; i++) { toast(`Reading file ${i + 1} of ${list.length}…`); await new Promise((r) => setTimeout(r, 30)); pwScan(await list[i].text(), list[i].name, st); } }
   catch (e) { toast(`${list[st.files.length] ? list[st.files.length].name + ': ' : ''}that file could not be read: ` + (e && e.message ? e.message : e), 'err'); return; }
@@ -5185,12 +5196,13 @@ async function importPathways(files) {
   if (!stats.procs) { toast('No surgery, endoscopy or procedure accounts were found in those files.', 'err'); return; }
   const months = [...new Set(st.files.flatMap((f) => f.months))].sort(), unique = records.filter((r) => r.all);
   const top = Object.values(unique.reduce((o, r) => { const s = pwSum([r], 90), a = o[r.dept || r.loc] = o[r.dept || r.loc] || { l: r.loc, n: 0, ch: 0 }; a.n += s.n; a.ch += s.ch; return o; }, {})).filter((a) => a.n).sort((a, b) => b.n - a.n).slice(0, 8);
-  const meta = { id: 'pwmeta', kind: 'pathmeta', v: PW_FORMAT, depts: [...st.depts].filter(Boolean).sort(), files: st.files.map((f) => ({ from: f.from, to: f.to, lines: f.lines })), months, visitFrom: st.visitFrom, visitTo: st.visitTo, procFrom: stats.procFrom, procTo: stats.procTo, procs: stats.procs, byType: stats.byType, traced: stats.traced, importedAt: nowISO(), importedBy: session.name };
+  const meta = { id: 'pwmeta', kind: 'pathmeta', v: PW_FORMAT, named: stats.named, codes: Object.fromEntries(Object.keys(stats.used).filter((c) => st.codes[c]).map((c) => [c, st.codes[c]])), depts: [...st.depts].filter(Boolean).sort(), files: st.files.map((f) => ({ from: f.from, to: f.to, lines: f.lines })), months, visitFrom: st.visitFrom, visitTo: st.visitTo, procFrom: stats.procFrom, procTo: stats.procTo, procs: stats.procs, byType: stats.byType, traced: stats.traced, importedAt: nowISO(), importedBy: session.name };
   const body = `
     <p><b>${list.length}</b> report file${list.length === 1 ? '' : 's'} read, covering ${months.length ? `${esc(fmtMonth(months[0]))}${months.length > 1 ? ' to ' + esc(fmtMonth(months[months.length - 1])) : ''}` : 'no full month'}. <b>${volInt(stats.procs)}</b> surgery, endoscopy and procedure ${stats.procs === 1 ? 'case was' : 'cases were'} found, with <b>${finShort(stats.ch)}</b> of hospital facility charges.</p>
     ${list.length === 1 ? `<div class="notice info" style="margin:10px 0">${ico('i-info')}<div><b>One month on its own finds very little.</b> Most procedures happen weeks after the clinic visit, so the visit is usually in an earlier month's file. Cancel, then pick every monthly RVU report together (hold Ctrl or Shift, or Command on a Mac, while you click them).</div></div>` : ''}
     <ul class="list small" style="margin:10px 0">
       <li style="display:block"><div style="margin-bottom:6px">Cases by type</div>${Object.entries(PW_TYPES).filter(([k]) => stats.byType[k]).map(([k, l]) => `<span class="tag" style="margin:0 6px 6px 0">${esc(l)} ${volInt(stats.byType[k])}</span>`).join('')}</li>
+      <li><span>Cases where the report names the procedure done</span><b>${volInt(stats.named)} <span class="muted" style="font-weight:400">(${finPctText(finPct(stats.named, stats.procs))})</span></b></li>
       ${PW_BUCKETS.map((d, i) => `<li><span>Cases with a clinic visit to another provider in the ${d} days before</span><b>${volInt(stats.traced[i])} <span class="muted" style="font-weight:400">(${finPctText(finPct(stats.traced[i], stats.procs))})</span></b></li>`).join('')}
       ${top.length ? `<li style="display:block"><div style="margin-bottom:6px">Clinics whose patients went on to the most cases within 90 days</div>${top.map((a) => `<div style="display:flex;justify-content:space-between;gap:12px"><span>${esc(a.l)}</span><span><b>${volInt(a.n)}</b> ${a.n === 1 ? 'case' : 'cases'} · ${finShort(a.ch)}</span></div>`).join('')}</li>` : ''}
       <li style="display:block"><div style="margin-bottom:6px">Files</div>${st.files.map((f) => `<div style="display:flex;justify-content:space-between;gap:12px"><span>${esc(f.name)}</span><span class="muted">${fmtDate(f.from)} to ${fmtDate(f.to)} · ${volInt(f.lines)} lines${f.skipped ? ` · ${volInt(f.skipped)} unreadable, left out` : ''}</span></div>`).join('')}</li>
@@ -5211,16 +5223,17 @@ function clearPathways() {
 }
 function pwSum(recs, win) {
   const nb = Math.max(1, PW_BUCKETS.indexOf(win) + 1), z = () => ({ n: 0, ch: 0 });
-  const s = { ...z(), byType: {}, byGroup: {}, byAtt: {}, byMonth: {}, byBucket: PW_BUCKETS.map(z) };
+  const s = { ...z(), byType: {}, byGroup: {}, byAtt: {}, byProc: {}, byMonth: {}, byBucket: PW_BUCKETS.map(z) };
   PW_GROUPS.forEach(([k]) => { s.byGroup[k] = z(); });
   const put = (o, n, ch) => { o.n += n; o.ch += ch; };
   recs.forEach((r) => Object.entries(r.x || {}).forEach(([xk, v]) => {
-    const i = xk.lastIndexOf('|'), att = xk.slice(0, i), T = xk.slice(i + 1), grp = (PW_GROUPS.find((g) => g[2].includes(T)) || PW_GROUPS[2])[0];
+    const { att, T, code } = pwKey(xk), grp = (PW_GROUPS.find((g) => g[2].includes(T)) || PW_GROUPS[2])[0], pk = T + '|' + code;
     for (let b = 0; b < 4; b++) {
       const n = v[b * 2] || 0, ch = v[b * 2 + 1] || 0; if (!n && !ch) continue;
       put(s.byBucket[b], n, ch); if (b >= nb) continue;
       put(s, n, ch); put(s.byType[T] = s.byType[T] || z(), n, ch); put(s.byGroup[grp], n, ch); put(s.byMonth[r.pm] = s.byMonth[r.pm] || z(), n, ch);
-      const a = s.byAtt[att] = s.byAtt[att] || { ...z(), att, types: {} }; put(a, n, ch); put(a.types[T] = a.types[T] || z(), n, ch);
+      const a = s.byAtt[att] = s.byAtt[att] || { ...z(), att, types: {}, procs: {} }; put(a, n, ch); put(a.types[T] = a.types[T] || z(), n, ch); put(a.procs[pk] = a.procs[pk] || { ...z(), T, code }, n, ch);
+      const q = s.byProc[pk] = s.byProc[pk] || { ...z(), T, code, atts: {} }; put(q, n, ch); q.atts[att] = (q.atts[att] || 0) + n;
     }
   }));
   return s;
@@ -5272,14 +5285,21 @@ function openPathModal(name) {
   const tile = (l, o) => `<div class="kpi"><div class="label">${l}</div><div class="value" style="font-size:22px">${volInt(o.n)}</div><span class="small">${o.n ? `${finShort(o.ch)} charged · ${finMoney(o.ch / o.n)} a case` : `none within ${win} days`}</span></div>`;
   const atts = Object.values(s.byAtt).sort((p, q) => q.ch - p.ch || q.n - p.n), months = Object.keys(s.byMonth).sort(), maxM = Math.max(1, ...months.map((m) => s.byMonth[m].ch));
   const lo = [0, 31, 61, 91];
+  /* the named procedures behind a row, most frequent first */
+  const what = (a) => { const named = Object.values(a.procs).filter((q) => q.code).sort((x, y) => y.n - x.n || y.ch - x.ch); if (!named.length) return ''; const show = named.slice(0, 4), rest = named.slice(4).reduce((t, q) => t + q.n, 0) + Object.values(a.procs).filter((q) => !q.code).reduce((t, q) => t + q.n, 0); return `<div class="sub">${show.map((q) => `${volInt(q.n)} ${esc(pwProcName(q.code) || q.code)}`).join(' · ')}${rest ? ` · ${volInt(rest)} other or not named` : ''}</div>`; };
+  const procs = Object.values(s.byProc).sort((x, y) => y.ch - x.ch || y.n - x.n), named = procs.filter((q) => q.code).reduce((t, q) => t + q.n, 0);
   const body = `
+    <div class="no-print" style="display:flex;justify-content:flex-end;margin:0 0 10px"><button class="btn" data-act="pw-xlsx" data-prov="${esc(name)}">${ico('i-download')}Export to Excel</button></div>
     <div class="kpis" style="grid-template-columns:repeat(auto-fit,minmax(170px,1fr))">
       <div class="kpi"><div class="label">Cases within ${win} days of a visit</div><div class="value" style="font-size:22px">${volInt(s.n)}</div><span class="small">${finShort(s.ch)} of facility charges</span></div>
       ${PW_GROUPS.map(([k, l]) => tile(l, s.byGroup[k])).join('')}
     </div>
     ${atts.length ? `${h3('Who did the procedure', `${atts.length} ${atts.length === 1 ? 'surgeon or proceduralist' : 'surgeons and proceduralists'}`)}
     <div class="table-wrap"><table class="breakdown tight"><thead><tr><th>Done by</th><th>What</th><th class="num">Cases</th><th class="num">Facility charges</th><th class="num">Per case</th></tr></thead>
-      <tbody>${atts.slice(0, 40).map((a) => { const p = a.att ? chgAttPhysician(a.att) : null; return `<tr><td>${p ? `<a href="#/physician/${p.id}"><b>${esc(pwAttName(a.att))}</b></a>` : `<b>${esc(pwAttName(a.att))}</b>`}</td><td>${Object.entries(a.types).sort((x, y) => y[1].n - x[1].n).map(([t, o]) => `${volInt(o.n)} ${esc(PW_TYPES[t] || t).toLowerCase()}`).join(' · ')}</td><td class="num">${volInt(a.n)}</td><td class="num"><b>${finMoney(a.ch)}</b></td><td class="num">${a.n ? finMoney(a.ch / a.n) : '—'}</td></tr>`; }).join('')}</tbody></table></div>${atts.length > 40 ? `<p class="small muted" style="margin:6px 0 0">The 40 largest of ${atts.length} are shown.</p>` : ''}
+      <tbody>${atts.slice(0, 40).map((a) => { const p = a.att ? chgAttPhysician(a.att) : null; return `<tr><td>${p ? `<a href="#/physician/${p.id}"><b>${esc(pwAttName(a.att))}</b></a>` : `<b>${esc(pwAttName(a.att))}</b>`}</td><td style="white-space:normal">${Object.entries(a.types).sort((x, y) => y[1].n - x[1].n).map(([t, o]) => `${volInt(o.n)} ${esc(PW_TYPES[t] || t).toLowerCase()}`).join(' · ')}${what(a)}</td><td class="num">${volInt(a.n)}</td><td class="num"><b>${finMoney(a.ch)}</b></td><td class="num">${a.n ? finMoney(a.ch / a.n) : '—'}</td></tr>`; }).join('')}</tbody></table></div>${atts.length > 40 ? `<p class="small muted" style="margin:6px 0 0">The 40 largest of ${atts.length} are shown.</p>` : ''}
+    ${named ? `${h3('What was done', `the procedure is named on ${volInt(named)} of ${volInt(s.n)} cases`)}
+    <div class="table-wrap"><table class="breakdown tight"><thead><tr><th>Procedure</th><th>Code</th><th>Type</th><th class="num">Cases</th><th class="num">Facility charges</th><th class="num">Per case</th><th style="white-space:normal">Mostly done by</th></tr></thead>
+      <tbody>${procs.slice(0, 60).map((q) => { const top = Object.entries(q.atts).sort((x, y) => y[1] - x[1])[0]; return `<tr><td style="white-space:normal">${q.code ? `<b>${esc(pwProcName(q.code) || 'No description in the report')}</b>` : '<span class="muted">Not named in the report</span>'}</td><td class="mono">${esc(q.code) || dash}</td><td>${esc(PW_TYPES[q.T] || q.T)}</td><td class="num">${volInt(q.n)}</td><td class="num"><b>${finMoney(q.ch)}</b></td><td class="num">${q.n ? finMoney(q.ch / q.n) : '—'}</td><td style="white-space:normal">${top ? `${esc(pwAttName(top[0]))}${Object.keys(q.atts).length > 1 ? ` <span class="muted">(${volInt(top[1])} of ${volInt(q.n)})</span>` : ''}` : ''}</td></tr>`; }).join('')}</tbody></table></div>${procs.length > 60 ? `<p class="small muted" style="margin:6px 0 0">The 60 largest of ${procs.length} are shown; the Excel export has them all.</p>` : ''}` : (meta && meta.v === 2 ? '<p class="help" style="margin:14px 0 0">Run the trace again to see the name of each procedure: the saved trace was made before procedure names were kept.</p>' : '')}
     ${h3('By type')}
     <div class="table-wrap"><table class="breakdown tight"><thead><tr><th>Type</th><th class="num">Cases</th><th class="num">Facility charges</th><th class="num">Per case</th></tr></thead>
       <tbody>${Object.entries(PW_TYPES).filter(([t]) => s.byType[t]).map(([t, l]) => { const o = s.byType[t]; return `<tr><td><b>${esc(l)}</b></td><td class="num">${volInt(o.n)}</td><td class="num"><b>${finMoney(o.ch)}</b></td><td class="num">${finMoney(o.ch / o.n)}</td></tr>`; }).join('')}</tbody></table></div>
@@ -5289,8 +5309,32 @@ function openPathModal(name) {
     ${h3('How long after the visit', 'all cases up to 180 days, whatever window is chosen')}
     <div class="table-wrap"><table class="breakdown tight"><thead><tr><th>Days from the last visit to the procedure</th><th class="num">Cases</th><th class="num">Facility charges</th></tr></thead>
       <tbody>${s.byBucket.map((o, i) => `<tr><td>${lo[i]} to ${PW_BUCKETS[i]} days${PW_BUCKETS[i] <= win ? '' : ' <span class="muted">(outside the window chosen)</span>'}</td><td class="num">${o.n ? volInt(o.n) : dash}</td><td class="num">${money(o.ch)}</td></tr>`).join('')}</tbody></table></div>
-    <p class="help" style="margin:16px 0 0">${pwCaveat(meta, win)} To see the individual patients behind a number, run the report in Meditech; DocDock keeps totals only.</p>`;
+    <p class="help" style="margin:16px 0 0">${pwCaveat(meta, win)} The procedure named is the one with the most physician work on the surgeon's or proceduralist's own bill for the case, in Meditech's short wording; where that bill is not in the files, the hospital's own procedure line is used, and some cases have neither. To see the individual patients behind a number, run the report in Meditech; DocDock keeps totals only.</p>`;
   openModal({ title: `${name || rec.label + ', all providers'}: procedures their patients went on to`, wide: true, body });
+}
+/* Everything behind the detail window as a workbook: summary, by procedure, by who did it, and every stored row. */
+async function exportPathExcel(name) {
+  const rec = finCurrentDept(); if (!rec) return;
+  try { if (!window.XLSX) await loadScript('lib/xlsx.full.min.js'); } catch { toast('The spreadsheet library (lib/xlsx.full.min.js) is missing from the web folder.', 'err'); return; }
+  const meta = pwMeta(), win = pwWindow(), mine = pwRecords().filter((r) => r.dept === rec.code), recs = name ? mine.filter((r) => !r.all && r.provider === name) : mine.filter((r) => r.all), s = pwSum(recs, win);
+  const who = name || `${rec.label}, all providers (each case once)`, r0 = (v) => Math.round(v), plain = (h) => String(h).replace(/<[^>]+>/g, '');
+  const sheet = (rows, widths) => { const ws = XLSX.utils.aoa_to_sheet(rows); ws['!cols'] = widths.map((w) => ({ wch: w })); return ws; };
+  const wb = XLSX.utils.book_new();
+  XLSX.utils.book_append_sheet(wb, sheet([
+    ['Procedures their patients went on to'], [who], [`Clinic: ${rec.label}`], [`Window: a clinic service in the ${win} days before the procedure`], [meta ? `Trace covers ${plain(pwCoverage(meta))}` : ''], [`Exported ${fmtDate(todayISO())} from DocDock`], [],
+    ['', 'Cases', 'Facility charges', 'Per case'],
+    ['All cases', s.n, r0(s.ch), s.n ? r0(s.ch / s.n) : ''],
+    ...PW_GROUPS.map(([k, l]) => [l, s.byGroup[k].n, r0(s.byGroup[k].ch), s.byGroup[k].n ? r0(s.byGroup[k].ch / s.byGroup[k].n) : '']), [],
+    ['Days from the last visit to the procedure (all cases up to 180 days)', 'Cases', 'Facility charges'], ...s.byBucket.map((o, i) => [`${[0, 31, 61, 91][i]} to ${PW_BUCKETS[i]} days`, o.n, r0(o.ch)]),
+  ], [62, 12, 18, 14]), 'Summary');
+  XLSX.utils.book_append_sheet(wb, sheet([['Procedure', 'Code', 'Type', 'Cases', 'Facility charges', 'Per case', 'Mostly done by'], ...Object.values(s.byProc).sort((x, y) => y.ch - x.ch).map((q) => { const top = Object.entries(q.atts).sort((x, y) => y[1] - x[1])[0]; return [q.code ? pwProcName(q.code) || 'No description in the report' : 'Not named in the report', q.code, PW_TYPES[q.T] || q.T, q.n, r0(q.ch), q.n ? r0(q.ch / q.n) : '', top ? pwAttName(top[0]) : '']; })], [44, 9, 24, 8, 16, 12, 26]), 'By procedure');
+  XLSX.utils.book_append_sheet(wb, sheet([['Done by', 'Procedure', 'Code', 'Type', 'Cases', 'Facility charges', 'Per case'], ...Object.values(s.byAtt).sort((x, y) => y.ch - x.ch).flatMap((a) => Object.values(a.procs).sort((x, y) => y.ch - x.ch).map((q) => [pwAttName(a.att), q.code ? pwProcName(q.code) || 'No description in the report' : 'Not named in the report', q.code, PW_TYPES[q.T] || q.T, q.n, r0(q.ch), q.n ? r0(q.ch / q.n) : '']))], [26, 44, 9, 24, 8, 16, 12]), 'Done by and procedure');
+  XLSX.utils.book_append_sheet(wb, sheet([['Month', 'Cases', 'Facility charges'], ...Object.keys(s.byMonth).sort().map((m) => [fmtMonth(m), s.byMonth[m].n, r0(s.byMonth[m].ch)])], [14, 8, 16]), 'By month');
+  const detail = [['Clinic provider', 'Clinic', 'Month of procedure', 'Done by', 'Type', 'Code', 'Procedure', 'Days from last visit', 'Within the window chosen', 'Cases', 'Facility charges']];
+  recs.slice().sort((a, b) => (a.pm < b.pm ? -1 : a.pm > b.pm ? 1 : 0)).forEach((r) => Object.entries(r.x || {}).forEach(([xk, v]) => { const k = pwKey(xk); for (let b = 0; b < 4; b++) { const n = v[b * 2] || 0, ch = v[b * 2 + 1] || 0; if (!n && !ch) continue; detail.push([r.all ? 'All providers (each case once)' : r.provider, r.loc || rec.label, fmtMonth(r.pm), pwAttName(k.att), PW_TYPES[k.T] || k.T, k.code, k.code ? pwProcName(k.code) : 'Not named in the report', `${[0, 31, 61, 91][b]} to ${PW_BUCKETS[b]}`, PW_BUCKETS[b] <= win ? 'Yes' : 'No', n, ch]); } }));
+  XLSX.utils.book_append_sheet(wb, sheet(detail, [30, 26, 16, 26, 22, 9, 44, 18, 20, 8, 16]), 'All rows');
+  XLSX.utils.book_append_sheet(wb, sheet([['How to read this'], [plain(pwCaveat(meta, win))], ['Each row is a count of cases, not a patient. DocDock stores no patient names or account numbers.'], ['The All rows sheet holds every stored row up to 180 days; the other sheets use the window chosen on screen.']], [140]), 'About');
+  XLSX.writeFile(wb, `procedures-followed-${chgSlug(name || rec.label)}-${todayISO()}.xlsx`);
 }
 /* The Provider billing view: every clinic side by side, and which proceduralists their patients reach. */
 function viewBillingPath(actions, filterCard) {
@@ -6160,6 +6204,7 @@ const actions = {
   'pw-win': (el) => { ui.pw.win = +el.dataset.v; const y = window.scrollY; rerender(); window.scrollTo(0, y); },
   'pw-detail': (el) => openPathModal(el.dataset.prov || ''),
   'pw-clear': () => clearPathways(),
+  'pw-xlsx': (el) => exportPathExcel(el.dataset.prov || ''),
   'pw-goto': (el, e) => { if (e) e.preventDefault(); ui.bl.view = 'path'; if (location.hash === '#/reports/billing') rerender(); else location.hash = '#/reports/billing'; },
   'export-chg': () => exportCharges(),
   'fin-group': (el) => { ui.fin.group = el.dataset.v; rerender(); },
