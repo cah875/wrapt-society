@@ -1262,6 +1262,7 @@ const ui = {
   fin: { group: 'clinic', period: 'ytd', sort: 'ebitda', dir: 1, pl: 'cy', open: {}, what: {}, showHosp: false, cost: 'finance', cmp: 'bu', code: {}, pay: null },
   bl: { loc: '', prov: '', month: '', sort: 'w', dir: -1, showAll: false, view: 'prof' },
   pw: { win: 90 },
+  ph: { tab: 'rel' },
   tidy: { field: 'specialty', from: '', into: '' },
   year: new Date().getFullYear(),
 };
@@ -1724,6 +1725,133 @@ function saveClinicFromForm(form, id) {
 }
 
 /* ===================== View: Physician detail ===================== */
+/* ---------- physician profile: three tabs, a scorecard that reads at a glance, and a provider profit and loss ---------- */
+const PH_TABS = [['rel', 'Relationship'], ['score', 'Scorecard'], ['pl', 'Profit and loss']];
+function phTab() { return PH_TABS.some((t) => t[0] === ui.ph.tab) ? ui.ph.tab : 'rel'; }
+function phTabsHTML() { const t = phTab(); return `<div class="toggle no-print" role="tablist" aria-label="Sections of this profile" style="margin:14px 0 0;flex-wrap:wrap">${PH_TABS.map(([k, l]) => `<button role="tab" aria-selected="${t === k}" class="${t === k ? 'on' : ''}" data-act="ph-tab" data-v="${k}">${l}</button>`).join('')}</div>`; }
+/* The cards that used to sit under the contact details: encounters, surgical volume, imaging, billing. */
+function physActivityCardsHTML(p) {
+  return (p.nwsh ? `<section class="card">
+          <div class="card-head"><h2>Encounters &amp; procedures</h2>${nwshBadge(p)}</div>
+          <div class="kpis" style="grid-template-columns:repeat(auto-fit,minmax(120px,1fr));margin-bottom:12px">
+            <div class="kpi"><div class="label">Procedure cases 2026</div><div class="value">${fmtNum(p.nwsh.procedures2026)}</div><span class="small muted">${fmtNum(p.nwsh.procedures2025)} in 2025</span></div>
+            <div class="kpi"><div class="label">Encounters 2026</div><div class="value">${fmtNum(p.nwsh.encounters2026)}</div><span class="small muted">${fmtNum(p.nwsh.encounters2025)} in 2025</span></div>
+            <div class="kpi"><div class="label">Clinic visits 2026</div><div class="value">${fmtNum(p.nwsh.clinicVisits2026)}</div></div>
+            <div class="kpi ${p.nwsh.lastSeen && daysBetween(p.nwsh.lastSeen, todayISO()) > 90 ? 'red' : ''}"><div class="label">Last seen at NWSH</div><div class="value" style="font-size:20px">${p.nwsh.lastSeen ? fmtDate(p.nwsh.lastSeen) : '—'}</div>${p.nwsh.lastSeen ? `<span class="small muted">${daysBetween(p.nwsh.lastSeen, todayISO())} days ago</span>` : ''}</div>
+          </div>
+          <dl class="dl">
+            <dt>Role</dt><dd>${orDash(p.nwsh.role)}</dd>
+            <dt>Primary service line</dt><dd>${orDash(p.nwsh.serviceLine)}</dd>
+            <dt>Service lines</dt><dd>${orDash(p.nwsh.serviceLines)}</dd>
+            <dt>Clinics (visits)</dt><dd>${orDash(p.nwsh.clinics)}</dd>
+          </dl>
+          <p class="help" style="margin:10px 0 0">Source: ${esc(p.nwsh.source)}. Encounters minus procedure cases are loaded as the "ancillary actual" below.</p>
+        </section>` : '') + physicianVolumeCardHTML(p) + physicianImagingCardHTML(p) + physicianBillingCardHTML(p);
+}
+/* The provider's own billing lines, wherever the physician record was matched to them. */
+function physBilling(p) { return chgRecords().filter((r) => r.physicianId === p.id && !chgIsFac(r)); }
+function physScorecardHTML(p) {
+  const tiles = [], add = (l, v, sub, tone) => tiles.push(`<div class="kpi ${tone === 'bad' ? 'red' : tone === 'good' ? 'green' : ''}"><div class="label">${l}</div><div class="value" style="font-size:26px">${v}</div><span class="small">${sub || ''}</span></div>`);
+  const chg = (d, word) => (d === null || !Number.isFinite(d) || Math.abs(d) < 0.5 ? '' : `<b class="${volCls(d)}">${d > 0 ? '▲' : d < 0 ? '▼' : ''} ${Math.abs(Math.round(d))}%</b> ${word}`);
+  // surgical and procedure cases, this year against the same weeks last year
+  const vr = volForPhysician(p), asOf = volAsOf();
+  if (vr && asOf) { const { years, w } = volAgg(vr, null), latest = asOf.year, prior = years.filter((y) => y < latest).slice(-1)[0], ytd = (y) => (w[y] ? w[y].slice(0, asOf.week).reduce((s, a) => s + a[0], 0) : 0), c = ytd(latest), pc = prior ? ytd(prior) : 0;
+    if (c || pc) add(`Procedure cases, ${latest} so far`, volInt(c), pc ? `${chg((c - pc) / pc * 100, `against ${volInt(pc)} by this point in ${prior}`)}` : 'no cases in the year before', pc && c < pc * 0.9 ? 'bad' : pc && c > pc * 1.1 ? 'good' : ''); }
+  // work billed
+  const recs = physBilling(p), months = chgMainMonths(recs);
+  if (months.length) { const s = chgSum(recs.filter((r) => months.includes(r.period))), n = months.length, last = months[n - 1], prev = months[n - 2], sl = chgSum(recs.filter((r) => r.period === last)), sp = prev ? chgSum(recs.filter((r) => r.period === prev)) : null;
+    add('Work RVUs a month', volInt(s.w / n), `${volInt(s.enc / n)} encounters a month · ${s.enc ? (s.w / s.enc).toFixed(2) : '—'} per encounter${sp && sp.w ? `<br>${chg((sl.w - sp.w) / sp.w * 100, `${fmtMonth(last)} against ${fmtMonth(prev)}`)}` : ''}`);
+    const u = (c, x) => (x.cpt[c] ? x.cpt[c][1] : 0), est = EM_EST.reduce((t, c) => t + u(c, s), 0);
+    if (est >= 30) { const nw = chgSum(chgRecords().filter((r) => !r.src && !chgIsFac(r))), nEst = EM_EST.reduce((t, c) => t + u(c, nw), 0), l4 = (u('99214', s) + u('99215', s)) / est * 100, n4 = nEst ? (u('99214', nw) + u('99215', nw)) / nEst * 100 : null;
+      add('Established visits coded level 4 or 5', `${Math.round(l4)}%`, n4 !== null ? `all NWSH clinics: ${Math.round(n4)}%` : '', n4 !== null && l4 < n4 - 10 ? 'bad' : ''); } }
+  // hospital charges on their own cases
+  const fac = chgRecords().filter((r) => chgIsFac(r) && r.attPhysicianId === p.id);
+  if (fac.length) { const fs = chgSum(fac), fm = [...new Set(fac.map((r) => r.period))].sort(); add('Hospital charges with them as attending', finShort(fs.ch), `their own cases and imaging they ordered · ${volInt(fs.enc)} accounts · ${fmtMonth(fm[0])}${fm.length > 1 ? ' to ' + fmtMonth(fm[fm.length - 1]) : ''} · list price`); }
+  // imaging ordered
+  const ir = imgForPhysician(p), im = imgMonths();
+  if (ir && im.length) { const saved = { mods: ui.im.mods, sites: ui.im.sites }; ui.im.mods = {}; ui.im.sites = {}; const asOfI = (imgMeta() || {}).asOf || '', full = asOfI && +asOfI.slice(8, 10) < 25 && im[im.length - 1] === asOfI.slice(0, 7) ? im.slice(0, -1) : im, m12 = im.slice(-12), l3 = full.slice(-3), p3 = full.slice(Math.max(0, full.length - 6), full.length - 3), s = imgSum([ir], m12), a = imgSum([ir], l3), b = p3.length === 3 ? imgSum([ir], p3) : null; ui.im.mods = saved.mods; ui.im.sites = saved.sites;
+    if (s.n) add('Imaging exams ordered at NWSH', volInt(s.n), `${fmtMonth(m12[0])} to ${fmtMonth(m12[m12.length - 1])}${b && b.n ? `<br>${chg((a.n - b.n) / b.n * 100, 'last 3 full months against the 3 before')}` : ''}`, b && b.n && a.n < b.n * 0.8 ? 'bad' : ''); }
+  // procedures their patients went on to
+  const pw = pwRecords().filter((r) => !r.all && r.physicianId === p.id);
+  if (pw.length) { const s = pwSum(pw, 90); if (s.n) add('Procedures their patients went on to', volInt(s.n), `${finShort(s.ch)} of hospital charges · within 90 days of a visit · ${volInt(s.byGroup.surg.n)} surgery, ${volInt(s.byGroup.endo.n)} endoscopy`); }
+  // referrals
+  const rs = refsForPhysician(p.id);
+  if (rs.length) { const range = { from: addDays(todayISO(), -364), to: todayISO() }, m = refMetrics(rs, range), legs = rs.flatMap((r) => r.legs), sent = legs.filter((l) => l.from && l.from.physicianId === p.id && inRange(l.sentDate, range)).length, got = legs.filter((l) => l.to && l.to.physicianId === p.id && inRange(l.sentDate, range)).length;
+    add('Referrals, last 12 months', `${volInt(sent)} sent · ${volInt(got)} received`, m.stale ? `<b class="vol-down">${volInt(m.stale)} stale</b> · ${volInt(m.inProcess)} in process` : `${volInt(m.inProcess)} in process · none stale`, m.stale ? 'bad' : ''); }
+  const cards = physActivityCardsHTML(p);
+  if (!tiles.length && !cards.trim()) return `<section class="card empty" style="margin-top:18px"><p style="margin:0 0 8px;font-size:17px"><b>No activity is loaded for this provider yet.</b></p><p class="muted" style="max-width:640px;margin:0 auto">The scorecard fills in from the surgical volume, imaging, provider RVU and referral reports once this provider appears in them.</p></section>`;
+  return `${tiles.length ? `<div class="kpis" style="margin-top:18px;grid-template-columns:repeat(auto-fit,minmax(240px,1fr))">${tiles.join('')}</div>
+    <p class="help" style="margin:8px 4px 0">Red marks a figure that is down by more than a tenth, visit coding more than ten points under the NWSH average, or referrals gone stale. ${vr ? 'On-time starts, block use, idle time and opportunity are measured from the operating room schedule in the main dashboard and are not loaded into DocDock.' : ''}</p>` : ''}
+    ${cards.trim() ? `<div class="cgrid" style="display:grid;grid-template-columns:repeat(auto-fit,minmax(min(460px,100%),1fr));gap:18px;margin-top:18px;align-items:start">${cards}</div>` : ''}`;
+}
+/* A provider's share of each clinic they bill in, for the months that have both a statement and an RVU report.
+   Revenue follows their share of the clinic's charges, their pay follows work RVUs within their type, everything else follows encounters. */
+function physPL(p) {
+  const mine = physBilling(p).filter((r) => r.dept && finDept(r.dept) && finGroupOf(r.dept) === 'clinic'), out = [];
+  [...new Set(mine.map((r) => r.dept))].forEach((code) => {
+    const rec = finDept(code), per = finPeriod(rec, 'ytd'), d = finPayData(rec, per); if (!d) return;
+    const bset = new Set(d.basis), nb = Math.max(1, d.basis.length), all = chgRecords().filter((r) => r.dept === code && !chgIsFac(r) && bset.has(r.period)), me = all.filter((r) => r.physicianId === p.id); if (!me.length) return;
+    const tot = (rs, k) => rs.reduce((s, r) => s + r[k], 0) / nb, sh = (a, b) => (b ? a / b : 0);
+    const name = me[0].provider, g = payGroupOf(chgProviderParts(name).cred), grp = d.groups.find((x) => x.k === g);
+    const shCh = sh(tot(me, 'ch'), tot(all, 'ch')), shEnc = sh(tot(me, 'enc'), tot(all, 'enc')), w = tot(me, 'w'), shW = grp ? sh(w, grp.w) : 0;
+    const rev = d.revMo * shCh, pay = grp ? grp.pay * shW : 0, sup = d.supUnit * d.visMo * shEnc, over = d.overMo * shEnc;
+    out.push({ rec, d, per, name, g, grp, enc: tot(me, 'enc'), w, shCh, shEnc, shW, rev, pay, sup, over, res: rev - pay - sup - over });
+  });
+  return out;
+}
+function physPLHTML(p) {
+  const rows = physPL(p), fac = chgRecords().filter((r) => chgIsFac(r) && r.attPhysicianId === p.id), fs = chgSum(fac), pw = pwRecords().filter((r) => !r.all && r.physicianId === p.id), ps = pwSum(pw, 90);
+  const outside = fs.ch || ps.n ? `<section class="card" style="margin-top:18px"><div class="card-head"><h2>Not in this result</h2><span class="hint">the hospital side of this provider's work</span></div>
+      <div class="kpis" style="grid-template-columns:repeat(auto-fit,minmax(260px,1fr))">
+        ${fs.ch ? `<div class="kpi"><div class="label">Hospital charges on their own cases</div><div class="value" style="font-size:24px">${finShort(fs.ch)}</div><span class="small">${volInt(fs.enc)} cases where they are the attending · list price, not payment</span></div>` : ''}
+        ${ps.n ? `<div class="kpi"><div class="label">Procedures their clinic patients went on to</div><div class="value" style="font-size:24px">${finShort(ps.ch)}</div><span class="small">${volInt(ps.n)} cases within 90 days of a visit · list price, done by others</span></div>` : ''}
+      </div>
+      <p class="help" style="margin:10px 0 0">These are charges at list price booked to the operating room, endoscopy, imaging and procedure departments. What the hospital was paid for them, and what the implants, supplies and room time cost, is in the main dashboard by case and is not loaded into DocDock, so no hospital profit is shown here.</p></section>` : '';
+  if (!rows.length) return `<section class="card empty" style="margin-top:18px"><p style="margin:0 0 8px;font-size:17px"><b>A profit and loss cannot be worked out for this provider yet.</b></p>
+      <p class="muted" style="max-width:680px;margin:0 auto">It needs two things that cover the same months: the operating statement for a clinic this provider works in, and the provider RVU report showing their billing there. ${physBilling(p).length ? 'Their billing is loaded; the clinic statement for those locations is not, or it has no provider pay on it.' : 'No billing is loaded under this provider.'}</p></section>${outside}`;
+  const T = rows.reduce((t, x) => { ['rev', 'pay', 'sup', 'over', 'res', 'enc', 'w'].forEach((k) => { t[k] += x[k]; }); return t; }, { rev: 0, pay: 0, sup: 0, over: 0, res: 0, enc: 0, w: 0 });
+  const typeWord = { phys: 'physician', np: 'nurse practitioner', pa: 'physician assistant' };
+  const noPay = T.pay < 1, before = noPay ? ' before provider pay' : '';
+  const cost = T.pay + T.sup + T.over, one = rows.length === 1, x0 = rows[0], pctOf = (v) => `${Math.round(v * 100)}%`;
+  const mLabel = (ms) => (ms.length ? (ms.length === 1 ? fmtMonth(ms[0]) : `${fmtMonth(ms[0])} to ${fmtMonth(ms[ms.length - 1])}`) : '');
+  const line = (label, sub, v, how, cls) => `<tr class="${cls || ''}"><td><b>${label}</b>${sub ? `<div class="sub">${sub}</div>` : ''}</td><td class="num">${finMoney(v)}</td><td class="num">${finMoney(v * 12)}</td><td class="num">${T.enc ? finMoney(v / T.enc) : '—'}</td><td style="white-space:normal;min-width:220px">${how}</td></tr>`;
+  const share = (k) => (one ? pctOf(x0[k]) : rows.map((x) => `${pctOf(x[k])} of ${esc(x.rec.label)}`).join(', '));
+  return `<p style="margin:18px 0 12px;font-size:17px;line-height:1.5">On the assumptions listed below, ${esc(x0.name)}'s clinic work at ${rows.map((x) => esc(x.rec.label)).join(' and ')} ${T.res < 0 ? 'loses' : 'earns'} about <b class="${volCls(T.res)}">${finShort(Math.abs(T.res))} a month</b>${before} (${finShort(Math.abs(T.res) * 12)} a year): <b>${finShort(T.rev)}</b> of net revenue against <b>${finShort(cost)}</b> of cost.</p>
+    ${noPay ? `<div class="notice info" style="margin:0 0 14px">${ico('i-info')}<div><b>This provider's pay is not on the clinic's statement.</b> The statement for ${rows.map((x) => esc(x.rec.label)).join(' and ')} carries no ${x0.grp ? typeWord[x0.g] : 'provider'} salary, so it is paid from another department or under a contract. The result below is before that pay and is not a profit.</div></div>` : ''}
+    <div class="kpis" style="grid-template-columns:repeat(auto-fit,minmax(200px,1fr))">
+      <div class="kpi"><div class="label">Net revenue a month</div><div class="value" style="font-size:26px">${finShort(T.rev)}</div><span class="small">${T.enc ? finMoney(T.rev / T.enc) + ' per encounter' : ''}</span></div>
+      <div class="kpi"><div class="label">Cost a month</div><div class="value" style="font-size:26px">${finShort(cost)}</div><span class="small">${T.enc ? finMoney(cost / T.enc) + ' per encounter' : ''}</span></div>
+      <div class="kpi ${T.res < 0 ? 'red' : 'green'}"><div class="label">Result a month${before}</div><div class="value" style="font-size:26px"><span class="${volCls(T.res)}">${finShort(T.res)}</span></div><span class="small">${T.enc ? finMoney(T.res / T.enc) + ' per encounter' : ''} · ${T.rev ? pctOf(T.res / T.rev) + ' of net revenue' : ''}</span></div>
+      <div class="kpi"><div class="label">Volume a month</div><div class="value" style="font-size:26px">${volInt(T.enc)}</div><span class="small">encounters · ${volInt(T.w)} work RVUs</span></div>
+    </div>
+    <section class="card" style="margin-top:18px">
+      <div class="card-head"><h2>Profit and loss, clinic work</h2><span class="hint">monthly average · ${rows.map((x) => `${esc(x.rec.label)}: ${esc(mLabel(x.d.basis))}`).join(' · ')}</span></div>
+      <div class="table-wrap"><table class="breakdown">
+        <thead><tr><th>Line</th><th class="num">A month</th><th class="num">A year at this pace</th><th class="num">Per encounter</th><th>How this provider's share is set</th></tr></thead>
+        <tbody>
+          ${line('Net revenue', 'what the clinic expects to be paid', T.rev, `${share('shCh')} of the clinic's charges were billed under this provider, so that share of the clinic's net revenue.`)}
+          ${line('Provider pay', x0.grp ? `share of the clinic's ${typeWord[x0.g]} salary line` : 'not on a provider salary line', -T.pay, x0.grp ? `${share('shW')} of the work RVUs billed by ${typeWord[x0.g]}s here, so that share of the ${typeWord[x0.g]} salary line. Not this person's actual pay.` : 'This provider type is paid from staff cost on the statement, so their pay sits in the overhead line below.')}
+          ${line('Supplies and per-visit costs', 'medical supplies, drugs, lab', -T.sup, `${share('shEnc')} of the clinic's encounters.`)}
+          ${line('Staff, benefits, rent and overhead', 'support staff, all benefits, rent, purchased services', -T.over, `${share('shEnc')} of the clinic's encounters.`)}
+          <tr class="total-row"><td><b>Result${before}</b></td><td class="num ${volCls(T.res)}"><b>${finMoney(T.res)}</b></td><td class="num ${volCls(T.res)}"><b>${finMoney(T.res * 12)}</b></td><td class="num ${volCls(T.res)}"><b>${T.enc ? finMoney(T.res / T.enc) : '—'}</b></td><td></td></tr>
+        </tbody></table></div>
+      ${one ? '' : `<h3 style="margin:18px 0 8px">By clinic</h3><div class="table-wrap"><table class="breakdown tight"><thead><tr><th>Clinic</th><th class="num">Encounters a month</th><th class="num">Net revenue</th><th class="num">Cost</th><th class="num">Result a month</th></tr></thead>
+        <tbody>${rows.map((x) => `<tr><td><a href="#/reports/clinics/${encodeURIComponent(x.rec.code)}"><b>${esc(x.rec.label)}</b></a></td><td class="num">${volInt(x.enc)}</td><td class="num">${finMoney(x.rev)}</td><td class="num">${finMoney(x.pay + x.sup + x.over)}</td><td class="num ${volCls(x.res)}"><b>${finMoney(x.res)}</b></td></tr>`).join('')}</tbody></table></div>`}
+    </section>
+    <section class="card" style="margin-top:18px">
+      <div class="card-head"><h2>How this is worked out</h2><span class="hint">an estimate built from clinic totals, not a ledger kept by provider</span></div>
+      <ol style="margin:0;padding-left:22px;line-height:1.6;font-size:15.5px">
+        <li><b>Nothing is recorded by provider on the operating statement.</b> Finance reports each clinic as a whole. Every line here is the clinic's figure split between its providers by a stated rule.</li>
+        <li><b>Net revenue follows charges.</b> The clinic's net revenue is shared out by each provider's share of the clinic's charges. A provider whose patients have better-paying insurance than the clinic average earns more than shown, and the reverse.</li>
+        <li><b>Provider pay follows work RVUs within the provider type.</b> The statement has one salary total each for physicians, nurse practitioners and physician assistants. It is shared by work RVUs billed here. A provider paid more or less than that share will differ from this figure.</li>
+        <li><b>Everything else follows encounters.</b> Supplies, support staff, benefits, rent and overhead are shared by number of encounters, so a provider who sees more patients carries more of them.</li>
+        <li><b>The months are those that have both a statement and an RVU report</b> (${rows.map((x) => `${esc(x.rec.label)}: ${esc(mLabel(x.d.basis))}${x.d.overlap ? '' : ', which do not overlap the statement, so monthly averages of different months are compared'}`).join('; ')}). Figures are monthly averages; the yearly column multiplies by twelve.</li>
+        <li><b>Only clinic work is counted.</b> Surgery, endoscopy, imaging and other hospital business this provider brings is listed separately and is not part of the result.</li>
+        <li><b>The clinic's result is shared out in full.</b> Added up over every provider in a clinic, these results come to the clinic's own result on the statement, apart from providers with no billing in the months used.</li>
+      </ol>
+    </section>
+    ${outside}`;
+}
 function viewPhysician(p) {
   const cs = contactsFor(p.id);
   const idx = stageIndex(p);
@@ -1749,8 +1877,9 @@ function viewPhysician(p) {
           ${isAdmin() ? `<button class="btn danger" data-act="delete-physician" data-id="${p.id}">${ico('i-trash')}Delete</button>` : ''}
         </div>
       </div>
+      ${phTabsHTML()}
     </section>
-
+    ${phTab() === 'score' ? physScorecardHTML(p) : phTab() === 'pl' ? physPLHTML(p) : `
     <section class="card">
       <div class="card-head"><h2>Status tracker</h2><span class="hint">${esc(STAGES[idx].desc)}</span></div>
       <div class="steps">
@@ -1832,22 +1961,7 @@ function viewPhysician(p) {
             <p class="help" style="margin:10px 0 0"><a href="#/referrals" data-act="ref-phys-link" data-id="${p.id}">See this physician's referrals</a> · <a href="#/reports">Open the reports</a></p>`;
           })()}
         </section>
-        ${(() => { const cards = (p.nwsh ? `<section class="card">
-          <div class="card-head"><h2>Encounters &amp; procedures</h2>${nwshBadge(p)}</div>
-          <div class="kpis" style="grid-template-columns:repeat(auto-fit,minmax(120px,1fr));margin-bottom:12px">
-            <div class="kpi"><div class="label">Procedure cases 2026</div><div class="value">${fmtNum(p.nwsh.procedures2026)}</div><span class="small muted">${fmtNum(p.nwsh.procedures2025)} in 2025</span></div>
-            <div class="kpi"><div class="label">Encounters 2026</div><div class="value">${fmtNum(p.nwsh.encounters2026)}</div><span class="small muted">${fmtNum(p.nwsh.encounters2025)} in 2025</span></div>
-            <div class="kpi"><div class="label">Clinic visits 2026</div><div class="value">${fmtNum(p.nwsh.clinicVisits2026)}</div></div>
-            <div class="kpi ${p.nwsh.lastSeen && daysBetween(p.nwsh.lastSeen, todayISO()) > 90 ? 'red' : ''}"><div class="label">Last seen at NWSH</div><div class="value" style="font-size:20px">${p.nwsh.lastSeen ? fmtDate(p.nwsh.lastSeen) : '—'}</div>${p.nwsh.lastSeen ? `<span class="small muted">${daysBetween(p.nwsh.lastSeen, todayISO())} days ago</span>` : ''}</div>
-          </div>
-          <dl class="dl">
-            <dt>Role</dt><dd>${orDash(p.nwsh.role)}</dd>
-            <dt>Primary service line</dt><dd>${orDash(p.nwsh.serviceLine)}</dd>
-            <dt>Service lines</dt><dd>${orDash(p.nwsh.serviceLines)}</dd>
-            <dt>Clinics (visits)</dt><dd>${orDash(p.nwsh.clinics)}</dd>
-          </dl>
-          <p class="help" style="margin:10px 0 0">Source: ${esc(p.nwsh.source)}. Encounters minus procedure cases are loaded as the "ancillary actual" below.</p>
-        </section>` : '') + physicianVolumeCardHTML(p) + physicianImagingCardHTML(p) + physicianBillingCardHTML(p); return cards.trim() ? `<h2 class="section-title">Activity at NWSH</h2>` + cards : ''; })()}
+
       </div>
 
       <div>
@@ -1862,7 +1976,7 @@ function viewPhysician(p) {
           ${cs.length ? `<ul class="timeline">${cs.map(contactItemHTML).join('')}</ul>` : '<p class="empty">No contacts have been logged for this physician yet. Use the form above to add the first one.</p>'}
         </section>
       </div>
-    </div>`;
+    </div>`}`;
 }
 
 function goalsTableHTML(p) {
@@ -6203,6 +6317,7 @@ const actions = {
   'import-pw': () => $('#pw-input').click(),
   'pw-win': (el) => { ui.pw.win = +el.dataset.v; const y = window.scrollY; rerender(); window.scrollTo(0, y); },
   'pw-detail': (el) => openPathModal(el.dataset.prov || ''),
+  'ph-tab': (el) => { ui.ph.tab = el.dataset.v; const y = window.scrollY; rerender(); window.scrollTo(0, Math.min(y, 260)); },
   'pw-clear': () => clearPathways(),
   'pw-xlsx': (el) => exportPathExcel(el.dataset.prov || ''),
   'pw-goto': (el, e) => { if (e) e.preventDefault(); ui.bl.view = 'path'; if (location.hash === '#/reports/billing') rerender(); else location.hash = '#/reports/billing'; },

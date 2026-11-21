@@ -125,7 +125,15 @@ recovery, technical fees). Provider billing keeps them out of the provider table
 **Hospital facility charges**, by attending provider. Each clinic's financial page ends with **What this clinic's
 providers bring to the rest of the hospital**, in charges from the RVU reports: imaging they ordered at the hospital
 (MRI, CT, ultrasound, mammography), X-rays taken in the clinic (booked to Imaging) and facility charges on their
-surgery, procedure and therapy cases, none of which sit on the clinic's own statement. **Colonoscopy and GI referrals, by who sent them** (Reports, Referral tracking) counts the Meditech referral orders
+surgery, procedure and therapy cases, none of which sit on the clinic's own statement. **Physician profile tabs.** A physician's page has three tabs: **Relationship** (status, details, goals, referrals,
+tasks, contact log), **Scorecard** (headline tiles for procedure cases, work RVUs, visit coding, hospital charges,
+imaging ordered, procedures their patients went on to and referrals, each against its comparison, then the detail
+cards) and **Profit and loss** (the provider's share of each clinic they bill in: net revenue by share of charges,
+provider pay by share of work RVUs within their type, supplies and overhead by share of encounters, with the
+assumptions listed on the page; hospital work is shown beside it and not counted). The Clinic to procedure detail
+window names each procedure and has **Export to Excel**.
+
+**Colonoscopy and GI referrals, by who sent them** (Reports, Referral tracking) counts the Meditech referral orders
 that match a set of words (colonoscopy, gastro, endoscopy, EGD by default; anyone can change them) by referring
 provider and clinic, with how many are done, scheduled, not yet scheduled or dropped, and who they were sent to. It
 shows family medicine and urgent care providers by default and all referring providers on request. A provider's clinic
