@@ -122,7 +122,7 @@ try {
   switch ($action) {
 
     case 'ping':
-      out(['ok' => true, 'app' => APP_ID, 'mode' => 'server', 'loggedIn' => currentUser() !== null, 'appName' => $CFG['app_name'], 'idleMinutes' => idleMinutes(), 'maxFileMB' => effectiveMaxFileMB()]);
+      out(['ok' => true, 'app' => APP_ID, 'mode' => 'server', 'build' => (int)@filemtime(__DIR__ . '/index.html'), 'loggedIn' => currentUser() !== null, 'appName' => $CFG['app_name'], 'idleMinutes' => idleMinutes(), 'maxFileMB' => effectiveMaxFileMB()]);
 
     case 'login':
       if ($method !== 'POST') fail('Bad request.');
@@ -306,7 +306,7 @@ try {
     case 'version':
       requireUser();
       session_write_close();
-      out(['ok' => true, 'version' => store()->version()]);
+      out(['ok' => true, 'version' => store()->version(), 'build' => (int)@filemtime(__DIR__ . '/index.html')]);
 
     case 'load': {
       requireUser();
