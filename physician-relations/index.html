@@ -1255,7 +1255,7 @@ const ui = {
   clin: { q: '', city: '', type: '', has: '', sort: 'name', limit: 100 },
   fu: { tab: 'over', mine: false },
   ref: { tab: 'active', q: '', view: 'list', sort: 'attention', dir: 0, phys: '', role: 'any', dest: '', sender: '', from: '', to: '', cat: '', pri: '', payer: '', mstat: '', inout: '', owner: '', source: '', group: '', more: false, limit: 100, sel: new Set(), bulkOwner: '' },
-  rep: { preset: '12m', from: '', to: '', compare: 'prev', sort: 'ordered', dir: -1 },
+  rep: { preset: '12m', from: '', to: '', compare: 'prev', sort: 'ordered', dir: -1, find: undefined, findWho: 'pc', findAllRows: false },
   act: { q: '', who: '', method: '', from: '', to: '' },
   sx: { vol: '', metric: 'cases', smooth: 4, rooms: {} },
   im: { id: '', period: '6', mods: {}, sites: {}, showAll: false, rank: '' },
@@ -2343,7 +2343,8 @@ function meditechLeg(row, trackingDate) {
   const sent = (future ? (row.statusDate || row.effDate) : (row.orderStart || row.statusDate || row.effDate)) || runDate;
   const out = meditechOutcome(row);
   const l = { id: uid(), from, to, service: pri + (row.order || row.referralType) + loc, sentDate: sent, scheduledDate: '', completedDate: '', resultedDate: '', notes: '',
-    meditech: { referralType: row.referralType, priority: row.priority, authStatus: row.authStatus, orderStatus: row.orderStatus, statusDate: row.statusDate, assignedUser: row.assignedUser, payer: row.payer, authNumber: row.authNumber, referralNumber: row.referralNumber, destination: row.destination, neededBy: row.neededBy, expDate: row.expDate, trackingDate },
+    meditech: { referralType: row.referralType, priority: row.priority, authStatus: row.authStatus, orderStatus: row.orderStatus, statusDate: row.statusDate, assignedUser: row.assignedUser, payer: row.payer, authNumber: row.authNumber, referralNumber: row.referralNumber, destination: row.destination, neededBy: row.neededBy, expDate: row.expDate, trackingDate,
+      order: row.order || '', fromLoc: row.referredByLocation || '', fromGroup: row.referredByGroup || '', toLoc: row.referredToLocation || '', toGroup: row.referredToGroup || '' },
     log: [{ date: sent, by: 'Meditech', text: `Sent to ${to.label}` }] };
   if (row.statusDate && row.authStatus) l.log.push({ date: row.statusDate, by: 'Meditech', text: `Meditech status: ${row.authStatus}${row.orderStatus ? ' · order ' + row.orderStatus : ''}` });
   if (future) { l.scheduledDate = row.orderStart; l.log.push({ date: sent, by: 'Meditech', text: `Future-dated order: starts ${fmtDate(row.orderStart)}` }); }
@@ -2714,6 +2715,114 @@ function viewPatient(mrn) {
     </section>`;
 }
 
+/* ---------- referrals for a service, by who sent them (asked for first as: colonoscopy referrals from urgent care and family medicine) ---------- */
+const REF_FIND_DEFAULT = 'colonoscopy, gastro, endoscopy, EGD';
+const REF_PRIMARY_DEPTS = ['33013', '33008', '33017', '33020', '33003', '33007', '33018', '33500'];   // family medicine and urgent care
+function refFindRaw() { return ui.rep.find ?? (db.settings.refFind || REF_FIND_DEFAULT); }
+function refFindTerms() { return String(refFindRaw()).split(/[,;\n]+/).map((t) => t.trim()).filter(Boolean); }
+/* A word of four letters or more matches as the start of a word, with its ending dropped so "colonoscopy" also finds "colonoscopies".
+   A short one such as GI or EGD has to be a whole word, so it does not match inside "imaging". */
+function refTermRe(t) {
+  const esc2 = (s) => s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+  if (t.length <= 3) return new RegExp('\\b' + esc2(t) + '\\b', 'i');
+  return new RegExp(esc2(t.length > 5 ? t.replace(/(ies|y|s)$/i, '') : t), 'i');
+}
+function refOrderText(l) { const m = l.meditech; if (m && m.order) return m.order; return String(l.service || '').replace(/^(URGENT|STAT|ASAP)\s·\s/i, '').split(' · ')[0].trim(); }
+function refLegPlace(l) { const m = l.meditech || {}; if (m.toLoc) return m.toLoc; const parts = String(l.service || '').replace(/^(URGENT|STAT|ASAP)\s·\s/i, '').split(' · '); return parts.length > 1 ? parts[parts.length - 1].trim() : ''; }
+function refLabelParts(label) { const s = String(label || '').replace(/^Dr\.?\s+/i, '').split(',')[0].trim().split(/\s+/).filter(Boolean); return s.length >= 2 ? { first: s.slice(0, -1).join(' '), last: s[s.length - 1] } : null; }
+/* Which clinic a referring provider belongs to: where the worklist says the referral came from, else where the provider bills most. */
+function refClinicIndex() {
+  const acc = {}, byPhys = {}, people = [], cache = new Map();
+  chgRecords().forEach((r) => { if (chgIsFac(r) || !r.dept || finGroupOf(r.dept) !== 'clinic') return; const a = acc[r.provider] = acc[r.provider] || { name: r.provider, physicianId: '', depts: {} }; a.depts[r.dept] = (a.depts[r.dept] || 0) + r.enc; if (r.physicianId) a.physicianId = r.physicianId; });
+  Object.values(acc).forEach((a) => { a.dept = pwTop(a.depts); a.parts = chgProviderParts(a.name); if (a.physicianId) byPhys[a.physicianId] = a; people.push(a); });
+  return (l) => {
+    const f = l.from || {}, m = l.meditech || {};
+    let hit = f.physicianId ? byPhys[f.physicianId] : null;
+    if (!hit) { if (!cache.has(f.label)) { const parts = refLabelParts(f.label); cache.set(f.label, parts ? people.find((a) => samePerson(a.parts, parts)) || null : null); } hit = cache.get(f.label); }
+    const stated = m.fromLoc ? finLocDept(m.fromLoc) : '';
+    return { dept: stated && finGroupOf(stated) === 'clinic' ? stated : hit ? hit.dept : '', name: hit ? hit.name : '' };
+  };
+}
+/* Every referral leg sent in the period whose order, destination or referral type holds one of the words. */
+function refFind(range) {
+  const res = refFindTerms().map(refTermRe), clinicOf = refClinicIndex(), who = ui.rep.findWho === 'all' ? 'all' : 'pc';
+  const rows = [], orders = {}, period = [];
+  db.referrals.forEach((r) => r.legs.forEach((l) => {
+    if (!l.sentDate || !inRange(l.sentDate, range)) return;
+    const order = refOrderText(l), to = (l.to && l.to.label) || '', place = refLegPlace(l), type = (l.meditech && l.meditech.referralType) || '';
+    period.push(order);
+    if (!res.length || !res.some((re) => re.test(order) || re.test(to) || re.test(place) || re.test(type))) return;
+    const { dept, name } = clinicOf(l), st = legStage(l);
+    rows.push({ r, l, order, to, place, dept, primary: REF_PRIMARY_DEPTS.includes(dept), from: name || (l.from && l.from.label) || 'Not recorded', fromId: (l.from && l.from.physicianId) || '', stage: st === 'lost' ? 'lost' : st === 'resulted' || st === 'completed' ? 'done' : st === 'scheduled' ? 'sched' : 'open' });
+  }));
+  const shown = who === 'all' ? rows : rows.filter((x) => x.primary);
+  shown.forEach((x) => { orders[x.order] = (orders[x.order] || 0) + 1; });
+  return { rows, shown, who, orders, period, others: rows.length - rows.filter((x) => x.primary).length };
+}
+function refFindTally(list) { const t = { n: list.length, done: 0, sched: 0, open: 0, lost: 0 }; list.forEach((x) => { t[x.stage]++; }); return t; }
+/* Endoscopies the provider's patients went on to, from the clinic to procedure trace (180 days), to set beside the referrals. */
+function refFindScopes() {
+  if (!pwMeta()) return null;
+  const by = []; pwRecords().forEach((r) => { if (r.all) return; let n = 0; Object.entries(r.x || {}).forEach(([k, v]) => { if (k.slice(k.lastIndexOf('|') + 1) === 'E') for (let b = 0; b < 4; b++) n += v[b * 2] || 0; }); if (n) by.push({ id: r.physicianId || '', parts: chgProviderParts(r.provider), n }); });
+  return (fromId, label) => { const parts = refLabelParts(label); return by.reduce((s, x) => s + ((fromId && x.id === fromId) || (parts && samePerson(x.parts, parts)) ? x.n : 0), 0); };
+}
+function refFinderOutHTML(range) {
+  const f = refFind(range), terms = refFindTerms(), T = refFindTally(f.shown), scopes = refFindScopes();
+  const dash = '<span class="muted">—</span>', cnt = (v) => (v ? volInt(v) : dash), words = terms.length > 1 ? `${terms.slice(0, -1).map(esc).join(', ')} or ${esc(terms[terms.length - 1])}` : esc(terms[0] || '');
+  const whoText = f.who === 'all' ? 'all referring providers' : 'family medicine and urgent care providers';
+  if (!terms.length) return '<p class="muted" style="margin:12px 0 0">Type a word to look for, such as colonoscopy.</p>';
+  if (!f.shown.length) {
+    const common = Object.entries(f.period.reduce((o, k) => { if (k) o[k] = (o[k] || 0) + 1; return o; }, {})).sort((a, b) => b[1] - a[1]).slice(0, 14);
+    return `<p style="margin:12px 0 0;font-size:16px;line-height:1.5">${esc(range.label)}: no referral from ${whoText} has ${words} in its order, destination or referral type.${f.who === 'pc' && f.rows.length ? ` <b>${volInt(f.rows.length)}</b> from other providers do; choose All referring providers to see them.` : ''}</p>
+      ${common.length ? `<p class="help" style="margin:10px 0 6px">The most common orders in this period, in case the one you want is worded differently:</p><div>${common.map(([k, n]) => `<span class="tag" style="margin:0 6px 6px 0">${esc(k)} ${volInt(n)}</span>`).join('')}</div>` : '<p class="help" style="margin:10px 0 0">No referrals were sent in this period. Choose a longer period at the top of the page.</p>'}`;
+  }
+  const groupBy = (keyOf) => { const m = new Map(); f.shown.forEach((x) => { const k = keyOf(x); if (!m.has(k)) m.set(k, []); m.get(k).push(x); }); return [...m.entries()]; };
+  const clinicLabel = (d) => (d ? ((finDept(d) || {}).label || FIN_DEPT_LABELS[d] || d) : 'Clinic not known');
+  const byClinic = groupBy((x) => x.dept).map(([dept, list]) => ({ dept, list, t: refFindTally(list) })).sort((a, b) => b.t.n - a.t.n);
+  const byProv = groupBy((x) => x.fromId || x.from).map(([key, list]) => { const to = {}; list.forEach((x) => { const k = x.to || x.place || 'Not recorded'; to[k] = (to[k] || 0) + 1; }); const top = Object.entries(to).sort((a, b) => b[1] - a[1])[0]; const depts = {}; list.forEach((x) => { depts[x.dept] = (depts[x.dept] || 0) + 1; });
+    return { key, list, t: refFindTally(list), from: list[0].from, fromId: list[0].fromId, dept: pwTop(depts), top, nTo: Object.keys(to).length, scopes: scopes ? scopes(list[0].fromId, list[0].from) : 0 }; }).sort((a, b) => b.t.n - a.t.n || a.from.localeCompare(b.from));
+  const limit = 25, rowsShown = ui.rep.findAllRows ? byProv : byProv.slice(0, limit);
+  const pct = (a, b) => (b ? `${Math.round(a / b * 100)}%` : '—');
+  const cells = (t) => `<td class="num"><b>${volInt(t.n)}</b></td><td class="num">${cnt(t.done)}</td><td class="num">${cnt(t.sched)}</td><td class="num">${cnt(t.open)}</td><td class="num">${cnt(t.lost)}</td>`;
+  const head = '<th class="num">Referrals</th><th class="num">Done</th><th class="num">Scheduled</th><th class="num">Not yet scheduled</th><th class="num">Dropped</th>';
+  const sent = f.shown.map((x) => x.l.sentDate).sort(), orderChips = Object.entries(f.orders).sort((a, b) => b[1] - a[1]);
+  return `<p style="margin:14px 0 12px;font-size:16px;line-height:1.5">${esc(range.label)}: ${whoText} sent <b>${volInt(T.n)}</b> referral${T.n === 1 ? '' : 's'} matching ${words}: <b>${volInt(T.done)}</b> done (${pct(T.done, T.n)}), <b>${volInt(T.sched)}</b> scheduled, <b>${volInt(T.open)}</b> not yet scheduled and <b>${volInt(T.lost)}</b> dropped.${f.who === 'pc' && f.others ? ` Another ${volInt(f.others)} came from other providers.` : ''}</p>
+    ${byClinic.length > 1 ? `<div class="table-wrap" style="margin-bottom:14px"><table class="breakdown tight"><thead><tr><th>Clinic the referral came from</th>${head}<th class="num">Done so far</th></tr></thead>
+      <tbody>${byClinic.map((c) => `<tr><td>${c.dept && finDept(c.dept) ? `<a href="#/reports/clinics/${encodeURIComponent(c.dept)}"><b>${esc(clinicLabel(c.dept))}</b></a>` : `<b>${esc(clinicLabel(c.dept))}</b>`}</td>${cells(c.t)}<td class="num">${pct(c.t.done, c.t.n)}</td></tr>`).join('')}
+      <tr class="total-row"><td><b>Total</b></td>${cells(T)}<td class="num"><b>${pct(T.done, T.n)}</b></td></tr></tbody></table></div>` : ''}
+    <div class="table-wrap"><table class="breakdown bill tight"><thead><tr><th>Referring provider</th><th>Clinic</th>${head}<th style="white-space:normal">Mostly sent to</th>${scopes ? '<th class="num" style="white-space:normal">Endoscopies their patients had (trace)</th>' : ''}</tr></thead>
+      <tbody>${rowsShown.map((p) => `<tr><td>${p.fromId && getPhys(p.fromId) ? `<a href="#/physician/${p.fromId}"><b>${esc(p.from)}</b></a>` : `<b>${esc(p.from)}</b>`}<div class="no-print"><button class="btn sm link" data-act="ref-find-detail" data-key="${esc(p.key)}" style="padding-left:0">See the referrals</button></div></td><td>${esc(clinicLabel(p.dept))}</td>${cells(p.t)}<td style="white-space:normal;min-width:140px">${p.top ? `${esc(p.top[0])}${p.nTo > 1 ? ` <span class="muted">(${volInt(p.top[1])} of ${volInt(p.t.n)})</span>` : ''}` : ''}</td>${scopes ? `<td class="num">${cnt(p.scopes)}</td>` : ''}</tr>`).join('')}</tbody></table></div>
+    ${byProv.length > limit && !ui.rep.findAllRows ? `<p style="margin:10px 0 0"><button class="btn sm" data-act="ref-find-all">Show all ${byProv.length} referring providers</button></p>` : ''}
+    <p class="help" style="margin:12px 0 6px">What was counted, by the order as written in Meditech:</p>
+    <div>${orderChips.slice(0, 30).map(([k, n]) => `<span class="tag" style="margin:0 6px 6px 0">${esc(k || 'No order name')} ${volInt(n)}</span>`).join('')}${orderChips.length > 30 ? `<span class="muted small">and ${orderChips.length - 30} more</span>` : ''}</div>
+    <p class="help" style="margin:10px 0 0">These are referral orders from the Meditech worklists loaded into Referral tracking, sent ${sent.length ? `between ${esc(fmtDate(sent[0]))} and ${esc(fmtDate(sent[sent.length - 1]))}` : 'in the period'}. A referral is counted when one of the words appears in its order, in who it was sent to or in its referral type; change the words to widen or narrow it, for example add a doctor's last name. Done means Meditech shows the order completed; dropped means cancelled, denied or expired. A provider's clinic is where the worklist says the referral came from or, for referrals loaded before that was kept, where the provider bills most.${scopes ? ' The last column is not from the worklist: it is the endoscopies those providers\' patients actually had within 180 days of a visit, from the Clinic to procedure trace, and covers its own dates.' : ''} A referral loaded only once keeps the status it had that day; load the newest worklist to bring statuses up to date.</p>`;
+}
+function refFinderHTML(range) {
+  if (!db.referrals.length) return '';
+  const who = ui.rep.findWho === 'all' ? 'all' : 'pc';
+  return `<section class="card">
+      <div class="card-head"><h2 id="ref-find-title">${refFindTitle()}</h2><span class="hint">${esc(range.label)} · the period is set at the top of this page</span></div>
+      <div class="pair fbar no-print" style="display:flex;gap:14px 22px;flex-wrap:wrap;align-items:flex-end">
+        <label style="flex:1 1 320px"><span>Order or destination contains any of these words</span><input type="text" data-input="ref-find" data-change="ref-find" value="${esc(refFindRaw())}" placeholder="${esc(REF_FIND_DEFAULT)}" autocomplete="off" spellcheck="false"></label>
+        <label><span>Sent by</span><div class="toggle"><button class="${who === 'pc' ? 'on' : ''}" data-act="ref-find-who" data-v="pc">Family medicine and urgent care</button><button class="${who === 'all' ? 'on' : ''}" data-act="ref-find-who" data-v="all">All referring providers</button></div></label>
+        <button class="btn sm" id="ref-find-reset" data-act="ref-find-reset" style="align-self:flex-end" ${refFindIsDefault() ? 'hidden' : ''}>Back to colonoscopy and GI</button>
+      </div>
+      <div id="ref-find-out">${refFinderOutHTML(range)}</div>
+    </section>`;
+}
+function refFindIsDefault() { return refFindRaw().trim().toLowerCase() === REF_FIND_DEFAULT.toLowerCase(); }
+function refFindTitle() { return refFindIsDefault() ? 'Colonoscopy and GI referrals, by who sent them' : 'Referrals for a service, by who sent them'; }
+function updateRefFinder() {
+  const el = $('#ref-find-out'); if (!el) return; el.innerHTML = refFinderOutHTML(repRange());
+  const h = $('#ref-find-title'), b = $('#ref-find-reset'); if (h) h.textContent = refFindTitle(); if (b) b.hidden = refFindIsDefault();
+}
+function openRefFindModal(key) {
+  const range = repRange(), list = refFind(range).shown.filter((x) => (x.fromId || x.from) === key).sort((a, b) => (a.l.sentDate < b.l.sentDate ? 1 : -1)); if (!list.length) return;
+  const label = { done: 'Done', sched: 'Scheduled', open: 'Not yet scheduled', lost: 'Dropped' };
+  openModal({ title: `${list[0].from}: referrals found`, wide: true, body: `<p class="small muted" style="margin:0 0 10px">${esc(range.label)} · ${volInt(list.length)} referral${list.length === 1 ? '' : 's'}</p>
+    <div class="table-wrap"><table class="breakdown tight"><thead><tr><th>Sent</th><th>Patient</th><th>Order</th><th>Sent to</th><th>Where it stands</th><th></th></tr></thead>
+      <tbody>${list.map((x) => `<tr><td class="nowrap">${esc(fmtDate(x.l.sentDate))}</td><td class="nowrap">${esc(x.r.mrn || '')}${x.r.initials ? ` · ${esc(x.r.initials)}` : ''}</td><td>${esc(x.order)}</td><td>${esc(x.to || x.place)}</td><td><b>${label[x.stage]}</b><div class="sub">${esc(legStatusShort(x.l))}</div></td><td><a class="btn sm" href="#/referral/${x.r.id}" data-act="close-modal">Open</a></td></tr>`).join('')}</tbody></table></div>` });
+}
 function viewReferralReports() {
   const s = ui.rep, R = db.referrals, range = repRange(), cmp = compareRange(range);
   const now = refMetrics(R, range), before = cmp ? refMetrics(R, cmp) : null;
@@ -2769,6 +2878,7 @@ function viewReferralReports() {
       ${tile('Avg. total journey', now.avgJourney, 'avgJourney', { lowerIsBetter: true }, 'days')}
       <div class="kpi"><div class="label">In process right now</div><div class="value">${now.inProcess}</div><span class="small muted">${now.stale} stale · avg age ${now.avgAging ?? '—'} days</span></div>
     </div>
+    ${refFinderHTML(range)}
     <section class="card">
       <div class="card-head"><h2>Monthly trend</h2><span class="hint">Last ${months} months · hover a bar for the number</span></div>
       ${trendChartHTML(monthlySeries(R, months))}
@@ -5891,6 +6001,10 @@ const actions = {
   'ref-view-link': () => {},
   'ref-clear': () => { refClearFilters(); rerender(); },
   'ref-phys-link': (el) => { refClearFilters(); Object.assign(ui.ref, { view: 'list', tab: 'all', phys: el.dataset.id }); rerender(); },
+  'ref-find-who': (el) => { ui.rep.findWho = el.dataset.v; ui.rep.findAllRows = false; const y = window.scrollY; rerender(); window.scrollTo(0, y); },
+  'ref-find-all': () => { ui.rep.findAllRows = true; updateRefFinder(); },
+  'ref-find-reset': () => { ui.rep.find = undefined; ui.rep.findAllRows = false; if (db.settings.refFind) { delete db.settings.refFind; saveDB(); } const y = window.scrollY; rerender(); window.scrollTo(0, y); },
+  'ref-find-detail': (el) => openRefFindModal(el.dataset.key || ''),
   'rep-sort': (el) => { const k = el.dataset.key; ui.rep.dir = ui.rep.sort === k ? -ui.rep.dir : -1; ui.rep.sort = k; rerender(); },
   'export-rep-csv': () => exportReportCSV(),
   'add-referral': () => openAddReferral(null),
@@ -6153,6 +6267,7 @@ document.addEventListener('input', (e) => {
   if (k === 'act-q') { ui.act.q = e.target.value; updateActivityTable(); }
   if (k === 'clin-q') { ui.clin.q = e.target.value; ui.clin.limit = 100; const y = window.scrollY; $('#view').innerHTML = viewClinics(); window.scrollTo(0, y); const s = $('#clinic-search'); s.focus(); s.setSelectionRange(s.value.length, s.value.length); }
   if (k === 'fin-what') { const code = decodeURIComponent(location.hash.split('/')[3] || ''); if (!ui.fin.what || ui.fin.what.code !== code) ui.fin.what = { code }; const v = e.target.value === '' ? null : num(e.target.value); if (v === null) delete ui.fin.what[e.target.dataset.k]; else ui.fin.what[e.target.dataset.k] = v; clearTimeout(ui.fin._t); ui.fin._t = setTimeout(() => { const el = $('#fin-whatif'); const active = document.activeElement; const k = active && active.dataset ? active.dataset.k : ''; updateFinWhatIf(); if (k && el) { const again = el.querySelector(`[data-input="fin-what"][data-k="${k}"]`); if (again) { again.focus(); } } }, 350); }
+  if (k === 'ref-find') { ui.rep.find = e.target.value; ui.rep.findAllRows = false; clearTimeout(ui.rep._t); ui.rep._t = setTimeout(updateRefFinder, 250); }
   if (k === 'fin-pay') { const rec = finCurrentDept(); if (rec) { const st = finPayState(rec), t = e.target, g = t.dataset.g, tgt = g === 'add' ? st.add : (st.g[g] = st.g[g] || {}); if (t.value === '') delete tgt[t.dataset.k]; else tgt[t.dataset.k] = Math.max(0, num(t.value)); clearTimeout(ui.fin._t3); ui.fin._t3 = setTimeout(updateFinPay, 200); } }
   if (k === 'fin-code') { const st = ui.fin.code || (ui.fin.code = {}); const v = e.target.value === '' ? undefined : num(e.target.value); st[e.target.dataset.k] = v; clearTimeout(ui.fin._t2); ui.fin._t2 = setTimeout(() => { const kk = e.target.dataset.k; updateFinCoding(); const again = document.querySelector(`#fin-coding [data-input="fin-code"][data-k="${kk}"]`); if (again) again.focus(); }, 450); }
   if (k === 'ref-q') { ui.ref.q = e.target.value; clearTimeout(ui.ref._t); ui.ref._t = setTimeout(() => { const y = window.scrollY; updateRefList(); window.scrollTo(0, y); }, 180); }
@@ -6199,6 +6314,7 @@ document.addEventListener('change', (e) => {
     case 'ref-bulk-owner': ui.ref.bulkOwner = t.value; break;
     case 'phys-refs': ui.phys.refs = t.value; updatePhysTable(); break;
     case 'phys-group': ui.phys.group = t.value; updatePhysTable(); break;
+    case 'ref-find': { ui.rep.find = t.value; if ((db.settings.refFind || REF_FIND_DEFAULT) !== t.value) { db.settings.refFind = t.value; saveDB(); } updateRefFinder(); break; }   // the words are kept for everyone
     case 'rep-preset': ui.rep.preset = t.value; rerender(); break;
     case 'rep-from': ui.rep.from = t.value; rerender(); break;
     case 'rep-to': ui.rep.to = t.value; rerender(); break;

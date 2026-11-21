@@ -125,7 +125,13 @@ recovery, technical fees). Provider billing keeps them out of the provider table
 **Hospital facility charges**, by attending provider. Each clinic's financial page ends with **What this clinic's
 providers bring to the rest of the hospital**, in charges from the RVU reports: imaging they ordered at the hospital
 (MRI, CT, ultrasound, mammography), X-rays taken in the clinic (booked to Imaging) and facility charges on their
-surgery, procedure and therapy cases, none of which sit on the clinic's own statement. **Clinic to procedure** (Provider billing, third view; also a card on each
+surgery, procedure and therapy cases, none of which sit on the clinic's own statement. **Colonoscopy and GI referrals, by who sent them** (Reports, Referral tracking) counts the Meditech referral orders
+that match a set of words (colonoscopy, gastro, endoscopy, EGD by default; anyone can change them) by referring
+provider and clinic, with how many are done, scheduled, not yet scheduled or dropped, and who they were sent to. It
+shows family medicine and urgent care providers by default and all referring providers on request. A provider's clinic
+comes from the worklist's "Referred by Location" (kept from this version on) or from where the provider bills most.
+
+**Clinic to procedure** (Provider billing, third view; also a card on each
 clinic page) shows the surgeries, endoscopies, pain procedures and interventional radiology cases a clinic's patients
 went on to. The RVU report names no referring provider on a surgery account, so patients are followed instead: the
 administrator picks all the monthly RVU report files together under **Trace patients to procedures**, and the browser
