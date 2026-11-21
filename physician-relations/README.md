@@ -125,7 +125,16 @@ recovery, technical fees). Provider billing keeps them out of the provider table
 **Hospital facility charges**, by attending provider. Each clinic's financial page ends with **What this clinic's
 providers bring to the rest of the hospital**, in charges from the RVU reports: imaging they ordered at the hospital
 (MRI, CT, ultrasound, mammography), X-rays taken in the clinic (booked to Imaging) and facility charges on their
-surgery, procedure and therapy cases, none of which sit on the clinic's own statement. The Clinic financials overview opens with **What stands
+surgery, procedure and therapy cases, none of which sit on the clinic's own statement. **Clinic to procedure** (Provider billing, third view; also a card on each
+clinic page) shows the surgeries, endoscopies, pain procedures and interventional radiology cases a clinic's patients
+went on to. The RVU report names no referring provider on a surgery account, so patients are followed instead: the
+administrator picks all the monthly RVU report files together under **Trace patients to procedures**, and the browser
+links each procedure to clinic services the same patient had with another provider in the 180 days before it (30, 60,
+90 or 180 on screen). A visit is a billed service on a clinic visit account; the surgeon's and assistant's own fees
+never count, and a same-day line counts only with an office visit code. Only counts and hospital facility charges by
+clinic provider, clinic, proceduralist, type, month and time since the visit are stored: no patient names, account
+numbers, file names or payments. It shows where patients went next, not who referred them. Each run replaces the
+last; **Remove the trace** deletes it. The Clinic financials overview opens with **What stands
 out**: the largest losses, the biggest budget misses and their main cause, departments within reach of break-even,
 and what closing each clinic's visit-coding gap to the NWSH average would be worth. Months uploaded before this
 version need their RVU report uploaded again for facility charges to be tied to an attending.

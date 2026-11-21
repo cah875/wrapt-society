@@ -104,6 +104,11 @@ if ($method === 'POST') {
   if (stripos($_SERVER['CONTENT_TYPE'] ?? '', 'application/json') !== false) $body = json_decode((string)file_get_contents('php://input'), true) ?: [];
   else $body = $_POST;
 }
+/* When the page was last replaced, so an open tab can tell it is out of date. 0 when it cannot be read; it must never
+   fail, because the error handler above turns even a suppressed warning into an exception and every tab calls this. */
+function buildStamp(): int {
+  try { $f = __DIR__ . '/index.html'; return is_file($f) ? (int)filemtime($f) : 0; } catch (Throwable $e) { return 0; }
+}
 $validId = fn($id) => is_string($id) && preg_match('/^[A-Za-z0-9_-]{1,64}$/', $id) === 1;
 /* The hosting's own PHP limits (upload_max_filesize / post_max_size) cap attachments regardless of
    config.php. .user.ini next to this file raises them; this reports whichever limit is lowest. */
@@ -122,7 +127,7 @@ try {
   switch ($action) {
 
     case 'ping':
-      out(['ok' => true, 'app' => APP_ID, 'mode' => 'server', 'build' => (int)@filemtime(__DIR__ . '/index.html'), 'loggedIn' => currentUser() !== null, 'appName' => $CFG['app_name'], 'idleMinutes' => idleMinutes(), 'maxFileMB' => effectiveMaxFileMB()]);
+      out(['ok' => true, 'app' => APP_ID, 'mode' => 'server', 'build' => buildStamp(), 'loggedIn' => currentUser() !== null, 'appName' => $CFG['app_name'], 'idleMinutes' => idleMinutes(), 'maxFileMB' => effectiveMaxFileMB()]);
 
     case 'login':
       if ($method !== 'POST') fail('Bad request.');
@@ -306,7 +311,7 @@ try {
     case 'version':
       requireUser();
       session_write_close();
-      out(['ok' => true, 'version' => store()->version(), 'build' => (int)@filemtime(__DIR__ . '/index.html')]);
+      out(['ok' => true, 'version' => store()->version(), 'build' => buildStamp()]);
 
     case 'load': {
       requireUser();

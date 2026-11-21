@@ -711,7 +711,7 @@ async function api(action, body) {
   }
   const r = await fetch(`${API}?action=${encodeURIComponent(action)}`, init);
   const j = await r.json().catch(() => null);
-  if (!j) throw new Error('The server did not answer correctly.');
+  if (!j) { const e = new Error('The server did not answer correctly.'); e.status = r.status; throw e; }
   if (r.status === 401 && session) { logout('Your session ended. Please sign in again.'); }
   if (!r.ok || j.ok === false) { const e = new Error(j.error || 'Request failed'); e.status = r.status; throw e; }
   return j;
@@ -824,7 +824,7 @@ function diffOps(d) {
   snapshot = next;
   return ops;
 }
-let pushFails = 0, pushRetry = null;
+let pushFails = 0, pushRetry = null, importBusy = 0, seenBuild = 0;
 window.addEventListener('beforeunload', (e) => { if (MODE === 'server' && session && (pendingOps.length || pushing)) { e.preventDefault(); e.returnValue = ''; } });
 async function pushOps() {
   if (pushing) return pushing;
@@ -838,11 +838,14 @@ async function pushOps() {
       } catch (e) {
         pendingOps.unshift(...batch);
         setSaveState('error');
-        /* a dropped connection or a server hiccup is tried again; a request the server rejects is not, it would only fail again */
-        if (!e.status || e.status >= 500) { clearTimeout(pushRetry); pushRetry = setTimeout(pushOps, 15000); }
+        /* a dropped connection or a server hiccup is tried again, waiting longer each time (15 s up to 5 min);
+           a request the server refuses (4xx) is not, it would only be refused again */
+        const refused = e.status >= 400 && e.status < 500;
+        clearTimeout(pushRetry); pushRetry = refused ? null : setTimeout(pushOps, Math.min(300000, 15000 * 2 ** Math.min(pushFails, 5)));
+        setSaveState(refused ? 'refused' : 'error');
         if (pushFails++) break;
         const newCols = batch.some((o) => o.collection === 'financials' || o.collection === 'charges');
-        toast(newCols && /bad request/i.test(e.message || '') ? 'The server could not store clinic financials or provider billing. Upload lib.php and api.php from the latest site zip to the web folder, then try again.' : 'Could not save to the server: ' + e.message + ' — your change is kept and will be retried.', 'err');
+        toast(newCols && /bad request/i.test(e.message || '') ? 'The server could not store clinic financials or provider billing. Upload lib.php and api.php from the latest site zip to the web folder, then try again.' : refused ? 'The server refused this change: ' + e.message + ' It is kept in this tab but will not be sent again by itself. Tell the administrator.' : 'Could not save to the server: ' + e.message + ' — your change is kept and will be retried.', 'err');
         break;
       }
     }
@@ -854,9 +857,10 @@ function setSaveState(state) {
   clearTimeout(el._t);
   el.hidden = MODE !== 'server';
   if (state === 'saved') el._t = setTimeout(() => { el.hidden = true; }, 1500);
-  el.className = 'save-state ' + state;
-  el.textContent = state === 'saving' ? 'Saving…' : state === 'error' ? 'Not saved' : 'Saved';
-  el.title = state === 'error' ? 'The last change could not be saved to the server. It will be retried automatically.' : 'All changes are saved in the shared database';
+  const bad = state === 'error' || state === 'refused';
+  el.className = 'save-state ' + (bad ? 'error' : state);
+  el.textContent = state === 'saving' ? 'Saving…' : bad ? 'Not saved' : 'Saved';
+  el.title = state === 'refused' ? 'The server refused the last change. It is kept in this tab but is not being sent again. Tell the administrator.' : state === 'error' ? 'The last change could not be saved to the server. It will be retried automatically.' : 'All changes are saved in the shared database';
 }
 
 function saveDB() {
@@ -864,7 +868,7 @@ function saveDB() {
   db.meta.updatedAt = nowISO();
   if (MODE === 'server') {
     const ops = diffOps(db);
-    if (ops.length) { pendingOps.push(...ops); setSaveState('saving'); pushOps(); }
+    if (ops.length) { pendingOps.push(...ops); pushFails = 0; setSaveState('saving'); pushOps(); }   // a new change that fails is announced again
     return true;
   }
   try { localStorage.setItem(STORE_KEY, JSON.stringify(db)); return true; }
@@ -878,7 +882,12 @@ async function refreshFromServer() {
   try {
     const v = await api('version');
     const busy = $('#modal-root').innerHTML || (document.activeElement && /^(INPUT|TEXTAREA|SELECT)$/.test(document.activeElement.tagName) && document.activeElement.value);
-    if (v.build && serverBuild && v.build !== serverBuild) { if (!busy) location.reload(); return; }
+    if (v.build && serverBuild && v.build !== serverBuild) {
+      /* the file's time changes when an upload starts: wait until two checks in a row see the same new time */
+      if (v.build !== seenBuild) { seenBuild = v.build; return; }
+      if (!busy && !importBusy && !pendingOps.length && !pushing) location.reload();
+      return;
+    }
     if (v.version === serverVersion) return;
     if (busy) return;
     db = dbFromServer(await api('load'));
@@ -4755,8 +4764,10 @@ function chgParseJSON(text) {
 async function importCharges(file) {
   if (!isAdmin()) { toast('Only the administrator can upload the RVU report.', 'err'); return; }
   let parsed;
+  importBusy++;
   try { const name = (file.name || '').toLowerCase(); toast('Reading the report…'); parsed = name.endsWith('.json') ? chgParseJSON(await file.text()) : chgParseReport(await file.text(), file.name); }
   catch (e) { toast('That file could not be read: ' + (e && e.message ? e.message : e), 'err'); return; }
+  finally { importBusy--; }
   if (!parsed.records.length) { toast('No charge lines were found in that file.', 'err'); return; }
   const provs = new Set(parsed.records.map((r) => r.provider)), locs = new Set(parsed.records.map((r) => r.location));
   const matched = [...provs].filter((p) => p !== CHG_FAC && chgMatchPhysician(p)).length;
@@ -4895,7 +4906,7 @@ function chgFacTableHTML(recs, limit) {
 }
 function viewBilling() {
   const f = ui.bl, all = chgRecords(), meta = chgMeta();
-  const actions = `${all.length ? `<button class="btn" data-act="print">${ico('i-print')}Print</button><button class="btn" data-act="export-chg">${ico('i-download')}Download data file</button>` : ''}${isAdmin() ? `<button class="btn" data-act="import-chg">${ico('i-upload')}Upload provider RVU report</button>` : ''}${isAdmin() && f.view === 'path' ? `<button class="btn primary" data-act="import-pw">${ico('i-upload')}Trace patients to procedures</button>` : ''}`;
+  const actions = `${all.length || (f.view === 'path' && pwMeta()) ? `<button class="btn" data-act="print">${ico('i-print')}Print</button>` : ''}${all.length ? `<button class="btn" data-act="export-chg">${ico('i-download')}Download data file</button>` : ''}${isAdmin() ? `<button class="btn" data-act="import-chg">${ico('i-upload')}Upload provider RVU report</button>` : ''}${isAdmin() && f.view === 'path' ? `<button class="btn primary" data-act="import-pw">${ico('i-upload')}Trace patients to procedures</button>` : ''}`;
   const showToggle = `<label><span>Show</span><div class="toggle" style="flex-wrap:wrap"><button class="${f.view !== 'fac' && f.view !== 'path' ? 'on' : ''}" data-act="bl-view" data-v="prof">Provider billing</button><button class="${f.view === 'fac' ? 'on' : ''}" data-act="bl-view" data-v="fac">Hospital facility charges</button><button class="${f.view === 'path' ? 'on' : ''}" data-act="bl-view" data-v="path">Clinic to procedure</button></div></label>`;
   if (f.view === 'path') return viewBillingPath(actions, `<div class="card no-print" style="margin-bottom:14px"><div class="pair fbar" style="display:flex;gap:14px 22px;flex-wrap:wrap;align-items:flex-end">${showToggle}</div></div>`);
   if (!all.length) return finHead('Provider billing', 'CPT codes, work RVUs, charges and payments by performing provider and visit location.', 'billing', actions) + `<div class="card no-print" style="margin-bottom:14px"><div class="pair fbar" style="display:flex;gap:14px 22px;flex-wrap:wrap;align-items:flex-end">${showToggle}</div></div><div class="card empty"><p style="margin:0 0 8px;font-size:17px"><b>No provider billing has been loaded yet.</b></p>
@@ -4972,8 +4983,10 @@ const PW_VISIT_ACCT = /^AMB(?!NV)/i;
 const PW_ASSIST = /^(AS|80|81|82|62)$/i;
 /* office, preventive, consult and transition-of-care visit codes: a same-day line counts as a visit only with one of these */
 const PW_VISIT_CODE = /^(992(0[2-5]|1[1-5])|9924[1-5]|9938[1-7]|9939[1-7]|9949[56]|G0402|G0438|G0439|S9083)$/i;
-function pwRecords() { return (db.charges || []).filter((r) => r.kind === 'path'); }
-function pwMeta() { return (db.charges || []).find((r) => r.id === 'pwmeta') || null; }
+/* The saved trace carries a format number. One saved in another format is treated as not there, so its numbers are never misread. */
+const PW_FORMAT = 2;
+function pwMeta() { const m = (db.charges || []).find((r) => r.id === 'pwmeta'); return m && m.v === PW_FORMAT ? m : null; }
+function pwRecords() { return pwMeta() ? (db.charges || []).filter((r) => r.kind === 'path') : []; }
 function pwWindow() { return PW_BUCKETS.includes(ui.pw.win) ? ui.pw.win : 90; }
 function pwNameKey(s) { return String(s || '').toUpperCase().replace(/\s*,\s*/g, ',').replace(/\s+/g, ' ').trim(); }
 function pwTop(o) { let best = '', n = -1; Object.entries(o).forEach(([k, v]) => { if (v > n) { best = k; n = v; } }); return best; }
@@ -4991,8 +5004,8 @@ function pwProcType(a) {
 function pwScan(text, fileName, st) {
   const rows = parseCSV(text); if (rows.length < 2) throw new Error('the file is empty');
   const hdr = rows[0].map((h) => String(h || '').trim().toLowerCase()), ix = (n) => hdr.indexOf(n);
-  const I = { acct: ix('account number'), name: ix('name'), date: ix('service date'), perf: ix('performing provider'), att: ix('attending provider'), dept: ix('dept name'), loc: ix('visit location'), type: ix('acct type'), ch: ix('charge amt'), cpt: ix('cpt'), hcpcs: ix('hcpcs'), mod: ix('cpt modifiers'), link: ix('linked account#') };
-  if (I.acct < 0 || I.name < 0 || I.date < 0 || I.perf < 0 || I.att < 0 || I.loc < 0 || I.dept < 0 || I.type < 0) throw new Error('this is not the Performing Provider RVU report (it needs Account Number, Name, Service Date, Performing Provider, Attending Provider, Visit Location, Dept Name and Acct Type columns)');
+  const I = { acct: ix('account number'), name: ix('name'), date: ix('service date'), perf: ix('performing provider'), att: ix('attending provider'), dept: ix('dept name'), loc: ix('visit location'), type: ix('acct type'), ch: ix('charge amt'), cpt: ix('cpt'), hcpcs: ix('hcpcs'), mod: ix('cpt modifiers'), hmod: ix('hcpcs modifiers'), link: ix('linked account#') };
+  if (I.acct < 0 || I.name < 0 || I.date < 0 || I.perf < 0 || I.att < 0 || I.loc < 0 || I.dept < 0 || I.type < 0 || I.mod < 0 || I.link < 0 || (I.cpt < 0 && I.hcpcs < 0)) throw new Error('this is not the full Performing Provider RVU report (it needs Account Number, Name, Service Date, CPT, CPT Modifiers, Performing Provider, Attending Provider, Visit Location, Dept Name, Acct Type and Linked Account# columns)');
   const accts = new Map(), months = {}; let lines = 0, skipped = 0, minD = '', maxD = '';
   for (let r = 1; r < rows.length; r++) {
     const row = rvuFixRow(rows[r], I.name, hdr.length); if (!row || row.length < 5) continue; const g = (k) => (I[k] >= 0 ? String(row[I[k]] ?? '').trim() : '');
@@ -5000,10 +5013,11 @@ function pwScan(text, fileName, st) {
     lines++; months[date.slice(0, 7)] = (months[date.slice(0, 7)] || 0) + 1; if (!minD || date < minD) minD = date; if (date > maxD) maxD = date;
     const perf = g('perf'), loc = g('loc') || g('dept') || 'Unknown location';
     if (perf) {
-      if (!PW_VISIT_ACCT.test(g('type')) || PW_NOT_SOURCE.test(loc) || g('link') || g('mod').split(/[\s,]+/).some((m) => PW_ASSIST.test(m))) continue;
+      if (!PW_VISIT_ACCT.test(g('type')) || PW_NOT_SOURCE.test(loc) || g('link') || (g('mod') + ' ' + g('hmod')).split(/[\s,]+/).some((m) => PW_ASSIST.test(m))) continue;
+      st.depts.add(finLocDept(loc));
       let v = st.visits.get(name); if (!v) st.visits.set(name, v = new Map());
       const k = perf + '\u0001' + loc; let s = v.get(k); if (!s) v.set(k, s = new Map());
-      s.set(date, s.get(date) || PW_VISIT_CODE.test(g('cpt') || g('hcpcs')));   // date -> was an office visit billed that day
+      s.set(date, s.get(date) || PW_VISIT_CODE.test(g('cpt')) || PW_VISIT_CODE.test(g('hcpcs')));   // date -> was an office visit billed that day
       if (!st.visitFrom || date < st.visitFrom) st.visitFrom = date; if (date > st.visitTo) st.visitTo = date;
     } else {
       let a = accts.get(acct); if (!a) accts.set(acct, a = { name, n: 0, ch: 0, date, atts: {}, locs: {}, type: g('type'), or: false });
@@ -5052,14 +5066,16 @@ function pwLink(st) {
 async function importPathways(files) {
   if (!isAdmin()) { toast('Only the administrator can run the trace.', 'err'); return; }
   const list = [...files]; if (!list.length) return;
-  const st = { visits: new Map(), accts: new Map(), files: [], visitFrom: '', visitTo: '' };
+  const st = { visits: new Map(), accts: new Map(), files: [], depts: new Set(), visitFrom: '', visitTo: '' };
+  importBusy++;
   try { for (let i = 0; i < list.length; i++) { toast(`Reading file ${i + 1} of ${list.length}…`); await new Promise((r) => setTimeout(r, 30)); pwScan(await list[i].text(), list[i].name, st); } }
   catch (e) { toast(`${list[st.files.length] ? list[st.files.length].name + ': ' : ''}that file could not be read: ` + (e && e.message ? e.message : e), 'err'); return; }
+  finally { importBusy--; }
   const { records, stats } = pwLink(st);
   if (!stats.procs) { toast('No surgery, endoscopy or procedure accounts were found in those files.', 'err'); return; }
   const months = [...new Set(st.files.flatMap((f) => f.months))].sort(), unique = records.filter((r) => r.all);
   const top = Object.values(unique.reduce((o, r) => { const s = pwSum([r], 90), a = o[r.dept || r.loc] = o[r.dept || r.loc] || { l: r.loc, n: 0, ch: 0 }; a.n += s.n; a.ch += s.ch; return o; }, {})).filter((a) => a.n).sort((a, b) => b.n - a.n).slice(0, 8);
-  const meta = { id: 'pwmeta', kind: 'pathmeta', files: st.files.map((f) => ({ from: f.from, to: f.to, lines: f.lines })), months, visitFrom: st.visitFrom, visitTo: st.visitTo, procFrom: stats.procFrom, procTo: stats.procTo, procs: stats.procs, byType: stats.byType, traced: stats.traced, importedAt: nowISO(), importedBy: session.name };
+  const meta = { id: 'pwmeta', kind: 'pathmeta', v: PW_FORMAT, depts: [...st.depts].filter(Boolean).sort(), files: st.files.map((f) => ({ from: f.from, to: f.to, lines: f.lines })), months, visitFrom: st.visitFrom, visitTo: st.visitTo, procFrom: stats.procFrom, procTo: stats.procTo, procs: stats.procs, byType: stats.byType, traced: stats.traced, importedAt: nowISO(), importedBy: session.name };
   const body = `
     <p><b>${list.length}</b> report file${list.length === 1 ? '' : 's'} read, covering ${months.length ? `${esc(fmtMonth(months[0]))}${months.length > 1 ? ' to ' + esc(fmtMonth(months[months.length - 1])) : ''}` : 'no full month'}. <b>${volInt(stats.procs)}</b> surgery, endoscopy and procedure ${stats.procs === 1 ? 'case was' : 'cases were'} found, with <b>${finShort(stats.ch)}</b> of hospital facility charges.</p>
     ${list.length === 1 ? `<div class="notice info" style="margin:10px 0">${ico('i-info')}<div><b>One month on its own finds very little.</b> Most procedures happen weeks after the clinic visit, so the visit is usually in an earlier month's file. Cancel, then pick every monthly RVU report together (hold Ctrl or Shift, or Command on a Mac, while you click them).</div></div>` : ''}
@@ -5074,7 +5090,7 @@ async function importPathways(files) {
 }
 function applyPathways(meta, records) {
   db.charges = [...(db.charges || []).filter((r) => r.kind !== 'path' && r.id !== 'pwmeta'), meta, ...records];
-  saveDB(); toast(`Trace saved: ${volInt(meta.procs)} procedure cases read, ${volInt(meta.traced[3])} followed back to a clinic visit`);
+  saveDB(); toast(`Trace saved: ${volInt(meta.procs)} procedure ${meta.procs === 1 ? 'case' : 'cases'} read, ${volInt(meta.traced[3])} followed back to a clinic visit within 180 days`);
   ui.bl.view = 'path'; if (location.hash.startsWith('#/reports/clinics')) rerender(); else if (location.hash === '#/reports/billing') rerender(); else location.hash = '#/reports/billing';
 }
 /* Adds records up within a look-back window: totals, by type, by group, by proceduralist, by month and by time since the visit. */
@@ -5108,10 +5124,11 @@ function pwAttName(att) { return chgAttDisplay(att) || 'Not recorded'; }
 /* The card on a clinic's financial page. */
 function pwDeptHTML(rec) {
   const meta = pwMeta(), hasBilling = chgRecords().some((r) => r.dept === rec.code && !chgIsFac(r));
-  if (!meta) return hasBilling ? `<section class="card no-print" style="margin-top:14px"><div class="card-head"><h2>Surgery, endoscopy and procedures this clinic's patients went on to</h2><span class="hint">not traced yet</span></div>
+  /* only a clinic that patients visit can be a place they came from: not the operating room, imaging or an inpatient unit */
+  if (!meta) return hasBilling && finGroupOf(rec.code) === 'clinic' && !PW_NOT_SOURCE.test(rec.label) ? `<section class="card no-print" style="margin-top:14px"><div class="card-head"><h2>Surgery, endoscopy and procedures this clinic's patients went on to</h2><span class="hint">not traced yet</span></div>
       <p class="muted" style="margin:0">${isAdmin() ? 'To see which surgeries, endoscopies and procedures followed a visit here, open <a href="#/reports/billing" data-act="bl-view" data-v="path">Provider billing, Clinic to procedure</a> and choose <b>Trace patients to procedures</b>. Pick all the monthly RVU report files together.' : 'The administrator can trace which surgeries, endoscopies and procedures followed a visit here, from the monthly RVU reports.'}</p></section>` : '';
   const win = pwWindow(), mine = pwRecords().filter((r) => r.dept === rec.code), byProv = {};
-  if (!mine.length && (!hasBilling || PW_NOT_SOURCE.test(rec.label))) return '';   // a department that is never a source clinic
+  if (!mine.length && !(meta.depts || []).includes(rec.code)) return '';   // the trace found no clinic visits here, so "none found" would say nothing
   mine.filter((r) => !r.all).forEach((r) => { (byProv[r.provider] = byProv[r.provider] || []).push(r); });
   const rows = Object.entries(byProv).map(([name, rs]) => ({ name, s: pwSum(rs, win), ph: chgMatchPhysician(name) })).filter((x) => x.s.n).sort((a, b) => b.s.ch - a.s.ch || b.s.n - a.s.n);
   const T = pwSum(mine.filter((r) => r.all), win), g = (s, k) => s.byGroup[k];
@@ -5126,7 +5143,7 @@ function pwDeptHTML(rec) {
   const topAtt = (s) => { const a = Object.values(s.byAtt).sort((p, q) => q.n - p.n || q.ch - p.ch)[0]; return a ? `${esc(pwAttName(a.att))}${Object.keys(s.byAtt).length > 1 ? ` <span class="muted">(${volInt(a.n)} of ${volInt(s.n)})</span>` : ''}` : ''; };
   return `<section class="card" style="margin-top:14px">
       <div class="card-head"><h2>Surgery, endoscopy and procedures this clinic's patients went on to</h2>${pwWinToggle()}</div>
-      <p style="margin:0 0 12px;font-size:16px;line-height:1.5">${T.n ? `In the ${win} days after a visit to ${esc(rec.label)}, its patients had ${say} at NWSH, with <b>${finShort(T.ch)}</b> of hospital facility charges. Those charges are booked to the operating room, endoscopy and procedure departments, not to this clinic.${ownSurgeons ? ' Cases done by this clinic\'s own surgeons are also in the table above, so do not add the two together.' : ''}` : `No surgery, endoscopy or procedure was found within ${win} days of a visit to ${esc(rec.label)} in the files traced.`}</p>
+      <p style="margin:0 0 12px;font-size:16px;line-height:1.5">${T.n ? `In the ${win} days after a visit to ${esc(rec.label)}, its patients had ${say} at NWSH, with <b>${finShort(T.ch)}</b> of hospital facility charges. Those charges are booked to the operating room, endoscopy and procedure departments, not to this clinic.${ownSurgeons ? ' Cases done by this clinic\'s own surgeons are also counted under the surgeon in this clinic\'s hospital charges, so do not add the two together.' : ''}` : `No surgery, endoscopy or procedure was found within ${win} days of a visit to ${esc(rec.label)} in the files traced.`}</p>
       ${rows.length ? `<div class="table-wrap"><table class="breakdown bill tight">
         <thead><tr><th rowspan="2">Provider seen before the procedure</th><th rowspan="2" class="num">Cases</th>${PW_GROUPS.map(([, l]) => `<th colspan="2" ${gh}>${l}</th>`).join('')}<th rowspan="2" class="num" style="white-space:normal">Total charges</th><th rowspan="2" style="white-space:normal">Most often done by</th></tr>
           <tr>${PW_GROUPS.map(() => '<th class="num">Cases</th><th class="num">Charges</th>').join('')}</tr></thead>
@@ -5173,7 +5190,11 @@ function viewBillingPath(actions, filterCard) {
       <p class="muted" style="max-width:680px;margin:0 auto">${isAdmin() ? 'Click <b>Trace patients to procedures</b> and pick all the monthly Meditech "Performing Provider RVU" files together (hold Ctrl or Shift, or Command on a Mac, while you click them). The browser follows each patient from a clinic visit to any surgery, endoscopy or procedure in the 180 days after it, and saves counts and facility charges only.' : 'Ask the administrator to run the trace from the monthly RVU reports.'}</p></div>`;
   const all = pwRecords().filter((r) => r.all), byPlace = {};
   all.forEach((r) => { const k = r.dept || 'loc:' + r.loc; (byPlace[k] = byPlace[k] || { dept: r.dept, loc: r.loc, recs: [] }).recs.push(r); });
-  const rows = Object.values(byPlace).map((p) => ({ ...p, s: pwSum(p.recs, win), d: p.dept ? finDept(p.dept) : null })).filter((x) => x.s.n).sort((a, b) => b.s.ch - a.s.ch);
+  /* who works in each clinic: everyone billing there, and everyone the trace saw patients visit there */
+  const staff = {}; const addStaff = (dept, name) => { if (dept && name) (staff[dept] = staff[dept] || new Map()).set(name, chgProviderParts(name)); };
+  chgRecords().forEach((r) => { if (!chgIsFac(r)) addStaff(r.dept, r.provider); }); pwRecords().forEach((r) => { if (!r.all) addStaff(r.dept, r.provider); });
+  const ownOf = (dept, s) => { const people = dept && staff[dept] ? [...staff[dept].values()] : []; return Object.values(s.byAtt).reduce((n, a) => { const ap = chgAttParts(a.att); return n + (people.some((p) => samePerson(p, ap)) ? a.n : 0); }, 0); };
+  const rows = Object.values(byPlace).map((p) => { const s = pwSum(p.recs, win); return { ...p, s, own: ownOf(p.dept, s), d: p.dept ? finDept(p.dept) : null }; }).filter((x) => x.s.n).sort((a, b) => b.s.ch - a.s.ch);
   const g = (s, k) => s.byGroup[k], dash = '<span class="muted">—</span>', money = (v) => (v ? finMoney(v) : dash), cnt = (v) => (v ? volInt(v) : dash), gh = 'style="text-align:center;white-space:normal;border-bottom:1px solid var(--border)"';
   const traced = meta.traced ? meta.traced[PW_BUCKETS.indexOf(win)] : 0;
   const kpis = [
@@ -5185,11 +5206,11 @@ function viewBillingPath(actions, filterCard) {
     <div class="kpis" style="margin-bottom:14px;grid-template-columns:repeat(auto-fit,minmax(240px,1fr))">${kpis.map((k) => `<div class="kpi"><div class="label">${k.l}</div><div class="value" style="font-size:24px">${k.v}</div><span class="small">${k.c || ''}</span></div>`).join('')}</div>
     <section class="card"><div class="card-head"><h2>By clinic visited before the procedure</h2>${pwWinToggle()}</div>
       ${rows.length ? `<div class="table-wrap"><table class="breakdown bill tight">
-        <thead><tr><th rowspan="2">Clinic</th><th rowspan="2" class="num">Cases</th>${PW_GROUPS.map(([, l]) => `<th colspan="2" ${gh}>${l}</th>`).join('')}<th rowspan="2" class="num" style="white-space:normal">Total charges</th></tr>
+        <thead><tr><th rowspan="2">Clinic</th><th rowspan="2" class="num">Cases</th>${PW_GROUPS.map(([, l]) => `<th colspan="2" ${gh}>${l}</th>`).join('')}<th rowspan="2" class="num" style="white-space:normal">Total charges</th><th rowspan="2" class="num" style="white-space:normal">Cases done by the clinic's own providers</th></tr>
           <tr>${PW_GROUPS.map(() => '<th class="num">Cases</th><th class="num">Charges</th>').join('')}</tr></thead>
-        <tbody>${rows.map((x) => `<tr><td>${x.d ? `<a href="#/reports/clinics/${encodeURIComponent(x.d.code)}"><b>${esc(x.d.label)}</b></a>` : `<b>${esc(x.loc)}</b>`}</td><td class="num"><b>${volInt(x.s.n)}</b></td>${PW_GROUPS.map(([k]) => `<td class="num">${cnt(g(x.s, k).n)}</td><td class="num">${money(g(x.s, k).ch)}</td>`).join('')}<td class="num"><b>${finMoney(x.s.ch)}</b></td></tr>`).join('')}</tbody>
+        <tbody>${rows.map((x) => `<tr><td>${x.d ? `<a href="#/reports/clinics/${encodeURIComponent(x.d.code)}"><b>${esc(x.d.label)}</b></a>` : `<b>${esc(x.loc)}</b>`}</td><td class="num"><b>${volInt(x.s.n)}</b></td>${PW_GROUPS.map(([k]) => `<td class="num">${cnt(g(x.s, k).n)}</td><td class="num">${money(g(x.s, k).ch)}</td>`).join('')}<td class="num"><b>${finMoney(x.s.ch)}</b></td><td class="num">${x.own ? `${volInt(x.own)} <span class="muted">(${Math.round(x.own / x.s.n * 100)}%)</span>` : dash}</td></tr>`).join('')}</tbody>
       </table></div>` : `<p class="muted">No procedure followed a clinic visit within ${win} days in the files traced.</p>`}
-      <p class="help" style="margin:10px 0 0">Each case is counted once per clinic. A patient seen at two clinics before a procedure counts under both, so do not add the rows together. Click a clinic for its providers. ${pwCaveat(meta, win)} Last traced ${meta.importedAt ? fmtTS(meta.importedAt) : ''}${meta.importedBy ? ' by ' + esc(meta.importedBy) : ''} from ${(meta.files || []).length} file${(meta.files || []).length === 1 ? '' : 's'}.${isAdmin() ? ' <button class="btn sm link danger no-print" data-act="pw-clear">Remove the trace</button>' : ''}</p>
+      <p class="help" style="margin:10px 0 0">Each case is counted once per clinic. A patient seen at two clinics before a procedure counts under both, so do not add the rows together. The last column is the cases done by someone who also works in that clinic: for a surgical practice that is mostly a surgeon operating on a patient a partner or assistant saw first, not business arriving from outside. Click a clinic for its providers. ${pwCaveat(meta, win)} Last traced ${meta.importedAt ? fmtTS(meta.importedAt) : ''}${meta.importedBy ? ' by ' + esc(meta.importedBy) : ''} from ${(meta.files || []).length} file${(meta.files || []).length === 1 ? '' : 's'}.${isAdmin() ? ' <button class="btn sm link danger no-print" data-act="pw-clear">Remove the trace</button>' : ''}</p>
     </section>`;
 }
 /* ---------- what a clinic's providers bring to the rest of the hospital ---------- */
