@@ -239,6 +239,12 @@
   .ftabs button.on .ftab-ico { background: rgba(255,255,255,.18); color: #fff; }
   .ftabs button.on::after { content: ''; position: absolute; left: 50%; bottom: -9px; width: 16px; height: 16px; margin-left: -8px; background: var(--teal); transform: rotate(45deg); border-radius: 2px; }
   @media (max-width: 520px) { .ftabs { grid-template-columns: 1fr 1fr; gap: 8px; } .ftabs button { padding: 10px; min-height: 0; flex-direction: column; align-items: flex-start; gap: 6px; } .ftabs small { display: none; } .ftabs b { font-size: 15px; } .ftabs .ftab-ico { width: 32px; height: 32px; } }
+  .rnav { display: flex; gap: 8px; flex-wrap: wrap; }
+  .rnav a { display: inline-flex; align-items: center; gap: 8px; height: 46px; padding: 0 18px; border: 1.5px solid var(--border); border-radius: 999px; background: var(--surface); color: var(--teal-dark); font-weight: 700; text-decoration: none; box-shadow: var(--shadow); transition: transform .12s, border-color .12s, box-shadow .12s; }
+  .rnav a:hover { border-color: var(--teal); transform: translateY(-1px); box-shadow: 0 3px 10px rgba(20,109,141,.18); }
+  .rnav a.on { background: var(--teal); border-color: var(--teal); color: #fff; box-shadow: 0 4px 12px rgba(20,109,141,.3); }
+  .grid2 > .card + .card { margin-top: 0; }
+  .card .ftabs { margin: 18px 0 2px; max-width: none; }
   .ftab-off { display: none; } .ftab-print { display: none; } .ftab-first > section.card:first-child { margin-top: 0 !important; }
   @media print { .ftab-off { display: block; } .ftab-print { display: block; margin: 18px 0 8px; } }
   td.chk, th.chk { width: 26px; padding-right: 0; }
@@ -1277,6 +1283,7 @@ const ui = {
   im: { id: '', period: '6', mods: {}, sites: {}, showAll: false, rank: '' },
   fin: { group: 'clinic', period: 'ytd', sort: 'ebitda', dir: 1, pl: 'cy', open: {}, what: {}, showHosp: false, cost: 'finance', cmp: 'bu', code: {}, pay: null },
   bl: { loc: '', prov: '', month: '', sort: 'w', dir: -1, showAll: false, view: 'prof' },
+  sec: {},
   pw: { win: 90 },
   ph: { tab: 'rel' },
   tidy: { field: 'specialty', from: '', into: '' },
@@ -1744,7 +1751,7 @@ function saveClinicFromForm(form, id) {
 /* ---------- physician profile: three tabs, a scorecard that reads at a glance, and a provider profit and loss ---------- */
 const PH_TABS = [['rel', 'Relationship'], ['score', 'Scorecard'], ['pl', 'Profit and loss']];
 function phTab() { return PH_TABS.some((t) => t[0] === ui.ph.tab) ? ui.ph.tab : 'rel'; }
-function phTabsHTML() { const t = phTab(); return `<div class="toggle no-print" role="tablist" aria-label="Sections of this profile" style="margin:14px 0 0;flex-wrap:wrap">${PH_TABS.map(([k, l]) => `<button role="tab" aria-selected="${t === k}" class="${t === k ? 'on' : ''}" data-act="ph-tab" data-v="${k}">${l}</button>`).join('')}</div>`; }
+function phTabsHTML() { ui.sec.ph = phTab(); return secTabsHTML('ph', [['rel', 'Relationship', 'i-person', 'Contact details, goals, referrals and the contact log'], ['score', 'Scorecard', 'i-chart', 'Volume, billing and what this provider brings to the hospital'], ['pl', 'Profit and Loss', 'i-list', 'Estimated revenue and cost for this provider, with the assumptions named']], 'ph-tab'); }
 /* The cards that used to sit under the contact details: encounters, surgical volume, imaging, billing. */
 function physActivityCardsHTML(p) {
   return (p.nwsh ? `<section class="card">
@@ -3166,9 +3173,11 @@ function legFormHTML(r, l) {
 /* ===================== View: Settings ===================== */
 function viewSettings() {
   const size = new Blob([localStorage.getItem(STORE_KEY) || '']).size;
+  const setDefs = [['people', 'Team & Logins', 'i-people', 'Who is on the team, who can sign in, and your own login'], ['lists', 'Lists', 'i-list', 'Specialties, departments and clinics, and tidying up names'], ['alerts', isAdmin() ? 'Alerts & Sign-out' : 'Alerts', 'i-alert', 'When a referral counts as at risk' + (isAdmin() ? ', and the sign-out timer' : '')], ['data', 'Backups & Data', 'i-download', 'Export a backup, restore one, or upload report files']];
   return `
     <div class="page-head"><div><h1>Settings</h1><p class="lead">Team list, specialty list and backups.</p></div></div>
-    <div class="grid2" style="margin-top:0">
+    ${secTabsHTML('set', setDefs)}
+    ${secPane('set', setDefs, 'people', `<div class="grid2" style="margin-top:0">
       <section class="card">
         <div class="card-head"><h2>Team members</h2><span class="hint">Names in the "Who made the contact?" list</span></div>
         <ul class="list">${db.settings.team.map((n, i) => `<li>
@@ -3176,7 +3185,9 @@ function viewSettings() {
           <button class="btn sm danger" data-act="team-del" data-i="${i}">Remove</button></li>`).join('')}</ul>
         <div style="display:flex;gap:10px;margin-top:12px"><input id="team-new" placeholder="Add another name"><button class="btn" data-act="team-add">Add</button></div>
       </section>
-
+      ${loginsCardHTML()}
+    </div>`)}
+    ${secPane('set', setDefs, 'lists', `<div class="grid2" style="margin-top:0">
       <section class="card">
         <div class="card-head"><h2>Specialty list</h2><span class="hint">Suggestions on the physician form</span></div>
         <form class="form" data-form="specialties">
@@ -3184,10 +3195,6 @@ function viewSettings() {
           <div><button class="btn" type="submit">Save list</button></div>
         </form>
       </section>
-      ${isAdmin() ? `<section class="card" style="grid-column:1 / -1">${(() => { try { return tidyCardHTML(); } catch (e) { console.error('tidy', e); return `<h2>Tidy up names</h2><p class="muted">This tool could not read the current records (${esc(e && e.message || e)}). The rest of Settings works normally.</p>`; } })()}</section>` : ''}
-    </div>
-
-    <div class="grid2">
       <section class="card">
         <div class="card-head"><h2>Departments &amp; clinics</h2><span class="hint">Choices for "Sent to" on referrals and orders</span></div>
         <form class="form" data-form="departments">
@@ -3195,18 +3202,17 @@ function viewSettings() {
           <div><button class="btn" type="submit">Save list</button></div>
         </form>
       </section>
-      <section class="card">
+      ${isAdmin() ? `<section class="card" style="grid-column:1 / -1">${(() => { try { return tidyCardHTML(); } catch (e) { console.error('tidy', e); return `<h2>Tidy up names</h2><p class="muted">This tool could not read the current records (${esc(e && e.message || e)}). The rest of Settings works normally.</p>`; } })()}</section>` : ''}
+    </div>`)}
+    ${secPane('set', setDefs, 'alerts', `<section class="card">
         <h2>Referral alerts</h2>
         <label class="field" style="max-width:320px"><span class="field-label">Flag a referral as "at risk" after this many days with no movement</span><input type="number" min="1" max="365" value="${esc(db.settings.riskDays)}" data-change="risk-days"></label>
         ${isAdmin() ? `<h3 style="margin:22px 0 6px">Sign-out timer</h3>
         <label class="field" style="max-width:320px"><span class="field-label">Sign people out after this many minutes without activity</span><input type="number" min="15" max="1440" step="15" value="${esc(db.settings.idleMinutes)}" data-change="idle-minutes"></label>
         <p class="help">${db.settings.idleMinutes >= 60 ? `${Math.round(db.settings.idleMinutes / 60 * 10) / 10} hour${db.settings.idleMinutes === 60 ? '' : 's'}` : `${db.settings.idleMinutes} minutes`} of no mouse, keyboard or touch. Applies to everyone. Shared or public computers call for a shorter time.</p>` : ''}
         <p class="help" style="margin-top:10px">A referral is also flagged when an appointment date passes without being marked as seen.</p>
-      </section>
-    </div>
-
-    <div class="grid2">
-      <section class="card">
+      </section>`)}
+    ${secPane('set', setDefs, 'data', `<section class="card">
         <h2>Backups &amp; downloads</h2>
         ${MODE === 'server'
           ? `<div class="notice info" style="margin-bottom:14px">${ico('i-info')}<div><b>Shared database.</b> Everything is saved in <code>data/physician-relations.sqlite</code> on the web server, and every team member sees the same records. Export a backup now and then and keep it somewhere safe.</div></div>`
@@ -3223,10 +3229,7 @@ function viewSettings() {
         ${isAdmin() ? `<div style="margin-top:18px;padding-top:14px;border-top:1px solid var(--border)">
           <button class="btn danger" data-act="clear-all">${ico('i-trash')}Erase all ${MODE === 'server' ? 'records' : 'data in this browser'}…</button>
           ${MODE === 'server' ? '<span class="help" style="margin-left:10px">Removes physicians, contacts, referrals and attachments. Logins are kept.</span>' : ''}</div>` : ''}
-      </section>
-
-      ${loginsCardHTML()}
-    </div>`;
+      </section>`)}`;
 }
 
 /* ===================== Logins (Settings) ===================== */
@@ -3875,6 +3878,7 @@ function viewScorecard(volId) {
   rows += rowHTML('Full year', (y, k) => (y === latest ? null : full(y, k)));
   const meta = volMeta() || {};
   const sources = meta.sources ? Object.entries(meta.sources).sort().map(([y, s]) => `${y}: ${esc(s)}`).join(' · ') : '';
+  const volDefs = [['trend', 'Trends', 'i-chart', 'Cases week by week and month by month, against earlier years'], ['mix', rec ? 'Service Lines' : 'Service Lines & Specialties', 'i-flag', 'Which rooms and specialties the cases come from'], ['period', 'By Period', 'i-list', 'Months, quarters and the year so far, side by side']];
   return head + `
     <section class="card no-print">
       <div class="filters" style="display:flex;flex-wrap:wrap;gap:14px 22px;align-items:flex-end">
@@ -3886,11 +3890,12 @@ function viewScorecard(volId) {
     </section>
     <p style="font-size:17px;line-height:1.5;margin:18px 0 14px;max-width:1100px">${sentence}</p>
     <div class="kpis" style="margin-bottom:18px">${kpis.map((k) => `<div class="kpi"><div class="label">${k.l}</div><div class="value" style="font-size:26px">${k.v}</div>${k.c ? `<span class="small muted">${k.c}</span>` : ''}</div>`).join('')}</div>
-    <div class="grid2" style="margin-top:0">
+    ${secTabsHTML('vol', volDefs)}
+    ${secPane('vol', volDefs, 'trend', `<div class="grid2" style="margin-top:0">
       <section class="card"><div class="card-head"><h2>${isCh ? 'Gross charges' : 'Cases'} per week${f.smooth > 1 ? ' (4-week average)' : ''}</h2><span class="hint">Week 1 begins Jan 1</span></div>${volLegend(years)}${volLineSVG(years, lineData, axisFmt, `${isCh ? 'Gross charges' : 'Cases'} per week by year for ${who}`)}</section>
       <section class="card"><div class="card-head"><h2>${isCh ? 'Gross charges' : 'Cases'} per month</h2></div>${volLegend(years)}${volBarSVG(years, barData, axisFmt, `${isCh ? 'Gross charges' : 'Cases'} per month by year for ${who}`)}</section>
-    </div>
-    <div class="grid2" style="margin-top:18px">
+    </div>`)}
+    ${secPane('vol', volDefs, 'mix', `<div class="grid2" style="margin-top:0">
       <section class="card"><div class="card-head"><h2>By service line</h2><span class="hint">${latest} weeks 1–${AW} vs ${prior || 'prior year'}</span></div>
         <div class="table-wrap"><table class="breakdown"><thead><tr><th>Service line</th><th class="num">Cases</th><th class="num">Change</th><th class="num">Charges</th><th class="num">Share</th></tr></thead><tbody>
         ${volRoomsPresent().map((k) => { const only = {}; volRoomsPresent().forEach((x) => { only[x] = x === k; }); const a = volAgg(scope, only); const y = (yr, i) => (a.w[yr] ? a.w[yr].slice(0, AW).reduce((s0, q) => s0 + q[i], 0) : 0); const c = y(latest, 0), pc = prior ? y(prior, 0) : 0, ch = y(latest, 1); return c || pc ? `<tr class="${rooms[k] === false ? 'muted' : ''}"><td><b>${esc(VOL_ROOM_LABEL[k])}</b>${rooms[k] === false ? ' <span class="small muted">(turned off above)</span>' : ''}</td><td class="num">${volInt(c)}</td><td class="num ${volCls(c - pc)}">${prior ? volSigned(c - pc) + ` (${volPctText(volPct(c, pc))})` : '—'}</td><td class="num">${volShort(ch)}</td><td class="num">${curC ? imgPctText(c, curC) : '—'}</td></tr>` : ''; }).join('')}
@@ -3903,12 +3908,12 @@ function viewScorecard(volId) {
         </tbody></table></div>
         <p class="help" style="margin:8px 0 0">Specialty comes from the physician record when the surgeon is matched to one; tidy spellings up in Settings.</p>
       </section>`}
-    </div>
-    <section class="card" style="margin-top:18px">
+    </div>`)}
+    ${secPane('vol', volDefs, 'period', `<section class="card">
       <div class="card-head"><h2>By period</h2><span class="hint">Cases, gross charges and the change from ${prior || 'the prior year'}</span></div>
       <div class="table-wrap"><table class="breakdown"><thead><tr><th>Period</th>${years.map((y) => `<th class="num">${y} cases</th>`).join('')}<th class="num">Δ cases</th>${years.map((y) => `<th class="num">${y} charges</th>`).join('')}<th class="num">Δ charges</th><th class="num">${latest} avg charge / case</th></tr></thead><tbody>${rows}</tbody></table></div>
       <p class="help" style="margin:10px 0 0">Service lines included: ${volRoomsPresent().filter((k) => rooms[k] !== false).map((k) => VOL_ROOM_LABEL[k]).join(', ')}. A case is an encounter with recorded room time, dated by admit date (discharge date when admit is blank). Gross charges are the account's total charge amount, not what was collected. "Same weeks" compares like periods; the latest year's most recent weeks may still have charges posting.${sources ? ` Sources — ${sources}.` : ''}${meta.importedAt ? ` Last uploaded ${fmtTS(meta.importedAt)} by ${esc(meta.importedBy || '')}.` : ''}</p>
-    </section>`;
+    </section>`)}`;
 }
 /* Card on a physician's page. */
 function physicianVolumeCardHTML(p) {
@@ -4390,9 +4395,13 @@ function finStackSVG(months, groups, label) {
 }
 /* ---------- views ---------- */
 function finSwitcher(which) {
-  const tab = (key, href, label) => `<a class="${which === key ? 'on' : ''}" href="${href}" style="display:inline-flex;align-items:center;padding:0 14px;height:40px;font-weight:700;text-decoration:none">${label}</a>`;
-  return `<div class="toggle" role="group" aria-label="Report" style="flex-wrap:wrap">${tab('referrals', '#/reports', 'Referral tracking')}${tab('surgeons', '#/reports/surgeons', 'Surgical volume')}${tab('imaging', '#/reports/imaging', 'Imaging referrals')}${tab('clinics', '#/reports/clinics', 'Clinic financials')}${tab('billing', '#/reports/billing', 'Provider billing')}</div>`;
+  const tab = (key, href, label, ic, tip) => `<a class="${which === key ? 'on' : ''}" href="${href}" title="${tip}"${which === key ? ' aria-current="page"' : ''}>${ico(ic)}<span>${label}</span></a>`;
+  return `<nav class="rnav" aria-label="Report">${tab('referrals', '#/reports', 'Referral tracking', 'i-route', 'Where referrals stand and how long they take')}${tab('surgeons', '#/reports/surgeons', 'Surgical volume', 'i-chart', 'Cases and charges by surgeon, room and specialty')}${tab('imaging', '#/reports/imaging', 'Imaging referrals', 'i-search', 'Who orders imaging and how much')}${tab('clinics', '#/reports/clinics', 'Clinic financials', 'i-home', 'Revenue, cost and break-even for each clinic')}${tab('billing', '#/reports/billing', 'Provider billing', 'i-list', 'Codes, work RVUs and charges by provider')}</nav>`;
 }
+/* Section cards: large buttons that split a long page into named parts. defs = [key, name, icon, one-line description]. */
+function secCur(g, defs) { const v = ui.sec[g]; return defs.some((d) => d[0] === v) ? v : defs[0][0]; }
+function secTabsHTML(g, defs, act) { const cur = secCur(g, defs); return `<div class="no-print ftabs" role="tablist" aria-label="Sections of this page">${defs.map(([k, l, ic, d]) => `<button role="tab" aria-selected="${cur === k}" class="${cur === k ? 'on' : ''}" data-act="${act || 'sec-tab'}" data-g="${g}" data-v="${k}"><span class="ftab-ico">${ico(ic)}</span><span class="ftab-txt"><b>${l}</b><small>${d}</small></span></button>`).join('')}</div>`; }
+function secPane(g, defs, k, html) { const d = defs.find((x) => x[0] === k); return d && html ? `<div class="ftab${secCur(g, defs) === k ? '' : ' ftab-off'}" data-g="${g}" data-ftab="${k}"><h2 class="ftab-print">${d[1]}</h2>${html}</div>` : ''; }
 function finHead(title, lead, which, extra) {
   return `<div class="page-head">
       <div><h1>${esc(title)}</h1><p class="lead">${lead}</p></div>
@@ -4455,6 +4464,7 @@ function viewFinOverview(recs, actions) {
   const ebChart = imgHBarSVG(ebRows.map((x) => ({ label: x.r.label, v: Math.round(x.a.ebitda || 0), color: (x.a.ebitda || 0) < 0 ? '#e34948' : '#1baf7a' })), '#1baf7a', 'EBITDA by department');
   const beRows = rows.filter((x) => x.a.beMo !== null).sort((x, y) => (x.a.coverage) - (y.a.coverage));
   const beChart = imgHBarSVG(beRows.map((x) => ({ label: x.r.label, v: Math.round(x.a.coverage * 100), color: x.a.coverage >= 1 ? '#1baf7a' : x.a.coverage >= 0.8 ? '#eda100' : '#e34948', sub: `${volInt(x.a.visMo)} of ${volInt(x.a.beMo)} ${unitWord} a month` })), '#2a78d6', 'Share of break-even volume reached');
+  const ovDefs = [['tbl', 'Departments', 'i-list', 'Every department side by side: visits, revenue, cost and break-even'], ['charts', 'Charts', 'i-chart', 'Profit by department and how close each one is to break-even']];
   return finHead('Clinic financials', `Revenue, cost, margin and break-even by department, ${esc(perLabel)}. Click a department for the full picture.`, 'clinics', actions) + `
     <div class="card" style="margin-bottom:14px">
       <div class="pair fbar" style="display:flex;gap:14px 22px;flex-wrap:wrap;align-items:flex-end">
@@ -4467,15 +4477,16 @@ function viewFinOverview(recs, actions) {
     <div class="kpis" style="margin-bottom:14px">${kpis.map((k) => `<div class="kpi ${k.red ? 'red' : ''}"><div class="label">${k.l}</div><div class="value" style="font-size:24px">${k.v}</div><span class="small">${k.c || ''}</span></div>`).join('')}</div>
     ${finInsightsHTML(rows, unitWord)}
     ${finGlossaryHTML('fin')}
-    <section class="card">
+    ${secTabsHTML('finov', ovDefs)}
+    ${secPane('finov', ovDefs, 'tbl', `<section class="card">
       <div class="card-head"><h2>${esc(FIN_GROUPS.find((x) => x[0] === f.group)[1])}, ${esc(perLabel)}</h2><span class="hint">Click a column heading to sort</span></div>
       ${table}
       <p class="help" style="margin:8px 0 0">Break-even here uses the <b>${finCostMode() === 'salaried' ? 'providers on salary' : 'finance statement'}</b> method; switch it at the top to see the other. The percentage is the share of break-even volume actually reached: green at 100% or more. A department can be here on purpose even when it loses money; open it to see what it is for and what is driving the result. Definitions are in the key above.</p>
-    </section>
-    <div class="grid2" style="display:grid;grid-template-columns:repeat(auto-fit,minmax(min(440px,100%),1fr));gap:14px;margin-top:14px">
+    </section>`)}
+    ${secPane('finov', ovDefs, 'charts', `<div class="grid2" style="display:grid;grid-template-columns:repeat(auto-fit,minmax(min(440px,100%),1fr));gap:14px">
       <section class="card"><div class="card-head"><h2>EBITDA by department</h2><span class="hint">${esc(perLabel)}</span></div>${ebChart}</section>
       <section class="card"><div class="card-head"><h2>Volume reached vs break-even</h2><span class="hint">100% = covering fixed cost</span></div>${beChart}</section>
-    </div>`;
+    </div>`)}`;
 }
 /* ---------- plain-language key ---------- */
 const FIN_TERMS = [
@@ -5180,11 +5191,19 @@ function viewBilling() {
   ];
   const byLoc = {}; recs.forEach((r) => { (byLoc[r.location] = byLoc[r.location] || []).push(r); });
   const locRows = Object.entries(byLoc).map(([loc, rs]) => ({ loc, s: chgSum(rs), dept: finLocDept(loc) })).sort((a, b) => (view === 'fac' ? b.s.ch - a.s.ch : b.s.w - a.s.w));
-  const locTable = !f.loc ? `<section class="card" style="margin-top:14px"><div class="card-head"><h2>By location</h2><span class="hint">${esc(perLabel)}</span></div>
+  const locTable = !f.loc ? `<section class="card"><div class="card-head"><h2>By location</h2><span class="hint">${esc(perLabel)}</span></div>
       <div class="table-wrap"><table class="breakdown"><thead><tr><th>Location</th><th>Department</th>${view === 'fac' ? '' : '<th class="num">Providers</th>'}<th class="num">${view === 'fac' ? 'Cases' : 'Encounters'}</th>${view === 'fac' ? '' : '<th class="num">Work RVUs</th><th class="num">wRVU / enc.</th>'}<th class="num">Charges</th><th class="num">Payments</th></tr></thead>
       <tbody>${locRows.map((x) => { const d = x.dept ? finDept(x.dept) : null; return `<tr><td><a href="#" data-act="bl-loc" data-v="${esc(x.loc)}"><b>${esc(x.loc)}</b></a></td><td>${d ? `<a href="#/reports/clinics/${encodeURIComponent(d.code)}">${esc(d.label)}</a>` : x.dept ? esc(FIN_DEPT_LABELS[x.dept] || x.dept) : '<span class="muted">—</span>'}</td>${view === 'fac' ? '' : `<td class="num">${x.s.provs.size}</td>`}<td class="num">${volInt(x.s.enc)}</td>${view === 'fac' ? '' : `<td class="num"><b>${volInt(x.s.w)}</b></td><td class="num">${x.s.enc ? (x.s.w / x.s.enc).toFixed(2) : '—'}</td>`}<td class="num">${finMoney(x.s.ch)}</td><td class="num">${finMoney(x.s.pay)}</td></tr>`; }).join('')}</tbody></table></div></section>` : '';
   const topCPT = Object.entries(s.cpt).map(([code, v]) => ({ label: `${code} ${(meta.descs || {})[code] || ''}`.trim(), v: Math.round(view === 'fac' ? v[3] : v[1]) })).sort((a, b) => b.v - a.v).slice(0, 15);
   const facNote = view === 'prof' && fs.ch ? `<div class="notice info" style="margin-bottom:14px">${ico('i-info')}<div><b>${finShort(fs.ch)} of hospital facility charges are kept out of this view.</b> They are the hospital's own billing for room time, implants, supplies, recovery and technical fees on ${volInt(fs.enc)} cases, and Meditech does not tie them to a clinician's work. <a href="#" data-act="bl-view" data-v="fac">See them by attending provider</a>.</div></div>` : '';
+  const provSec = view === 'fac' ? `<section class="card"><div class="card-head"><h2>By attending provider${f.loc ? ` · ${esc(f.loc)}` : ''}</h2><span class="hint">${esc(perLabel)}</span></div>${recs.length ? chgFacTableHTML(recs, 40) : '<p class="muted">No hospital facility charges in this selection.</p>'}
+        <p class="help" style="margin:10px 0 0">Facility charges are what the hospital bills for the room, staff time, implants and supplies on a case: operating room minutes, recovery, endoscopy, pain procedure rooms and the technical side of imaging. They are list price; what is collected is a fraction of it. The attending is the provider Meditech names on the account, usually the surgeon or proceduralist.</p></section>`
+      : `<section class="card"><div class="card-head"><h2>${f.prov ? esc(f.prov) : 'By provider'}${f.loc ? ` · ${esc(f.loc)}` : ''}</h2><span class="hint">${esc(perLabel)} · click a column heading to sort</span></div>${chgProviderTableHTML(recs, { limit: 40, showLoc: !f.loc, loc: f.loc })}</section>`;
+  const codeSec = `<div class="cgrid" style="display:grid;grid-template-columns:minmax(0,1fr);gap:14px">
+      <section class="card"><div class="card-head"><h2>${view === 'fac' ? 'Largest charge items' : 'Most billed codes'}</h2><span class="hint">${view === 'fac' ? 'charges' : 'units'}, ${esc(perLabel)}</span></div>${imgHBarSVG(topCPT, '#2a78d6', 'Most billed codes')}</section>
+      <section class="card"><div class="card-head"><h2>All codes</h2><span class="hint">${Object.keys(s.cpt).length} distinct</span></div>${chgCPTTableHTML(s.cpt, meta.descs || {}, 60)}</section>
+    </div>`;
+  const blDefs = [['prov', view === 'fac' ? 'By Attending Provider' : 'By Provider', 'i-people', view === 'fac' ? 'What each provider\'s cases bring to the hospital in facility charges' : 'Work RVUs, encounters, visit levels and charges for each provider'], ...(locTable ? [['loc', 'By Location', 'i-home', 'The same numbers for each clinic or site']] : []), ['codes', 'Codes', 'i-list', 'The most billed codes and the full list of codes']];
   return finHead('Provider billing', view === 'fac' ? 'Hospital facility charges by attending provider: what each provider\'s cases bring to the hospital.' : 'CPT and HCPCS codes, work RVUs, charges and payments by performing provider and visit location, from the Meditech RVU report.', 'billing', actions) + `
     <div class="card no-print" style="margin-bottom:14px">
       <div class="pair fbar" style="display:flex;gap:14px 22px;flex-wrap:wrap;align-items:flex-end">
@@ -5198,14 +5217,10 @@ function viewBilling() {
     ${facNote}
     ${chgCodingNoteHTML(s)}
     ${finGlossaryHTML('billing')}
-    ${view === 'fac' ? `<section class="card"><div class="card-head"><h2>By attending provider${f.loc ? ` · ${esc(f.loc)}` : ''}</h2><span class="hint">${esc(perLabel)}</span></div>${recs.length ? chgFacTableHTML(recs, 40) : '<p class="muted">No hospital facility charges in this selection.</p>'}
-        <p class="help" style="margin:10px 0 0">Facility charges are what the hospital bills for the room, staff time, implants and supplies on a case: operating room minutes, recovery, endoscopy, pain procedure rooms and the technical side of imaging. They are list price; what is collected is a fraction of it. The attending is the provider Meditech names on the account, usually the surgeon or proceduralist.</p></section>`
-      : `<section class="card"><div class="card-head"><h2>${f.prov ? esc(f.prov) : 'By provider'}${f.loc ? ` · ${esc(f.loc)}` : ''}</h2><span class="hint">${esc(perLabel)} · click a column heading to sort</span></div>${chgProviderTableHTML(recs, { limit: 40, showLoc: !f.loc, loc: f.loc })}</section>`}
-    ${locTable}
-    <div class="cgrid" style="display:grid;grid-template-columns:minmax(0,1fr);gap:14px;margin-top:14px">
-      <section class="card"><div class="card-head"><h2>${view === 'fac' ? 'Largest charge items' : 'Most billed codes'}</h2><span class="hint">${view === 'fac' ? 'charges' : 'units'}, ${esc(perLabel)}</span></div>${imgHBarSVG(topCPT, '#2a78d6', 'Most billed codes')}</section>
-      <section class="card"><div class="card-head"><h2>All codes</h2><span class="hint">${Object.keys(s.cpt).length} distinct</span></div>${chgCPTTableHTML(s.cpt, meta.descs || {}, 60)}</section>
-    </div>
+    ${secTabsHTML('bl', blDefs)}
+    ${secPane('bl', blDefs, 'prov', provSec)}
+    ${secPane('bl', blDefs, 'loc', locTable)}
+    ${secPane('bl', blDefs, 'codes', codeSec)}
     <p class="help" style="margin:10px 0 0">Work RVUs come from Meditech's fee schedule line by line, multiplied by units. Encounters are distinct account and service date pairs. Payments are what has posted so far, so recent months collect further after upload; they post to the patient account, not to a code. To see what a change in visit coding is worth for one clinic, open that clinic under Clinic financials. Months loaded: ${months.map(fmtMonth).join(', ')}${meta.importedAt ? ` · last uploaded ${fmtTS(meta.importedAt)} by ${esc(meta.importedBy || '')}` : ''}.</p>`;
 }
 /* ============================================================================================
@@ -6337,6 +6352,7 @@ const actions = {
   'import-pw': () => $('#pw-input').click(),
   'pw-win': (el) => { ui.pw.win = +el.dataset.v; const y = window.scrollY; rerender(); window.scrollTo(0, y); },
   'pw-detail': (el) => openPathModal(el.dataset.prov || ''),
+  'sec-tab': (el) => { const g = el.dataset.g; ui.sec[g] = el.dataset.v; document.querySelectorAll(`#view .ftab[data-g="${g}"]`).forEach((d) => d.classList.toggle('ftab-off', d.dataset.ftab !== el.dataset.v)); el.parentNode.querySelectorAll('button').forEach((b) => { b.classList.toggle('on', b === el); b.setAttribute('aria-selected', b === el); }); const top = el.parentNode.getBoundingClientRect().top + window.scrollY - 90; if (window.scrollY > top) window.scrollTo(0, top); },
   'fin-tab': (el) => { ui.fin.tab = el.dataset.v; document.querySelectorAll('#view .ftab').forEach((d) => d.classList.toggle('ftab-off', d.dataset.ftab !== el.dataset.v)); document.querySelectorAll('#view .ftabs button').forEach((b) => b.classList.toggle('on', b === el)); const top = document.querySelector('#view .ftabs').getBoundingClientRect().top + window.scrollY - 90; if (window.scrollY > top) window.scrollTo(0, top); },
   'ph-tab': (el) => { ui.ph.tab = el.dataset.v; const y = window.scrollY; rerender(); window.scrollTo(0, Math.min(y, 260)); },
   'pw-clear': () => clearPathways(),
