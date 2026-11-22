@@ -239,10 +239,23 @@
   .ftabs button.on .ftab-ico { background: rgba(255,255,255,.18); color: #fff; }
   .ftabs button.on::after { content: ''; position: absolute; left: 50%; bottom: -9px; width: 16px; height: 16px; margin-left: -8px; background: var(--teal); transform: rotate(45deg); border-radius: 2px; }
   @media (max-width: 520px) { .ftabs { grid-template-columns: 1fr 1fr; gap: 8px; } .ftabs button { padding: 10px; min-height: 0; flex-direction: column; align-items: flex-start; gap: 6px; } .ftabs small { display: none; } .ftabs b { font-size: 15px; } .ftabs .ftab-ico { width: 32px; height: 32px; } }
-  .rnav { display: flex; gap: 8px; flex-wrap: wrap; }
-  .rnav a { display: inline-flex; align-items: center; gap: 8px; height: 46px; padding: 0 18px; border: 1.5px solid var(--border); border-radius: 999px; background: var(--surface); color: var(--teal-dark); font-weight: 700; text-decoration: none; box-shadow: var(--shadow); transition: transform .12s, border-color .12s, box-shadow .12s; }
-  .rnav a:hover { border-color: var(--teal); transform: translateY(-1px); box-shadow: 0 3px 10px rgba(20,109,141,.18); }
-  .rnav a.on { background: var(--teal); border-color: var(--teal); color: #fff; box-shadow: 0 4px 12px rgba(20,109,141,.3); }
+  .page-head .actions:has(.rnav) { display: contents; }
+  .page-head:has(.rnav) { align-items: center; gap: 6px 4px; }
+  .page-head:has(.rnav) > div:first-child { flex: 1 1 320px; margin-right: 12px; }
+  .page-head:has(.rnav) .btn { min-height: 34px; padding: 4px 10px; font-size: 14px; font-weight: 600; color: var(--muted); background: none; border-color: transparent; box-shadow: none; }
+  .page-head:has(.rnav) .btn:hover { color: var(--teal-dark); background: var(--teal-soft); border-color: transparent; }
+  .page-head:has(.rnav) .btn svg { width: 16px; height: 16px; }
+  .rnav { order: 9; flex: 1 0 100%; display: grid; grid-template-columns: repeat(auto-fit, minmax(190px, 1fr)); gap: 10px; margin-top: 12px; padding-top: 14px; border-top: 1px solid var(--border); }
+  .rnav a { position: relative; display: flex; align-items: center; gap: 12px; padding: 12px 14px; min-height: 68px; border: 1.5px solid var(--border); border-top: 4px solid var(--c); border-radius: 12px; background: var(--surface); color: var(--text); text-decoration: none; box-shadow: var(--shadow); transition: transform .12s, box-shadow .12s, background .12s; }
+  .rnav a:hover { transform: translateY(-2px); box-shadow: 0 5px 14px rgba(0,0,0,.12); background: var(--cs); text-decoration: none; }
+  .rnav .rnav-ico { flex: none; width: 40px; height: 40px; border-radius: 10px; display: grid; place-items: center; background: var(--cs); color: var(--c); }
+  .rnav .rnav-txt { display: flex; flex-direction: column; min-width: 0; }
+  .rnav b { font-size: 16px; line-height: 1.25; }
+  .rnav small { font-size: 12.5px; line-height: 1.3; color: var(--muted); }
+  .rnav a.on { background: var(--c); border-color: var(--c); color: #fff; box-shadow: 0 6px 16px rgba(0,0,0,.2); transform: none; }
+  .rnav a.on small { color: rgba(255,255,255,.88); }
+  .rnav a.on .rnav-ico { background: rgba(255,255,255,.2); color: #fff; }
+  @media (max-width: 520px) { .rnav { grid-template-columns: 1fr 1fr; gap: 8px; } .rnav a { min-height: 0; padding: 9px 10px; gap: 8px; } .rnav small { display: none; } .rnav .rnav-ico { width: 30px; height: 30px; } .rnav b { font-size: 14.5px; } }
   .grid2 > .card + .card { margin-top: 0; }
   .card .ftabs { margin: 18px 0 2px; max-width: none; }
   .ftab-off { display: none; } .ftab-print { display: none; } .ftab-first > section.card:first-child { margin-top: 0 !important; }
@@ -4395,8 +4408,8 @@ function finStackSVG(months, groups, label) {
 }
 /* ---------- views ---------- */
 function finSwitcher(which) {
-  const tab = (key, href, label, ic, tip) => `<a class="${which === key ? 'on' : ''}" href="${href}" title="${tip}"${which === key ? ' aria-current="page"' : ''}>${ico(ic)}<span>${label}</span></a>`;
-  return `<nav class="rnav" aria-label="Report">${tab('referrals', '#/reports', 'Referral tracking', 'i-route', 'Where referrals stand and how long they take')}${tab('surgeons', '#/reports/surgeons', 'Surgical volume', 'i-chart', 'Cases and charges by surgeon, room and specialty')}${tab('imaging', '#/reports/imaging', 'Imaging referrals', 'i-search', 'Who orders imaging and how much')}${tab('clinics', '#/reports/clinics', 'Clinic financials', 'i-home', 'Revenue, cost and break-even for each clinic')}${tab('billing', '#/reports/billing', 'Provider billing', 'i-list', 'Codes, work RVUs and charges by provider')}</nav>`;
+  const tab = (key, href, label, ic, tip, c, cs) => `<a class="${which === key ? 'on' : ''}" href="${href}" style="--c:${c};--cs:${cs}"${which === key ? ' aria-current="page"' : ''}><span class="rnav-ico">${ico(ic)}</span><span class="rnav-txt"><b>${label}</b><small>${tip}</small></span></a>`;
+  return `<nav class="rnav" aria-label="Report">${tab('referrals', '#/reports', 'Referral tracking', 'i-route', 'Where referrals stand', '#146D8D', '#e3eff4')}${tab('surgeons', '#/reports/surgeons', 'Surgical volume', 'i-chart', 'Cases by surgeon and room', '#2f7f36', '#e8f4e9')}${tab('imaging', '#/reports/imaging', 'Imaging referrals', 'i-search', 'Who orders imaging', '#714F39', '#f2ece8')}${tab('clinics', '#/reports/clinics', 'Clinic financials', 'i-home', 'Profit and break-even', '#9a6410', '#fdf1dc')}${tab('billing', '#/reports/billing', 'Provider billing', 'i-list', 'Codes, RVUs and charges', '#44546a', '#e8ecf1')}</nav>`;
 }
 /* Section cards: large buttons that split a long page into named parts. defs = [key, name, icon, one-line description]. */
 function secCur(g, defs) { const v = ui.sec[g]; return defs.some((d) => d[0] === v) ? v : defs[0][0]; }
