@@ -226,6 +226,19 @@
   th.sortable:hover { color: var(--text); text-decoration: underline; }
   th.sortable .arrow { color: var(--green-dark); }
   @media print { th.ts .arrow { display: none; } }
+  .ftabs { display: grid; grid-template-columns: repeat(auto-fit, minmax(210px, 1fr)); gap: 12px; max-width: 1180px; margin: 22px auto 26px; }
+  .ftabs button { position: relative; display: flex; align-items: center; gap: 12px; text-align: left; font: inherit; cursor: pointer; padding: 14px 16px; min-height: 76px; color: var(--text); background: var(--surface); border: 1.5px solid var(--border); border-radius: 12px; box-shadow: var(--shadow); transition: transform .12s, box-shadow .12s, border-color .12s; }
+  .ftabs button:hover { border-color: var(--teal); transform: translateY(-2px); box-shadow: 0 4px 12px rgba(20,109,141,.18); }
+  .ftabs button:focus-visible { outline: 3px solid var(--teal-soft); outline-offset: 2px; }
+  .ftabs .ftab-ico { flex: none; width: 42px; height: 42px; border-radius: 50%; display: grid; place-items: center; background: var(--teal-soft); color: var(--teal); }
+  .ftabs .ftab-txt { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
+  .ftabs b { font-size: 17px; line-height: 1.25; }
+  .ftabs small { font-size: 13px; line-height: 1.35; color: var(--muted); }
+  .ftabs button.on { background: var(--teal); border-color: var(--teal); color: #fff; box-shadow: 0 6px 16px rgba(20,109,141,.32); transform: none; }
+  .ftabs button.on small { color: rgba(255,255,255,.86); }
+  .ftabs button.on .ftab-ico { background: rgba(255,255,255,.18); color: #fff; }
+  .ftabs button.on::after { content: ''; position: absolute; left: 50%; bottom: -9px; width: 16px; height: 16px; margin-left: -8px; background: var(--teal); transform: rotate(45deg); border-radius: 2px; }
+  @media (max-width: 520px) { .ftabs { grid-template-columns: 1fr 1fr; gap: 8px; } .ftabs button { padding: 10px; min-height: 0; flex-direction: column; align-items: flex-start; gap: 6px; } .ftabs small { display: none; } .ftabs b { font-size: 15px; } .ftabs .ftab-ico { width: 32px; height: 32px; } }
   .ftab-off { display: none; } .ftab-print { display: none; } .ftab-first > section.card:first-child { margin-top: 0 !important; }
   @media print { .ftab-off { display: block; } .ftab-print { display: block; margin: 18px 0 8px; } }
   td.chk, th.chk { width: 26px; padding-right: 0; }
@@ -4900,7 +4913,7 @@ function viewFinDept(rec, actions) {
       </div></section>` : '';
   const coding = finCodingHTML(rec), payPlan = finPayHTML(rec);
   const emCurve = finEMCurveCardHTML(rec), provBill = chgDeptSectionHTML(rec), downs = finDownstreamHTML(rec), trace = pwDeptHTML(rec);
-  const tabDefs = [['over', 'How it is doing', true], ['plan', 'What would improve it', true], ['stmt', 'Statement and costs', true], ['prov', 'Providers and what they bring', !!(provBill || downs || trace)]].filter((t) => t[2]);
+  const tabDefs = [['over', 'How it is doing', true, 'i-chart', 'Monthly trends and why the result is what it is'], ['plan', 'What would improve it', true, 'i-flag', 'Break-even, provider pay and visit coding'], ['stmt', 'Statement and costs', true, 'i-list', 'The statement, cost types and staffing hours'], ['prov', 'Providers and what they bring', !!(provBill || downs || trace), 'i-people', 'Billing, imaging and procedures by provider']].filter((t) => t[2]);
   const tab = tabDefs.some((t) => t[0] === f.tab) ? f.tab : 'over', pane = (k, html) => `<div class="ftab${tab === k ? '' : ' ftab-off'}" data-ftab="${k}"><h2 class="ftab-print">${tabDefs.find((t) => t[0] === k)[1]}</h2>${html}</div>`;
   return finHead(rec.label, `${esc(rec.code)} · ${esc(rec.name)} · ${esc(FIN_GROUPS.find((x) => x[0] === rec.group)[1])}`, 'clinics', actions) + `
     <div class="card no-print" style="margin-bottom:14px">
@@ -4915,7 +4928,7 @@ function viewFinDept(rec, actions) {
     <p style="font-size:16px;line-height:1.5;margin:0 0 14px">${story}</p>
     <div class="kpis" style="margin-bottom:14px">${kpis.map((k) => `<div class="kpi ${k.red ? 'red' : ''}"><div class="label">${k.l}</div><div class="value" style="font-size:24px">${k.v}</div><span class="small">${k.c || ''}</span></div>`).join('')}</div>
     ${finGlossaryHTML(coding ? 'both' : 'fin')}
-    <div class="toggle no-print ftabs" role="tablist" aria-label="Sections of this page" style="margin:0 0 14px;flex-wrap:wrap">${tabDefs.map(([k, l]) => `<button role="tab" class="${tab === k ? 'on' : ''}" data-act="fin-tab" data-v="${k}">${l}</button>`).join('')}</div>
+    <div class="no-print ftabs" role="tablist" aria-label="Sections of this page">${tabDefs.map(([k, l, , ic, d]) => `<button role="tab" class="${tab === k ? 'on' : ''}" data-act="fin-tab" data-v="${k}"><span class="ftab-ico">${ico(ic)}</span><span class="ftab-txt"><b>${l}</b><small>${d}</small></span></button>`).join('')}</div>
     ${pane('over', `
     <div class="cgrid" style="display:grid;grid-template-columns:repeat(auto-fit,minmax(min(440px,100%),1fr));gap:14px">
       <section class="card"><div class="card-head"><h2>${esc(rec.unit)} by month</h2><span class="hint">dashed red = break-even a month</span></div>${finLegend([{ l: `${rec.year}`, c: FIN_C.cy }, { l: `${meta.py}`, c: FIN_C.py }, { l: 'Budget', c: FIN_C.bu, dash: true }])}${volChart}</section>
