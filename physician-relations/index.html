@@ -258,6 +258,8 @@
   @media (max-width: 520px) { .rnav { grid-template-columns: 1fr 1fr; gap: 8px; } .rnav a { min-height: 0; padding: 9px 10px; gap: 8px; } .rnav small { display: none; } .rnav .rnav-ico { width: 30px; height: 30px; } .rnav b { font-size: 14.5px; } }
   .grid2 > .card + .card { margin-top: 0; }
   .card .ftabs { margin: 18px 0 2px; max-width: none; }
+  .sec-kind { margin: -4px 0 12px; font-size: 14.5px; color: var(--text-2); }
+  .sec-kind span { display: inline-block; font-weight: 700; font-size: 13px; padding: 3px 10px; border-radius: 999px; margin-right: 8px; }
   .ftab-off { display: none; } .ftab-print { display: none; } .ftab-first > section.card:first-child { margin-top: 0 !important; }
   @media print { .ftab-off { display: block; } .ftab-print { display: block; margin: 18px 0 8px; } }
   td.chk, th.chk { width: 26px; padding-right: 0; }
@@ -5410,7 +5412,7 @@ function pwAttName(att) { return chgAttDisplay(att) || 'Not recorded'; }
 function pwDeptHTML(rec) {
   const meta = pwMeta(), hasBilling = chgRecords().some((r) => r.dept === rec.code && !chgIsFac(r));
   /* only a clinic that patients visit can be a place they came from: not the operating room, imaging or an inpatient unit */
-  if (!meta) return hasBilling && finGroupOf(rec.code) === 'clinic' && !PW_NOT_SOURCE.test(rec.label) ? `<section class="card no-print" style="margin-top:14px"><div class="card-head"><h2>Surgery, endoscopy and procedures this clinic's patients went on to</h2><span class="hint">not traced yet</span></div>
+  if (!meta) return hasBilling && finGroupOf(rec.code) === 'clinic' && !PW_NOT_SOURCE.test(rec.label) ? `<section class="card no-print" style="margin-top:14px"><div class="card-head"><h2>Surgeries and procedures patients had after a visit here</h2><span class="hint">not traced yet</span></div>
       <p class="muted" style="margin:0">${isAdmin() ? 'To see which surgeries, endoscopies and procedures followed a visit here, open <a href="#/reports/billing" data-act="bl-view" data-v="path">Provider billing, Clinic to procedure</a> and choose <b>Trace patients to procedures</b>. Pick all the monthly RVU report files together.' : 'The administrator can trace which surgeries, endoscopies and procedures followed a visit here, from the monthly RVU reports.'}</p></section>` : '';
   const win = pwWindow(), mine = pwRecords().filter((r) => r.dept === rec.code), byProv = {};
   if (!mine.length && !(meta.depts || []).includes(rec.code)) return '';   // the trace found no clinic visits here, so "none found" would say nothing
@@ -5427,7 +5429,8 @@ function pwDeptHTML(rec) {
   const cells = (s) => PW_GROUPS.map(([k]) => `<td class="num">${cnt(g(s, k).n)}</td><td class="num">${money(g(s, k).ch)}</td>`).join('');
   const topAtt = (s) => { const a = Object.values(s.byAtt).sort((p, q) => q.n - p.n || q.ch - p.ch)[0]; return a ? `${esc(pwAttName(a.att))}${Object.keys(s.byAtt).length > 1 ? ` <span class="muted">(${volInt(a.n)} of ${volInt(s.n)})</span>` : ''}` : ''; };
   return `<section class="card" style="margin-top:14px">
-      <div class="card-head"><h2>Surgery, endoscopy and procedures this clinic's patients went on to</h2>${pwWinToggle()}</div>
+      <div class="card-head"><h2>Surgeries and procedures patients had after a visit here</h2>${pwWinToggle()}</div>
+      <p class="sec-kind"><span style="background:var(--amber-soft);color:var(--amber)">Followed a visit</span>The patient was seen here first, then had the procedure. It shows where patients went next, not proof of who sent them.</p>
       <p style="margin:0 0 12px;font-size:16px;line-height:1.5">${T.n ? `In the ${win} days after a visit to ${esc(rec.label)}, its patients had ${say} at NWSH, with <b>${finShort(T.ch)}</b> of hospital facility charges. Those charges are booked to the operating room, endoscopy and procedure departments, not to this clinic.${ownSurgeons ? ' Cases done by this clinic\'s own surgeons are also counted under the surgeon in this clinic\'s hospital charges, so do not add the two together.' : ''}` : `No surgery, endoscopy or procedure was found within ${win} days of a visit to ${esc(rec.label)} in the files traced.`}</p>
       ${rows.length ? `<div class="table-wrap"><table class="breakdown bill tight">
         <thead><tr><th rowspan="2">Provider seen before the procedure</th><th rowspan="2" class="num">Cases</th>${PW_GROUPS.map(([, l]) => `<th colspan="2" ${gh}>${l}</th>`).join('')}<th rowspan="2" class="num" style="white-space:normal">Total charges</th><th rowspan="2" style="white-space:normal">Most often done by</th></tr>
@@ -5569,7 +5572,8 @@ function finDownstreamHTML(rec) {
   const say = bits.length > 2 ? `${bits.slice(0, -1).join(', ')} and ${bits[bits.length - 1]}` : bits.join(' and ');
   const dash = '<span class="muted">—</span>', money = (v) => (v ? finMoney(v) : dash), cnt = (v) => (v ? volInt(v) : dash), gh = 'style="text-align:center;white-space:normal;border-bottom:1px solid var(--border)"', sub = 'class="sub" style="white-space:normal;max-width:150px;margin-left:auto"';
   return `<section class="card" style="margin-top:14px">
-      <div class="card-head"><h2>What this clinic's providers bring to the rest of the hospital</h2><span class="hint">charges not on this department's statement${chgLabel ? ` · ${esc(chgLabel)}` : ''}</span></div>
+      <div class="card-head"><h2>Hospital imaging and services these providers ordered</h2><span class="hint">charges not on this department's statement${chgLabel ? ` · ${esc(chgLabel)}` : ''}</span></div>
+      <p class="sec-kind"><span style="background:var(--green-soft);color:var(--green-dark)">Ordered directly</span>The provider's name is on the hospital account, so this work is tied to them.</p>
       <p style="margin:0 0 12px;font-size:16px;line-height:1.5">${T.tot ? `The ${rows.length} provider${rows.length === 1 ? '' : 's'} below who see patients in ${esc(rec.label)} also account for <b>${finShort(T.tot)}</b> of charges booked to other departments: ${say}. None of it shows up in this department's revenue or EBITDA.` : `Providers who see patients in ${esc(rec.label)} ordered <b>${volInt(T.orders)}</b> imaging exams at NWSH (${esc(imgLabel)}). Charges for them will show here once the provider RVU reports for those months are loaded.`}</p>
       <div class="table-wrap"><table class="breakdown bill tight">
         <thead><tr><th rowspan="2">Provider</th><th rowspan="2" class="num" style="white-space:normal">Encounters here</th><th colspan="2" ${gh}>Imaging ordered at the hospital</th><th colspan="2" ${gh}>Imaging taken in this clinic</th><th colspan="2" ${gh}>Surgery, procedures, therapy</th><th rowspan="2" class="num" style="white-space:normal">Total charges</th>${T.orders ? '<th rowspan="2" class="num">Orders in<br>imaging report</th>' : ''}</tr>
