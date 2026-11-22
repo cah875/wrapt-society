@@ -189,4 +189,4 @@ Click a column heading on almost any table to sort by it; click again to reverse
 
 ## Clinic page sections
 
-A clinic's financial page keeps its summary, sentence and headline numbers at the top, then splits the rest into four tabs: How it is doing (charts and the EBITDA drivers), What would improve it (break-even, pay planner, visit coding), Statement and costs, and Providers and what they bring (billing by provider, downstream imaging and procedures). The chosen tab is kept when you change clinic or period. Printing prints all four.
+A clinic's financial page keeps its summary, sentence and headline numbers at the top, then splits the rest into four tabs: Performance (charts and the EBITDA drivers), Ways to Improve (break-even, pay planner, visit coding), Financial Statement (statement, cost types, staffing hours), and Provider Impact (billing by provider, downstream imaging and procedures). The chosen tab is kept when you change clinic or period. Printing prints all four.

@@ -4913,7 +4913,7 @@ function viewFinDept(rec, actions) {
       </div></section>` : '';
   const coding = finCodingHTML(rec), payPlan = finPayHTML(rec);
   const emCurve = finEMCurveCardHTML(rec), provBill = chgDeptSectionHTML(rec), downs = finDownstreamHTML(rec), trace = pwDeptHTML(rec);
-  const tabDefs = [['over', 'How it is doing', true, 'i-chart', 'Monthly trends and why the result is what it is'], ['plan', 'What would improve it', true, 'i-flag', 'Break-even, provider pay and visit coding'], ['stmt', 'Statement and costs', true, 'i-list', 'The statement, cost types and staffing hours'], ['prov', 'Providers and what they bring', !!(provBill || downs || trace), 'i-people', 'Billing, imaging and procedures by provider']].filter((t) => t[2]);
+  const tabDefs = [['over', 'Performance', true, 'i-chart', 'Visits, money in and money out each month, and why we made or lost money'], ['plan', 'Ways to Improve', true, 'i-flag', 'Try changes to visits, provider pay and coding to see what gets us to break-even'], ['stmt', 'Financial Statement', true, 'i-list', 'The full income and expense statement, where the money goes, and staffing hours'], ['prov', 'Provider Impact', !!(provBill || downs || trace), 'i-people', 'What each provider bills, and the imaging and procedures they send to the hospital']].filter((t) => t[2]);
   const tab = tabDefs.some((t) => t[0] === f.tab) ? f.tab : 'over', pane = (k, html) => `<div class="ftab${tab === k ? '' : ' ftab-off'}" data-ftab="${k}"><h2 class="ftab-print">${tabDefs.find((t) => t[0] === k)[1]}</h2>${html}</div>`;
   return finHead(rec.label, `${esc(rec.code)} · ${esc(rec.name)} · ${esc(FIN_GROUPS.find((x) => x[0] === rec.group)[1])}`, 'clinics', actions) + `
     <div class="card no-print" style="margin-bottom:14px">
