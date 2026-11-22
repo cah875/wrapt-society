@@ -186,3 +186,7 @@ Referral tracking involves patient data, which makes this a HIPAA matter:
 ## Sorting tables
 
 Click a column heading on almost any table to sort by it; click again to reverse. Numbers and dates start largest or latest first, names start A to Z. Total rows stay at the bottom, and the choice is kept while the page is open. Tables whose order carries meaning (the operating statement, the EBITDA drivers, a provider's profit and loss, the pay planner and the office-visit code mix) stay in their fixed order. To keep another table fixed, add `data-nosort` to its `<table>` tag.
+
+## Clinic page sections
+
+A clinic's financial page keeps its summary, sentence and headline numbers at the top, then splits the rest into four tabs: How it is doing (charts and the EBITDA drivers), What would improve it (break-even, pay planner, visit coding), Statement and costs, and Providers and what they bring (billing by provider, downstream imaging and procedures). The chosen tab is kept when you change clinic or period. Printing prints all four.

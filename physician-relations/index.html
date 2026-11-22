@@ -226,6 +226,8 @@
   th.sortable:hover { color: var(--text); text-decoration: underline; }
   th.sortable .arrow { color: var(--green-dark); }
   @media print { th.ts .arrow { display: none; } }
+  .ftab-off { display: none; } .ftab-print { display: none; } .ftab-first > section.card:first-child { margin-top: 0 !important; }
+  @media print { .ftab-off { display: block; } .ftab-print { display: block; margin: 18px 0 8px; } }
   td.chk, th.chk { width: 26px; padding-right: 0; }
   td.chk input, th.chk input { width: 18px; height: 18px; cursor: pointer; }
   tr.selected td { background: var(--green-soft); }
@@ -4897,6 +4899,9 @@ function viewFinDept(rec, actions) {
         <div class="kpi"><div class="label">Salaries & benefits per ${esc(u1)}</div><div class="value" style="font-size:22px">${a.sb !== null && a.vis ? finMoney(a.sb / a.vis) : '—'}</div><span class="small">${a.sb !== null && a.netRev ? finPctText(finPct(a.sb, a.netRev)) + ' of net revenue' : ''}</span></div>
       </div></section>` : '';
   const coding = finCodingHTML(rec), payPlan = finPayHTML(rec);
+  const emCurve = finEMCurveCardHTML(rec), provBill = chgDeptSectionHTML(rec), downs = finDownstreamHTML(rec), trace = pwDeptHTML(rec);
+  const tabDefs = [['over', 'How it is doing', true], ['plan', 'What would improve it', true], ['stmt', 'Statement and costs', true], ['prov', 'Providers and what they bring', !!(provBill || downs || trace)]].filter((t) => t[2]);
+  const tab = tabDefs.some((t) => t[0] === f.tab) ? f.tab : 'over', pane = (k, html) => `<div class="ftab${tab === k ? '' : ' ftab-off'}" data-ftab="${k}"><h2 class="ftab-print">${tabDefs.find((t) => t[0] === k)[1]}</h2>${html}</div>`;
   return finHead(rec.label, `${esc(rec.code)} · ${esc(rec.name)} · ${esc(FIN_GROUPS.find((x) => x[0] === rec.group)[1])}`, 'clinics', actions) + `
     <div class="card no-print" style="margin-bottom:14px">
       <div class="pair fbar" style="display:flex;gap:14px 22px;flex-wrap:wrap;align-items:flex-end">
@@ -4910,27 +4915,28 @@ function viewFinDept(rec, actions) {
     <p style="font-size:16px;line-height:1.5;margin:0 0 14px">${story}</p>
     <div class="kpis" style="margin-bottom:14px">${kpis.map((k) => `<div class="kpi ${k.red ? 'red' : ''}"><div class="label">${k.l}</div><div class="value" style="font-size:24px">${k.v}</div><span class="small">${k.c || ''}</span></div>`).join('')}</div>
     ${finGlossaryHTML(coding ? 'both' : 'fin')}
+    <div class="toggle no-print ftabs" role="tablist" aria-label="Sections of this page" style="margin:0 0 14px;flex-wrap:wrap">${tabDefs.map(([k, l]) => `<button role="tab" class="${tab === k ? 'on' : ''}" data-act="fin-tab" data-v="${k}">${l}</button>`).join('')}</div>
+    ${pane('over', `
     <div class="cgrid" style="display:grid;grid-template-columns:repeat(auto-fit,minmax(min(440px,100%),1fr));gap:14px">
       <section class="card"><div class="card-head"><h2>${esc(rec.unit)} by month</h2><span class="hint">dashed red = break-even a month</span></div>${finLegend([{ l: `${rec.year}`, c: FIN_C.cy }, { l: `${meta.py}`, c: FIN_C.py }, { l: 'Budget', c: FIN_C.bu, dash: true }])}${volChart}</section>
       <section class="card"><div class="card-head"><h2>Net revenue, expenses and EBITDA</h2><span class="hint">${rec.year} by month</span></div>${finLegend([{ l: 'Net revenue', c: FIN_C.rev }, { l: 'Total expenses', c: FIN_C.exp }, { l: 'EBITDA', c: '#1d2730', dash: true }])}${revExp}</section>
       <section class="card"><div class="card-head"><h2>Expenses by category</h2><span class="hint">as on the statement</span></div>${finLegend(groups)}${mixChart}</section>
       <section class="card"><div class="card-head"><h2>Cost by how it behaves</h2><span class="hint">provider pay, per-visit costs, overhead</span></div>${finLegend([{ l: 'Staff, benefits, rent and overhead', c: '#6250d6' }, { l: 'Provider pay', c: '#2a78d6' }, { l: 'Supplies and per-visit costs', c: '#eda100' }])}${costStack}</section>
-      ${finEMCurveCardHTML(rec)}
     </div>
-    ${finDriversHTML(rec, per, a, rec.unit)}
-    ${finCostCardHTML(rec, per, a, unit)}
-    <section class="card" style="margin-top:14px"><div class="card-head"><h2>What it takes to break even</h2><span class="hint">change any input; the rest recalculates</span></div><div id="fin-whatif">${finWhatIfHTML(rec)}</div></section>
+    ${finDriversHTML(rec, per, a, rec.unit)}`)}
+    ${pane('plan', `<section class="card" ><div class="card-head"><h2>What it takes to break even</h2><span class="hint">change any input; the rest recalculates</span></div><div id="fin-whatif">${finWhatIfHTML(rec)}</div></section>
     ${payPlan ? `<section class="card" style="margin-top:14px"><div class="card-head"><h2>Provider pay planner</h2><span class="hint">try a pay plan or a staffing change; the results recalculate</span></div><div id="fin-pay">${payPlan}</div></section>` : ''}
     ${coding ? `<section class="card" style="margin-top:14px"><div class="card-head"><h2>Visit coding and what it is worth</h2><span class="hint">office visit (E/M) levels from the provider RVU report</span></div><div id="fin-coding">${coding}</div></section>` : ''}
-    ${hoursCard}
-    <section class="card" style="margin-top:14px">
+    ${emCurve ? `<div style="margin-top:14px">${emCurve}</div>` : ''}`)}
+    ${pane('stmt', `
+    <section class="card">
       <div class="card-head"><h2>${single ? `Statement for ${esc(per.label)}` : 'Statement by month'}</h2>${single ? '<span class="hint">actual against budget and the same month last year</span>' : `<div class="toggle" style="flex-wrap:wrap">${plToggle}</div>`}</div>
       ${plTable}
       <p class="help" style="margin:8px 0 0">${single ? 'The + button opens an expense category to its GL lines. In the two "Actual −" columns green is better than the comparison and red is worse: more revenue or lower cost is green. Choose Year to date or Last 3 months above to see the months side by side.' : `The + button opens an expense category to its GL lines. On the two "Actual −" views green is better than the comparison and red is worse. The last column totals the period; per-${esc(u1)} lines show the statement's own year-to-date figure. On a narrow screen the months scroll sideways while the line names and the total stay in view.`}</p>
     </section>
-    ${chgDeptSectionHTML(rec)}
-    ${finDownstreamHTML(rec)}
-    ${pwDeptHTML(rec)}`;
+    ${finCostCardHTML(rec, per, a, unit)}
+    ${hoursCard}`)}
+    ${tabDefs.some((t) => t[0] === 'prov') ? pane('prov', `<div class="ftab-first">${provBill}${downs}${trace}</div>`) : ''}`;
 }
 function pickFinDept(v) { const h = v ? '#/reports/clinics/' + encodeURIComponent(v) : '#/reports/clinics'; if (location.hash === h) rerender(); else location.hash = h; }
 function finCurrentDept() { return finDept(decodeURIComponent(location.hash.split('/')[3] || '')); }
@@ -6318,6 +6324,7 @@ const actions = {
   'import-pw': () => $('#pw-input').click(),
   'pw-win': (el) => { ui.pw.win = +el.dataset.v; const y = window.scrollY; rerender(); window.scrollTo(0, y); },
   'pw-detail': (el) => openPathModal(el.dataset.prov || ''),
+  'fin-tab': (el) => { ui.fin.tab = el.dataset.v; document.querySelectorAll('#view .ftab').forEach((d) => d.classList.toggle('ftab-off', d.dataset.ftab !== el.dataset.v)); document.querySelectorAll('#view .ftabs button').forEach((b) => b.classList.toggle('on', b === el)); const top = document.querySelector('#view .ftabs').getBoundingClientRect().top + window.scrollY - 90; if (window.scrollY > top) window.scrollTo(0, top); },
   'ph-tab': (el) => { ui.ph.tab = el.dataset.v; const y = window.scrollY; rerender(); window.scrollTo(0, Math.min(y, 260)); },
   'pw-clear': () => clearPathways(),
   'pw-xlsx': (el) => exportPathExcel(el.dataset.prov || ''),
