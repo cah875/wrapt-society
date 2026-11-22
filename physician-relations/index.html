@@ -225,6 +225,7 @@
   th.sortable { cursor: pointer; user-select: none; white-space: nowrap; }
   th.sortable:hover { color: var(--text); text-decoration: underline; }
   th.sortable .arrow { color: var(--green-dark); }
+  @media print { th.ts .arrow { display: none; } }
   td.chk, th.chk { width: 26px; padding-right: 0; }
   td.chk input, th.chk input { width: 18px; height: 18px; cursor: pointer; }
   tr.selected td { background: var(--green-soft); }
@@ -1826,7 +1827,7 @@ function physPLHTML(p) {
     </div>
     <section class="card" style="margin-top:18px">
       <div class="card-head"><h2>Profit and loss, clinic work</h2><span class="hint">monthly average · ${rows.map((x) => `${esc(x.rec.label)}: ${esc(mLabel(x.d.basis))}`).join(' · ')}</span></div>
-      <div class="table-wrap"><table class="breakdown">
+      <div class="table-wrap"><table class="breakdown" data-nosort>
         <thead><tr><th>Line</th><th class="num">A month</th><th class="num">A year at this pace</th><th class="num">Per encounter</th><th>How this provider's share is set</th></tr></thead>
         <tbody>
           ${line('Net revenue', 'what the clinic expects to be paid', T.rev, `${share('shCh')} of the clinic's charges were billed under this provider, so that share of the clinic's net revenue.`)}
@@ -4540,7 +4541,7 @@ function finDriversHTML(rec, per, a, unit) {
   return `<section class="card" style="margin-top:14px">
       <div class="card-head"><h2>Why the result is what it is</h2>${toggle}</div>
       <p style="margin:0 0 12px;font-size:16px;line-height:1.5">EBITDA for ${esc(per.label)} is <b class="${volCls(a.ebitda)}">${finMoney(a.ebitda)}</b>, <b class="${volCls(d)}">${finMoney(Math.abs(d))} ${d >= 0 ? 'better' : 'worse'}</b> than ${esc(cl)} (${finMoney(c.ebitda)}).${hurt ? ` The biggest drag is <b>${esc(hurt.l.toLowerCase())}</b> (${volSigned(hurt.v, finShort)}).` : ''}${help ? ` The biggest help is <b>${esc(help.l.toLowerCase())}</b> (${volSigned(help.v, finShort)}).` : ''}</p>
-      <div class="table-wrap"><table class="breakdown">
+      <div class="table-wrap"><table class="breakdown" data-nosort>
         <thead><tr><th>Driver</th><th>Actual against ${esc(cl)}</th><th class="num">Effect on EBITDA</th><th style="width:26%">Hurts ◄ ► Helps</th></tr></thead>
         <tbody><tr><td><b>EBITDA, ${esc(cl)}</b></td><td></td><td class="num"><b>${finMoney(c.ebitda)}</b></td><td></td></tr>
         ${rows.map((r) => `<tr><td>${esc(r.l)}</td><td>${r.raw ? r.d : esc(r.d)}</td><td class="num ${volCls(r.v)}">${volSigned(r.v, finMoney)}</td><td>${bar(r.v)}</td></tr>`).join('')}
@@ -4884,8 +4885,8 @@ function viewFinDept(rec, actions) {
   push('totExp', '<b>Total expenses</b>', { cls: 'total-row' });
   push('ebitda', '<b>EBITDA</b>', { cls: 'total-row' });
   [['revUnit', `Net revenue per ${u1}`], ['expUnit', `Total expense per ${u1}`], ['marginUnit', `Margin per ${u1}`], ['fixed', 'Fixed cost (finance statement)'], ['varCost', 'Variable cost (finance statement)'], ['varUnit', `Variable cost per ${u1}`], ['breakEven', `Break-even ${unit} (finance statement)`], ['hoursTotal', 'Total hours'], ['hoursProd', 'Productive hours'], ['hoursOT', 'Overtime hours'], ['hoursPTO', 'PTO hours'], ['hoursUnit', `Hours per ${u1}`]].forEach(([k, lab]) => { const l = finLine(rec, k); if (l) plRows.push(plRow(l, { label: `<span class="muted">${esc(lab)}</span>`, indent: 8 })); });
-  const plTable = single ? `<div class="table-wrap"><table class="breakdown"><thead><tr><th>Line</th><th class="num">${VOL_MONTHS[m1]} ${rec.year} actual</th><th class="num">Budget</th><th class="num">Actual − budget</th><th class="num">${VOL_MONTHS[m1]} ${meta.py}</th><th class="num">Actual − ${meta.py}</th></tr></thead><tbody>${plRows.join('')}</tbody></table></div>`
-    : `<div class="pl-wrap"><table class="breakdown pl"><thead><tr><th>Line</th>${per.months.map((i) => `<th class="num">${VOL_MONTHS[i]}</th>`).join('')}<th class="num">${esc(per.label)}</th></tr></thead><tbody>${plRows.join('')}</tbody></table></div>`;
+  const plTable = single ? `<div class="table-wrap"><table class="breakdown" data-nosort><thead><tr><th>Line</th><th class="num">${VOL_MONTHS[m1]} ${rec.year} actual</th><th class="num">Budget</th><th class="num">Actual − budget</th><th class="num">${VOL_MONTHS[m1]} ${meta.py}</th><th class="num">Actual − ${meta.py}</th></tr></thead><tbody>${plRows.join('')}</tbody></table></div>`
+    : `<div class="pl-wrap"><table class="breakdown pl" data-nosort><thead><tr><th>Line</th>${per.months.map((i) => `<th class="num">${VOL_MONTHS[i]}</th>`).join('')}<th class="num">${esc(per.label)}</th></tr></thead><tbody>${plRows.join('')}</tbody></table></div>`;
   const plToggle = [['cy', `${rec.year} actual`], ['bu', `${rec.year} budget`], ['py', `${meta.py} actual`], ['vb', 'Actual − budget'], ['vp', `Actual − ${meta.py}`]].map(([k, l]) => `<button class="${series === k ? 'on' : ''}" data-act="fin-pl" data-v="${k}">${l}</button>`).join('');
   const hoursCard = a.hours ? `<section class="card" style="margin-top:14px"><div class="card-head"><h2>Staffing hours</h2><span class="hint">${esc(per.label)}</span></div>
       <div class="kpis" style="grid-template-columns:repeat(auto-fit,minmax(140px,1fr))">
@@ -5765,7 +5766,7 @@ function viewImaging(recId) {
       <div class="card-head"><h2>By month</h2><span class="hint">${esc(who)}</span></div>
       <div class="table-wrap"><table class="breakdown"><thead><tr><th>Month</th>${modsOn.map((m) => `<th class="num">${esc(m)}</th>`).join('')}<th class="num">Total</th><th class="num">Resulted</th></tr></thead>
         <tbody>${months.map((m) => { const bm = now.byMonth[m]; return `<tr><td><b>${esc(fmtMonth(m))}</b></td>${modsOn.map((mod) => `<td class="num">${bm.mods[mod] ? volInt(bm.mods[mod]) : '<span class="muted">—</span>'}</td>`).join('')}<td class="num"><b>${volInt(bm.n)}</b></td><td class="num">${volInt(bm.r)}</td></tr>`; }).join('')}
-        <tr><td><b>Total</b></td>${modsOn.map((mod) => `<td class="num"><b>${volInt(now.byMod[mod] || 0)}</b></td>`).join('')}<td class="num"><b>${volInt(now.n)}</b></td><td class="num"><b>${volInt(now.r)}</b></td></tr></tbody></table></div>
+        <tr class="total-row"><td><b>Total</b></td>${modsOn.map((mod) => `<td class="num"><b>${volInt(now.byMod[mod] || 0)}</b></td>`).join('')}<td class="num"><b>${volInt(now.n)}</b></td><td class="num"><b>${volInt(now.r)}</b></td></tr></tbody></table></div>
       <p class="help" style="margin:10px 0 0">An exam is one imaging order line in Meditech, dated by service date. Cancelled orders are left out. "Resulted" means the order is resulted or complete or its report is signed. "Procedure Fluoroscopy" is C-arm time logged during pain injections and surgery (Meditech's "IR Fluoroscopy" lines); it is not a referral to imaging, so it is switched off unless you turn it on under Modalities, and it is not counted in Interventional Radiology. Facilities: ${esc(allSites.join(', '))}. ${meta.from && meta.asOf ? `Data covers ${fmtDate(meta.from)} to ${fmtDate(meta.asOf)}.` : ''}${meta.importedAt ? ` Last uploaded ${fmtTS(meta.importedAt)} by ${esc(meta.importedBy || '')}.` : ''}</p>
     </section>`;
 }
@@ -6372,6 +6373,48 @@ const actions = {
     try { if ((await fn()) !== false) closeModal(); } finally { el.disabled = false; }
   },
 };
+
+/* ---------- Click any column heading to sort (every table that does not already have its own sorting) ---------- */
+const tsState = new Map();   // heading signature -> { c: column, d: 1 ascending | -1 descending }; kept while the page is open
+const TS_MONTHS = { jan: 1, feb: 2, mar: 3, apr: 4, may: 5, jun: 6, jul: 7, aug: 8, sep: 9, oct: 10, nov: 11, dec: 12 };
+function tsText(td) { if (!td) return ''; let t = ''; td.childNodes.forEach((n) => { if (n.nodeType === 1 && (n.classList.contains('sub') || n.classList.contains('no-print') || (n.tagName === 'DIV' && t.trim()))) return; t += n.textContent; }); return t.replace(/\s+/g, ' ').trim(); }
+function tsDate(t) { let m = /^([A-Za-z]{3})[a-z]*\.? (?:(\d{1,2}), )?(\d{4})$/.exec(t); if (m && TS_MONTHS[m[1].toLowerCase()]) return +m[3] * 10000 + TS_MONTHS[m[1].toLowerCase()] * 100 + (+m[2] || 0); m = /^Q([1-4]) (\d{4})$/.exec(t); if (m) return +m[2] * 10000 + m[1] * 300; m = /^(\d{1,2})\/(\d{1,2})\/(\d{2,4})$/.exec(t); if (m) return (+m[3] < 100 ? 2000 + +m[3] : +m[3]) * 10000 + m[1] * 100 + +m[2]; return null; }
+function tsNum(t) { const s = t.replace(/[−–]/g, '-').replace(/[$,\s]/g, ''); const m = /^(\()?([-+]?)(\d*\.?\d+)/.exec(s); if (!m) return null; let v = parseFloat(m[3]); const rest = s.slice(m[0].length), k = /^([kKmMbB])(?![a-zA-Z])/.exec(rest); if (k) v *= { k: 1e3, m: 1e6, b: 1e9 }[k[1].toLowerCase()]; return m[1] || m[2] === '-' ? -v : v; }
+function tsHeads(table) { const grid = [], out = []; [...table.tHead.rows].forEach((tr, r) => { grid[r] = grid[r] || []; [...tr.cells].forEach((th) => { let c = 0; while (grid[r][c]) c++; const cs = th.colSpan || 1, rs = th.rowSpan || 1; for (let i = 0; i < rs; i++) { grid[r + i] = grid[r + i] || []; for (let j = 0; j < cs; j++) grid[r + i][c + j] = 1; } if (cs === 1) out.push([th, c]); }); }); return out; }
+function tsApply(table, st) {
+  const body = table.tBodies[0], all = [...body.rows], pin = all.filter((r) => r.classList.contains('total-row')), rows = all.filter((r) => !r.classList.contains('total-row'));
+  rows.forEach((r, i) => { if (r._tsI === undefined) r._tsI = i; });
+  const txt = rows.map((r) => tsText(r.cells[st.c])), blank = (t) => !t || /^(—|-|never)$/i.test(t);
+  const kind = [tsDate, tsNum].find((f) => txt.some((t) => !blank(t)) && txt.every((t) => blank(t) || f(t) !== null));
+  const val = txt.map((t) => (blank(t) ? null : kind ? kind(t) : t.toLowerCase()));
+  rows.map((r, i) => [r, val[i]]).sort((a, b) => (a[1] === null || b[1] === null ? (a[1] === null) - (b[1] === null) : (kind ? a[1] - b[1] : a[1].localeCompare(b[1], undefined, { numeric: true })) * st.d) || a[0]._tsI - b[0]._tsI).forEach(([r]) => body.appendChild(r));
+  pin.forEach((r) => body.appendChild(r));
+  table._tsHeads.forEach(([th, c]) => { const a = th.querySelector('.arrow'); if (a) a.textContent = c === st.c ? (st.d < 0 ? ' ▾' : ' ▴') : ''; });
+  return kind;
+}
+function tsSetup(root) {
+  (root || document).querySelectorAll('#view table, #modal-root table').forEach((table) => {
+    if (table._ts) return; table._ts = true;
+    const body = table.tBodies[0];
+    if (!table.tHead || !body || table.hasAttribute('data-nosort') || table.tHead.querySelector('th[data-act]') || body.querySelectorAll('tr:not(.total-row)').length < 2) return;
+    if (body.querySelector('td[colspan], td[rowspan], input:not([type=checkbox]), select, textarea')) return;
+    const heads = tsHeads(table).filter(([th]) => !th.dataset.act && !th.querySelector('input') && th.textContent.trim());
+    if (!heads.length) return;
+    table._tsHeads = heads; table._tsKey = [...table.tHead.querySelectorAll('th')].map((th) => th.textContent.trim()).join('|');
+    heads.forEach(([th, c]) => { th.classList.add('sortable', 'ts'); th._tsC = c; if (!th.title) th.title = 'Click to sort'; th.insertAdjacentHTML('beforeend', '<span class="arrow"></span>'); });
+    const st = tsState.get(table._tsKey); if (st && heads.some(([, c]) => c === st.c)) tsApply(table, st);
+  });
+}
+document.addEventListener('click', (e) => {
+  const th = e.target.closest && e.target.closest('th.ts'); if (!th) return;
+  const table = th.closest('table'); if (!table || !table._tsHeads) return;
+  const cur = tsState.get(table._tsKey), c = th._tsC;
+  let st;
+  if (cur && cur.c === c) st = { c, d: -cur.d };
+  else { st = { c, d: 1 }; if (tsApply(table, st)) st.d = -1; }   // numbers and dates start largest or latest first; names start A to Z
+  tsState.set(table._tsKey, st); tsApply(table, st);
+});
+new MutationObserver(() => tsSetup()).observe(document.body, { childList: true, subtree: true });
 
 document.addEventListener('click', (e) => {
   const el = e.target.closest('[data-act]');

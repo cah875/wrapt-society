@@ -182,3 +182,7 @@ Referral tracking involves patient data, which makes this a HIPAA matter:
   that your compliance officer has not approved for PHI. Shared web hosting often does not come with a
   Business Associate Agreement — check before going live with real patient identifiers.
 - Export a backup regularly (Settings) and store it somewhere secure.
+
+## Sorting tables
+
+Click a column heading on almost any table to sort by it; click again to reverse. Numbers and dates start largest or latest first, names start A to Z. Total rows stay at the bottom, and the choice is kept while the page is open. Tables whose order carries meaning (the operating statement, the EBITDA drivers, a provider's profit and loss, the pay planner and the office-visit code mix) stay in their fixed order. To keep another table fixed, add `data-nosort` to its `<table>` tag.
