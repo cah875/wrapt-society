@@ -260,6 +260,34 @@
   .card .ftabs { margin: 18px 0 2px; max-width: none; }
   .sec-kind { margin: -4px 0 12px; font-size: 14.5px; color: var(--text-2); }
   .sec-kind span { display: inline-block; font-weight: 700; font-size: 13px; padding: 3px 10px; border-radius: 999px; margin-right: 8px; }
+  .hero { display: flex; justify-content: space-between; align-items: center; gap: 24px 32px; flex-wrap: wrap; padding: 30px 34px; margin-bottom: 26px; border-radius: 18px; color: #fff; background: radial-gradient(1100px 380px at 88% -30%, rgba(62,157,70,.55), transparent 60%), linear-gradient(120deg, #0f5670 0%, #146D8D 55%, #1b7f9d 100%); box-shadow: 0 10px 28px rgba(15,86,112,.28); }
+  .hero-txt { flex: 1 1 420px; min-width: 0; }
+  .hero-kicker { font-size: 13px; font-weight: 700; letter-spacing: .08em; text-transform: uppercase; color: rgba(255,255,255,.78); }
+  .hero h1 { color: #fff; font-size: 34px; line-height: 1.15; margin: 6px 0 8px; }
+  .hero p { margin: 0; font-size: 17px; line-height: 1.5; color: rgba(255,255,255,.92); max-width: 640px; }
+  .hero-side { display: grid; gap: 12px; justify-items: end; }
+  .hero-actions { display: flex; gap: 10px; flex-wrap: wrap; justify-content: flex-end; }
+  .hero .btn { border-color: transparent; box-shadow: 0 2px 8px rgba(0,0,0,.16); }
+  .hero .btn.primary { background: #fff; color: var(--teal-dark); }
+  .hero .btn.primary:hover { background: var(--teal-soft); }
+  .hero .btn:not(.primary) { background: rgba(255,255,255,.14); color: #fff; border-color: rgba(255,255,255,.45); }
+  .hero .btn:not(.primary):hover { background: rgba(255,255,255,.24); }
+  .hero-lookup { display: flex; gap: 8px; width: 100%; max-width: 440px; }
+  .hero-lookup .search { flex: 1; }
+  .hero-lookup input { background: rgba(255,255,255,.96); border-color: transparent; }
+  .home-h { font-size: 13px; font-weight: 700; letter-spacing: .08em; text-transform: uppercase; color: var(--muted); margin: 26px 0 10px; }
+  .pulse { display: grid; grid-template-columns: repeat(auto-fit, minmax(215px, 1fr)); gap: 14px; }
+  .pulse-card { display: flex; flex-direction: column; gap: 4px; padding: 16px 18px 14px; border: 1.5px solid var(--border); border-top: 4px solid var(--c); border-radius: 14px; background: var(--surface); color: var(--text); text-decoration: none; box-shadow: var(--shadow); transition: transform .12s, box-shadow .12s; }
+  .pulse-card:hover { transform: translateY(-3px); box-shadow: 0 8px 20px rgba(0,0,0,.12); text-decoration: none; }
+  .pulse-top { display: flex; align-items: center; gap: 10px; }
+  .pulse-ico { flex: none; width: 34px; height: 34px; border-radius: 9px; display: grid; place-items: center; background: var(--cs); color: var(--c); }
+  .pulse-label { font-size: 14px; font-weight: 700; color: var(--text-2); }
+  .pulse-value { font-size: 34px; font-weight: 700; line-height: 1.15; margin-top: 8px; }
+  .pulse-sub { font-size: 14px; font-weight: 600; color: var(--text-2); min-height: 40px; }
+  .pulse-foot { display: flex; justify-content: space-between; align-items: center; gap: 8px; margin-top: 6px; padding-top: 10px; border-top: 1px solid var(--border); font-size: 13px; color: var(--muted); }
+  .pulse-go { display: inline-flex; align-items: center; gap: 4px; font-weight: 700; color: var(--c); }
+  @media (max-width: 640px) { .hero { padding: 22px 20px; } .hero h1 { font-size: 26px; } .hero-side, .hero-actions { justify-items: stretch; justify-content: flex-start; width: 100%; } .pulse-value { font-size: 28px; } .pulse-sub { min-height: 0; } }
+  @media print { .hero { background: none; color: var(--text); box-shadow: none; padding: 0; } .hero h1, .hero p, .hero-kicker { color: var(--text); } }
   .ftab-off { display: none; } .ftab-print { display: none; } .ftab-first > section.card:first-child { margin-top: 0 !important; }
   @media print { .ftab-off { display: block; } .ftab-print { display: block; margin: 18px 0 8px; } }
   td.chk, th.chk { width: 26px; padding-right: 0; }
@@ -1366,14 +1394,13 @@ document.addEventListener('keydown', (e) => { if (e.key === 'Enter' && e.target 
 function viewHome() {
   const P = db.physicians;
   const today = new Date().toLocaleDateString(undefined, { weekday: 'long', month: 'long', day: 'numeric' });
-  const head = `<div class="welcome">
-      <div><h1>${greeting()}, ${esc(firstName(session.name))}.</h1><p class="lead">${today}</p></div>
-      <div class="quick-actions">
-        <button class="btn primary lg" data-act="add-physician">${ico('i-plus')}Add a Physician</button>
-        <a class="btn lg" href="#/physicians" data-act="go-search">${ico('i-search')}Find a Physician</a>
+  const head = `<div class="hero">
+      <div class="hero-txt"><div class="hero-kicker">${today}</div><h1>${greeting()}, ${esc(firstName(session.name))}.</h1><p>${P.length ? homeLine() : 'Physician relations, referrals and the numbers behind them, in one place.'}</p></div>
+      <div class="hero-side no-print">
+        <div class="hero-actions"><button class="btn primary lg" data-act="add-physician">${ico('i-plus')}Add a Physician</button><a class="btn lg" href="#/physicians" data-act="go-search">${ico('i-search')}Find a Physician</a></div>
+        ${db.referrals.length ? `<div class="hero-lookup"><div class="search"><svg class="i"><use href="#i-search"/></svg><input id="patient-mrn" type="search" placeholder="Look up a patient: type an MRN, press Enter" aria-label="Patient MRN"></div><button class="btn" data-act="patient-go">Open</button></div>` : ''}
       </div>
-    </div>
-    ${db.referrals.length ? `<div class="lookup no-print"><span class="field-label">Look up a patient</span><div class="search"><svg class="i"><use href="#i-search"/></svg><input id="patient-mrn" type="search" placeholder="Type an MRN and press Enter" aria-label="Patient MRN"></div><button class="btn" data-act="patient-go">Open patient</button></div>` : ''}`;
+    </div>`;
   if (!P.length) {
     return head + `
       <div class="card" style="padding:40px 24px;text-align:center">
@@ -1413,10 +1440,13 @@ function viewHome() {
   const activeRefs = db.referrals.filter((r) => ['active', 'risk'].includes(refStatus(r))).length;
   const recent = db.contacts.slice().sort(byContactDesc).slice(0, 8);
 
+  const pulse = homePulse();
   return head + `
+    ${pulse.length ? `<h2 class="home-h">The hospital at a glance</h2><div class="pulse">${pulse.map((t) => `<a class="pulse-card" href="${t.href}" style="--c:${t.c};--cs:${t.cs}"><span class="pulse-top"><span class="pulse-ico">${ico(t.ic)}</span><span class="pulse-label">${t.label}</span></span><span class="pulse-value">${t.value}</span><span class="pulse-sub ${t.cls || ''}">${t.sub}</span><span class="pulse-foot"><span>${t.note}</span><span class="pulse-go">Open ${ico('i-arrow-right', 'sm')}</span></span></a>`).join('')}</div>` : ''}
+    <h2 class="home-h">Needs attention</h2>
     <section class="card">
       <div class="card-head">
-        <h2>Needs attention</h2>
+        <h2>Today's list</h2>
         <span class="hint">${riskRefs.length ? `<b style="color:var(--red)">${riskRefs.length} referral${riskRefs.length === 1 ? '' : 's'} at risk</b> · ` : ''}${overdue.length ? `<b style="color:var(--red)">${overdue.length} overdue</b> · ` : ''}${soon.length} due this week · <a href="#/followups">Follow-ups</a> · <a href="#/referrals">Referrals</a></span>
       </div>
       ${myTasks.length ? `<ul class="list">${myTasks.map((t) => `<li><div class="grow"><b>Task for you:</b> ${esc(t.title)}<div class="small muted">From ${esc(t.assignedBy)} · due ${fmtDate(t.dueDate)}${taskLink(t) ? ' · ' + taskLink(t) : ''}</div></div>
@@ -1434,7 +1464,8 @@ function viewHome() {
       }).join('')}</ul>` : (riskRefs.length || myTasks.length ? '' : `<p class="empty">Nothing is overdue or due this week, and no referrals are at risk. Nice work.</p>`)}
     </section>
 
-    <div class="kpis four" style="margin-top:18px">
+    <h2 class="home-h">Physician relationships</h2>
+    <div class="kpis four">
       <a class="kpi" href="#/physicians" data-act="filter-phys" data-stage=""><div class="label">Physicians</div><div class="value">${P.length}</div></a>
       <a class="kpi" href="#/physicians" data-act="filter-phys" data-rel="referring" data-sort="enc"><div class="label">Referring to NWSH, 2026</div><div class="value">${count((p) => p.nwshRelation === 'referring')}</div></a>
       ${count((p) => p.nwshRelation === 'lapsed') ? `<a class="kpi red" href="#/physicians" data-act="filter-phys" data-rel="lapsed" data-sort="enc25"><div class="label">Referred in 2025, not yet in 2026</div><div class="value">${count((p) => p.nwshRelation === 'lapsed')}</div></a>` : ''}
@@ -1475,6 +1506,49 @@ function viewHome() {
           <div class="small muted nowrap">${fmtDate(c.date)}</div></li>`;
       }).join('')}</ul>` : '<p class="empty">No contacts have been logged yet.</p>'}
     </section>`;
+}
+/* One sentence for the top of Home: what is waiting on the team today. */
+function homeLine() {
+  const fus = openFollowups(), over = fus.filter((c) => fuState(c) === 'over').length, risk = db.referrals.filter((r) => refStatus(r) === 'risk').length;
+  const mine = db.tasks.filter((t) => !t.done && t.assignedTo === session.name).length, bits = [];
+  if (risk) bits.push(`<b>${risk}</b> referral${risk === 1 ? '' : 's'} at risk`);
+  if (over) bits.push(`<b>${over}</b> overdue follow-up${over === 1 ? '' : 's'}`);
+  if (mine) bits.push(`<b>${mine}</b> open task${mine === 1 ? '' : 's'} for you`);
+  return bits.length ? `Waiting on the team today: ${bits.join(', ').replace(/, ([^,]*)$/, ' and $1')}.` : 'Nothing is overdue and no referrals are at risk today.';
+}
+/* Headline tiles for Home, one for each report that has data loaded. Each is wrapped so a problem in one report never blanks the page. */
+function homePulse() {
+  const out = [], add = (fn) => { try { const t = fn(); if (t) out.push(t); } catch (e) { console.error('home tile', e); } };
+  const thisMonth = todayISO().slice(0, 7), fullMonth = (months) => { const m = months.filter((x) => x < thisMonth); return m.length ? m : months; };
+  add(() => {   // surgical volume: this year so far against the same weeks last year
+    const recs = volRecords(); if (!recs.length) return null;
+    const { years, w } = volAgg(recs, null), asOf = volAsOf() || { year: years[years.length - 1], week: 53 };
+    const latest = asOf.year, prior = years.filter((y) => y < latest).slice(-1)[0], ytd = (y) => (w[y] ? w[y].slice(0, asOf.week).reduce((t, a) => t + a[0], 0) : 0);
+    const cur = ytd(latest), prev = prior ? ytd(prior) : 0, d = cur - prev;
+    return { c: '#2f7f36', cs: '#e8f4e9', ic: 'i-chart', label: 'Surgical cases', value: volInt(cur), sub: prev ? `${volSigned(d)} (${d >= 0 ? '+' : '−'}${Math.abs(d / prev * 100).toFixed(1)}%) vs the same weeks of ${prior}` : 'no earlier year loaded to compare', cls: prev ? volCls(d) : '', note: `${latest} through week ${asOf.week}`, href: '#/reports/surgeons' };
+  });
+  add(() => {   // clinic financials: the clinics' combined result and how many cover their fixed cost
+    const recs = finRecords().filter((r) => r.group === 'clinic'); if (!recs.length) return null;
+    let eb = 0, ok = 0, n = 0, label = '';
+    recs.forEach((r) => { const per = finPeriod(r, 'ytd'), a = finCalc(r, per.months, 'cy'); label = label || per.label; eb += a.ebitda || 0; if (a.beMo !== null) { n++; if (a.coverage >= 1) ok++; } });
+    return { c: '#9a6410', cs: '#fdf1dc', ic: 'i-home', label: 'Clinic result (EBITDA)', value: finShort(eb), sub: n ? `${ok} of ${n} clinics at or above break-even` : `${recs.length} clinics`, cls: eb < 0 ? 'vol-down' : 'vol-up', note: label, href: '#/reports/clinics' };
+  });
+  add(() => {   // referrals in progress and at risk
+    if (!db.referrals.length) return null;
+    const act = db.referrals.filter((r) => ['active', 'risk'].includes(refStatus(r))).length, risk = db.referrals.filter((r) => refStatus(r) === 'risk').length;
+    return { c: '#146D8D', cs: '#e3eff4', ic: 'i-route', label: 'Referrals in progress', value: volInt(act), sub: risk ? `${volInt(risk)} at risk of dropping` : 'none at risk', cls: risk ? 'vol-down' : 'vol-up', note: `${volInt(db.referrals.length)} tracked in all`, href: '#/referrals' };
+  });
+  add(() => {   // imaging exams ordered, last full month against the one before
+    const months = fullMonth(imgMonths()); if (!months.length) return null;
+    const recs = imgRecords(), m = months[months.length - 1], pm = months[months.length - 2], now = imgSum(recs, [m]).n, prev = pm ? imgSum(recs, [pm]).n : 0, d = now - prev;
+    return { c: '#714F39', cs: '#f2ece8', ic: 'i-search', label: 'Imaging exams ordered', value: volInt(now), sub: prev ? `${volSigned(d)} vs ${fmtMonth(pm)}` : 'first month loaded', cls: prev ? volCls(d) : '', note: fmtMonth(m), href: '#/reports/imaging' };
+  });
+  add(() => {   // provider work RVUs, last full month
+    const months = fullMonth(chgMonthsAvailable()); if (!months.length) return null;
+    const m = months[months.length - 1], s1 = chgSum(chgRecords().filter((r) => r.period === m && !chgIsFac(r)));
+    return { c: '#44546a', cs: '#e8ecf1', ic: 'i-list', label: 'Provider work RVUs', value: volInt(s1.w), sub: `${volInt(s1.enc)} encounters · ${volInt(s1.provs.size)} providers`, cls: '', note: fmtMonth(m), href: '#/reports/billing' };
+  });
+  return out;
 }
 function metricHTML(label, actual, goal, cls) {
   const p = pct(actual, goal);

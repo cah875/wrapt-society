@@ -194,3 +194,7 @@ A clinic's financial page keeps its summary, sentence and headline numbers at th
 ## Section cards on other pages
 
 The same large section buttons split the other long pages: Provider billing (By Provider, By Location, Codes), the Clinic financials overview (Departments, Charts), Surgical volume (Trends, Service Lines & Specialties, By Period), Settings (Team & Logins, Lists, Alerts & Sign-out, Backups & Data) and the physician profile (Relationship, Scorecard, Profit and Loss). The report switcher at the top of every report is a row of rounded buttons with icons. Each page remembers the section you were on while the site is open, and printing prints every section. To add cards to another page, build a list of `[key, name, icon, description]` and use `secTabsHTML` and `secPane`.
+
+## Home
+
+Home opens with a banner (greeting, what is waiting on the team today, Add and Find a Physician, patient lookup) and then **The hospital at a glance**: one tile for each report that has data loaded (surgical cases against the same weeks last year, the clinics' combined EBITDA and how many are at break-even, referrals in progress and at risk, imaging exams and provider work RVUs for the last full month). Each tile opens its report. Below are the day's list of tasks, at-risk referrals and follow-ups, the relationship counts, the pipeline, goals and recent activity.
