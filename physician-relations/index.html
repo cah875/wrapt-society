@@ -4424,6 +4424,8 @@ function finCostMode() { return ui.fin.cost === 'salaried' ? 'salaried' : 'finan
 /* The numbers a manager needs for one department over a period, for actual (cy), budget (bu) or prior year (py).
    Cost is split three ways (provider pay, per-visit supplies, staff and overhead) and break-even is worked out both ways:
    "finance" counts provider pay as rising with visits, "salaried" counts it as fixed. */
+/* Days a month a department sees patients: urgent care is open every day, everything else on weekdays. */
+function finDays(rec) { return /urgent care/i.test((rec && rec.label) || '') ? 30 : 21; }
 function finCalc(rec, months, which, mode) {
   mode = mode || finCostMode();
   const g = (k) => finSum(rec, k, which, months), z = (k) => g(k) || 0;
@@ -4432,7 +4434,7 @@ function finCalc(rec, months, which, mode) {
   const provPay = totExp === null ? null : FIN_PROVIDER_GL.reduce((s, k) => s + z(k), 0);
   const supplies = totExp === null ? null : FIN_SUPPLY_GROUPS.reduce((s, k) => s + z(k), 0);
   const overhead = totExp === null ? null : totExp - provPay - supplies;
-  const revUnit = vis ? npr / vis : null, expUnit = vis && totExp !== null ? totExp / vis : null, marginUnit = vis && netRev !== null && totExp !== null ? (netRev - totExp) / vis : null;
+  const revUnit = vis && netRev !== null ? netRev / vis : null, expUnit = vis && totExp !== null ? totExp / vis : null, marginUnit = vis && netRev !== null && totExp !== null ? (netRev - totExp) / vis : null;
   const be = (m) => {
     if (totExp === null) return { fixed: null, varCost: null, varUnit: null, contrib: null, breakEven: null, beMo: null, fixedMo: null, coverage: null };
     const varCost = m === 'salaried' ? supplies : provPay + supplies, fixed = totExp - varCost;
@@ -4696,7 +4698,7 @@ function finCostCardHTML(rec, per, a, unit) {
 function finWhatIfHTML(rec) {
   const f = ui.fin, per = finPeriod(rec, f.period), unit = (rec.unit || 'Units').toLowerCase(), u1 = finOne(unit), a = finCalc(rec, per.months, 'cy');
   const w = f.what && f.what.code === rec.code ? f.what : { code: rec.code };
-  const revU = w.rev ?? a.revUnit, varU = w.var ?? a.varUnit, fixM = w.fixed ?? a.fixedMo, days = w.days || 21;
+  const revU = w.rev ?? a.revUnit, varU = w.var ?? a.varUnit, fixM = w.fixed ?? a.fixedMo, days = w.days || finDays(rec);
   const contrib = revU !== null && varU !== null ? revU - varU : null, beM = contrib && contrib > 0 && fixM !== null ? fixM / contrib : null;
   const gapMo = beM !== null && a.visMo !== null ? beM - a.visMo : null;
   const needRev = a.visMo && varU !== null && fixM !== null ? varU + fixM / a.visMo : null, needVar = a.visMo && revU !== null && fixM !== null ? revU - fixM / a.visMo : null, needFixed = a.visMo && contrib !== null ? contrib * a.visMo : null;
@@ -4951,7 +4953,7 @@ function viewFinDept(rec, actions) {
   const a = finCalc(rec, per.months, 'cy'), b = finCalc(rec, per.months, 'bu'), p = finCalc(rec, per.months, 'py');
   const mAll = VOL_MONTHS, alt = a.byMode[a.mode === 'finance' ? 'salaried' : 'finance'], altName = a.mode === 'finance' ? 'if provider pay is treated as fixed' : 'on the finance statement';
   const line12 = (k, which) => { const l = finLine(rec, k); return l && l[which] ? l[which] : Array(12).fill(null); };
-  const days = (f.what && f.what.code === rec.code && f.what.days) || 21;
+  const days = (f.what && f.what.code === rec.code && f.what.days) || finDays(rec);
   const gapMo = a.beMo !== null && a.visMo !== null ? a.beMo - a.visMo : null;
   const needRev = a.visMo && a.varUnit !== null && a.fixedMo !== null ? a.varUnit + a.fixedMo / a.visMo : null;
   const ebDelta = a.ebitda !== null && b.ebitda !== null ? a.ebitda - b.ebitda : null;
@@ -5738,7 +5740,7 @@ function finInsightsHTML(rows, unitWord) {
   const ahead = live.filter((x) => x.b.ebitda !== null && x.a.ebitda - x.b.ebitda > 0).sort((x, y) => (y.a.ebitda - y.b.ebitda) - (x.a.ebitda - x.b.ebitda)).slice(0, 3);
   if (ahead.length) items.push(['Furthest ahead of budget', ahead.map((x) => `${link(x)} (+${finShort(x.a.ebitda - x.b.ebitda)})`).join(', ') + '.']);
   const near = live.filter((x) => x.a.coverage !== null && x.a.coverage >= 0.8 && x.a.coverage < 1).sort((x, y) => y.a.coverage - x.a.coverage).slice(0, 4);
-  if (near.length) items.push(['Within reach of break-even', near.map((x) => `${link(x)} is at ${Math.round(x.a.coverage * 100)}% and needs about ${Math.max(1, Math.round((x.a.beMo - x.a.visMo) / 21))} more ${Math.max(1, Math.round((x.a.beMo - x.a.visMo) / 21)) === 1 ? u1 : unitWord} a day`).join('; ') + '.']);
+  if (near.length) items.push(['Within reach of break-even', near.map((x) => `${link(x)} is at ${Math.round(x.a.coverage * 100)}% and needs about <b>${volInt(Math.ceil(x.a.beMo - x.a.visMo))}</b> more ${unitWord} a month (${((x.a.beMo - x.a.visMo) / finDays(x.r)).toFixed(1)} a day over ${finDays(x.r)} days)`).join('; ') + '.']);
   const flip = live.filter((x) => x.a.byMode.finance.coverage !== null && x.a.byMode.finance.coverage < 1 && x.a.byMode.salaried.coverage !== null && x.a.byMode.salaried.coverage >= 1);
   if (flip.length) items.push(['Already past break-even if provider pay is fixed', `${flip.map(link).join(', ')}. On the finance statement these look short on volume, but with salaried providers who have open slots they already cover their fixed cost; the question there is cost, not ${unitWord}.`]);
   if (chgRecords().length) {
