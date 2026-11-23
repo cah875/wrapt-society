@@ -198,3 +198,7 @@ The same large section buttons split the other long pages: Provider billing (By 
 ## Home
 
 Home opens with a banner (greeting, what is waiting on the team today, Add and Find a Physician, patient lookup) and then **The hospital at a glance**: one tile for each report that has data loaded (surgical cases against the same weeks last year, the clinics' combined EBITDA and how many are at break-even, referrals in progress and at risk, imaging exams and provider work RVUs for the last full month). Each tile opens its report. Below are the day's list of tasks, at-risk referrals and follow-ups, the relationship counts, the pipeline, goals and recent activity.
+
+## Information markers
+
+A small circled *i* sits beside the main labels on tiles and column headings. Hovering, tabbing to it or tapping it shows how that number is worked out. The explanations live in one list, `TIPS`, in `index.html`: each entry is a pattern that matches the label, a title and the text. Add a line there to explain another label; nothing else needs changing.

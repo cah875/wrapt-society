@@ -288,6 +288,11 @@
   .pulse-go { display: inline-flex; align-items: center; gap: 4px; font-weight: 700; color: var(--c); }
   @media (max-width: 640px) { .hero { padding: 22px 20px; } .hero h1 { font-size: 26px; } .hero-side, .hero-actions { justify-items: stretch; justify-content: flex-start; width: 100%; } .pulse-value { font-size: 28px; } .pulse-sub { min-height: 0; } }
   @media print { .hero { background: none; color: var(--text); box-shadow: none; padding: 0; } .hero h1, .hero p, .hero-kicker { color: var(--text); } }
+  .tip { display: inline-grid; place-items: center; width: 17px; height: 17px; margin-left: 6px; border-radius: 50%; border: 1.5px solid currentColor; font: italic 700 11px/1 Georgia, serif; text-transform: none; letter-spacing: 0; opacity: .5; cursor: help; vertical-align: 1px; flex: none; }
+  .tip::before { content: 'i'; }
+  .tip:hover, .tip:focus-visible { opacity: 1; color: var(--teal); outline: none; }
+  .tip-box { position: fixed; z-index: 500; display: none; pointer-events: none; max-width: 320px; padding: 12px 14px; border-radius: 10px; background: #1f2b33; color: #fff; font-size: 14px; line-height: 1.45; font-weight: 400; text-transform: none; letter-spacing: 0; box-shadow: 0 8px 24px rgba(0,0,0,.28); }
+  .tip-box b { display: block; margin-bottom: 4px; font-size: 14.5px; }
   .ftab-off { display: none; } .ftab-print { display: none; } .ftab-first > section.card:first-child { margin-top: 0 !important; }
   @media print { .ftab-off { display: block; } .ftab-print { display: block; margin: 18px 0 8px; } }
   td.chk, th.chk { width: 26px; padding-right: 0; }
@@ -4588,7 +4593,7 @@ const FIN_TERMS = [
   ['Net patient revenue', 'What the clinic actually expects to be paid: gross revenue less allowances and bad debt. This is the revenue number that matters.'],
   ['Total expenses', 'Everything the department spent to run: pay and benefits, supplies, drugs, purchased services, rent and other operating costs. Depreciation and interest are not included.'],
   ['EBITDA', 'Net revenue minus expenses, before interest, taxes, depreciation and amortization. Read it as the department\'s operating profit (positive) or loss (negative).'],
-  ['Net revenue per visit', 'Net patient revenue divided by visits: what one average visit brings in.'],
+  ['Net revenue per visit', 'Net revenue (after insurer discounts and bad debt) divided by visits: what one average visit brings in.'],
   ['Cost per visit', 'Total expenses divided by visits: what one average visit costs at today\'s volume. It falls as volume rises, because fixed costs are spread over more visits.'],
   ['Margin per visit', 'Net revenue per visit minus cost per visit. Negative means each visit, on average, loses money at today\'s volume.'],
   ['Provider pay', 'Salaries of physicians, nurse practitioners and physician assistants (GL 0502800000, 0501700000 and 0501800000). Their benefits sit with all other benefits.'],
@@ -6544,6 +6549,65 @@ document.addEventListener('click', (e) => {
   tsState.set(table._tsKey, st); tsApply(table, st);
 });
 new MutationObserver(() => tsSetup()).observe(document.body, { childList: true, subtree: true });
+
+/* ---------- "i" markers: hover, focus or tap a label to see how the number is worked out ---------- */
+const TIPS = [
+  [/^(net revenue per|rev\/)/i, 'Net revenue per visit', 'Net revenue ÷ visits. Net revenue is what the department expects to be paid after insurer discounts and bad debt, so this is what one average visit brings in.'],
+  [/^(cost per|cost\/)/i, 'Cost per visit', 'Total expenses ÷ visits. It falls as volume rises, because fixed costs are spread over more visits.'],
+  [/^(margin per|margin\/)/i, 'Margin per visit', 'Net revenue per visit − cost per visit. Negative means the average visit loses money at today\'s volume.'],
+  [/^net revenue/i, 'Net revenue', 'List-price charges − insurer discounts − bad debt, plus any other revenue. It is the money the department expects to keep, straight from the operating statement.'],
+  [/^total expenses/i, 'Total expenses', 'Everything the department spent to run: pay and benefits, supplies, drugs, purchased services, rent and other operating costs. Depreciation and interest are not included.'],
+  [/^(ebitda|clinic result)/i, 'EBITDA', 'Net revenue − total expenses, before interest, taxes, depreciation and amortization. Read it as operating profit (positive) or loss (negative).'],
+  [/^vs budget/i, 'Against budget', 'Actual EBITDA − budgeted EBITDA for the same months. The smaller line compares with the same months last year. Green is better than the comparison, red is worse.'],
+  [/^(break-even|below break-even)/i, 'Break-even', 'Break-even visits = fixed cost ÷ (net revenue per visit − variable cost per visit). The percentage is actual visits ÷ break-even visits; 100% means the department covers its costs. The method (provider pay as variable or as fixed) is chosen at the top of the page.'],
+  [/^departments losing money/i, 'Departments losing money', 'Departments whose EBITDA is below zero for the period shown, and their losses added together.'],
+  [/^statement month/i, 'Statement month', 'The last month finance had closed in the operating statement workbook that was uploaded.'],
+  [/^(fixed cost|fixed and variable)/i, 'Fixed cost', 'Cost that stays about the same whatever the volume: support staff, benefits, rent, purchased services. With the "providers on salary" method, provider pay is counted here too.'],
+  [/^variable cost/i, 'Variable cost', 'Cost that rises with each added visit: supplies, drugs, lab, implants and, with the "finance statement" method, provider pay.'],
+  [/^contribution/i, 'Contribution per visit', 'Net revenue per visit − variable cost per visit: what each extra visit adds toward covering fixed cost.'],
+  [/^(pay per w|pay per work)/i, 'Pay per work RVU', 'Provider pay ÷ the work RVUs those providers billed: what the clinic pays for one unit of clinician work.'],
+  [/^(wrvu \/ enc|wrvu \/ encounter)/i, 'Work RVUs per encounter', 'Work RVUs ÷ encounters: how much clinician work the average visit carries.'],
+  [/^(work rvus?|provider work rvus)/i, 'Work RVUs', 'Medicare\'s measure of the clinician work in each service, added up from the RVU report line by line (value × units). It compares productivity across providers whoever the insurer is.'],
+  [/^encounters/i, 'Encounters', 'One patient account on one date of service, counted once however many codes were billed.'],
+  [/^office visit/i, 'Office visit levels', 'The share of office visits billed at each level (99202 to 99205 new, 99211 to 99215 established). Lighter means lower levels. The average level is the visit-weighted mean.'],
+  [/^(charges|facility charges|total charges|gross charges)/i, 'Charges', 'List price billed, before any insurer discount. Almost nobody pays list price, so this is not money in the door.'],
+  [/^(collected)/i, 'Collected', 'Payments posted so far ÷ charges. Because charges are list price, 35 to 45 percent is normal, and recent months look low until payments catch up.'],
+  [/^(payments|paid so far)/i, 'Payments', 'Money posted so far to those accounts. Recent months keep collecting for weeks after the visit.'],
+  [/^surgical cases/i, 'Surgical cases', 'Procedure cases this year through the latest week loaded, compared with the same weeks of last year so the two are like for like.'],
+  [/run-rate/i, 'Run-rate', 'Cases so far this year ÷ weeks elapsed × 52: where the year lands if the current pace holds.'],
+  [/^average charge per case/i, 'Average charge per case', 'Gross charges ÷ cases for the weeks shown.'],
+  [/^imaging exams/i, 'Imaging exams', 'One imaging order line in Meditech, dated by service date. Cancelled orders are left out.'],
+  [/^orders in/i, 'Orders in the imaging report', 'Imaging orders under this provider in the imaging export. It covers a longer span than the charges, so it is larger than the exams billed.'],
+  [/^referrals in progress/i, 'Referrals in progress', 'Referrals that are not yet completed or dropped. "At risk" means one has waited longer than the limits set in Settings, Alerts.'],
+  [/^(referring to nwsh)/i, 'Referring to NWSH', 'Physicians in the list with encounters at NWSH this year, from the surgeon scorecard.'],
+  [/^(overdue follow-ups)/i, 'Overdue follow-ups', 'Logged contacts whose follow-up date has passed and that are not marked done.'],
+  [/^share$/i, 'Share', 'This row as a percentage of the table\'s total.'],
+  [/^most often done by/i, 'Most often done by', 'The proceduralist who did the most of these cases, and how many of the total.'],
+];
+let tipBox = null, tipFor = null;
+function tipSetup() {
+  document.querySelectorAll('#view .kpi .label, #view th, #view .pulse-label, #modal-root th, #modal-root .kpi .label').forEach((el) => {
+    if (el._tip !== undefined) return; el._tip = false;
+    const t = el.textContent.replace(/\s+/g, ' ').trim(); if (!t || t.length > 60) return;
+    const hit = TIPS.find((x) => x[0].test(t)); if (!hit) return;
+    const b = document.createElement('span'); b.className = 'tip no-print'; b.tabIndex = 0; b.setAttribute('role', 'button'); b.setAttribute('aria-label', 'How ' + hit[1] + ' is worked out'); b._tipData = hit;
+    el._tip = true; const arrow = el.querySelector(':scope > .arrow'); if (arrow) el.insertBefore(b, arrow); else el.appendChild(b);
+  });
+}
+function tipShow(b) {
+  if (!tipBox) { tipBox = document.createElement('div'); tipBox.className = 'tip-box'; tipBox.setAttribute('role', 'tooltip'); document.body.appendChild(tipBox); }
+  tipBox.innerHTML = `<b>${esc(b._tipData[1])}</b>${esc(b._tipData[2])}`; tipBox.style.display = 'block'; tipFor = b;
+  const r = b.getBoundingClientRect(), w = tipBox.offsetWidth, h = tipBox.offsetHeight, vw = document.documentElement.clientWidth;
+  const left = Math.max(8, Math.min(vw - w - 8, r.left + r.width / 2 - w / 2)), below = r.bottom + 8 + h < window.innerHeight || r.top - 8 - h < 0;
+  tipBox.style.left = left + 'px'; tipBox.style.top = (below ? r.bottom + 8 : r.top - 8 - h) + 'px';
+}
+function tipHide() { if (tipBox) tipBox.style.display = 'none'; tipFor = null; }
+document.addEventListener('mouseover', (e) => { const b = e.target.closest && e.target.closest('.tip'); if (b) tipShow(b); else if (tipFor && !(e.target.closest && e.target.closest('.tip-box'))) tipHide(); });
+document.addEventListener('focusin', (e) => { const b = e.target.closest && e.target.closest('.tip'); if (b) tipShow(b); else tipHide(); });
+document.addEventListener('keydown', (e) => { if (e.key === 'Escape') tipHide(); });
+window.addEventListener('scroll', tipHide, true);
+document.addEventListener('click', (e) => { const b = e.target.closest && e.target.closest('.tip'); if (!b) { tipHide(); return; } e.preventDefault(); e.stopPropagation(); if (tipFor === b && e.detail === 0) tipHide(); else tipShow(b); }, true);
+new MutationObserver(() => tipSetup()).observe(document.body, { childList: true, subtree: true });
 
 document.addEventListener('click', (e) => {
   const el = e.target.closest('[data-act]');
